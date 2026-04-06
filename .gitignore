@@ -1,0 +1,11 @@
+__pycache__/
+*.log
+*.tmp
+*.html
+report_*
+/tmp/
+.gemini/
+char_simc_addon.txt
+topgear.txt
+config.json
+*.simc
