@@ -11,13 +11,14 @@ The script automatically detects the base character profile and ensures it is
 included at the top of the input for every stage.
 
 Usage:
-    ./sim_helper simc_path=/path/to/simc input_file=your_input.simc [stage1_percent_best=25%] [stage2_percent_best=25%]
+    ./sim_helper simc_path=/path/to/simc input_file=your_input.simc [stage1_percent_best=25%] [stage2_percent_best=25%] [start_server=1]
 
 Arguments:
     simc_path:           Path to the SimulationCraft executable.
     input_file:          Path to the base .simc file containing 'copy=' profiles.
     stage1_percent_best: % or number of performers to keep after Stage 1 (default: 25%).
     stage2_percent_best: % or number of performers to keep after Stage 2 (default: 25%).
+    start_server:        Set to 1 to automatically start a local HTTP server and open the report.
 
 Outputs:
     - Console: Shows real-time simulation progress.
@@ -32,28 +33,41 @@ import datetime
 import pty
 import select
 import math
+import time
+import webbrowser
+import socket
 
 def get_character_name(input_file):
     """
     Parses the input .simc file to find the primary character's name.
-    Looks for the 'name=' line, which defines the base actor.
+    Looks for the 'name=' or 'class=name' line.
     """
+    classes = {
+        "deathknight", "demonhunter", "druid", "evoker", "hunter", "mage", 
+        "monk", "paladin", "priest", "rogue", "shaman", "warlock", "warrior"
+    }
     try:
         with open(input_file, "r", encoding='utf-8', errors='replace') as f:
             for line in f:
+                # Match name=...
                 match = re.match(r"^name=[\"']?([^\"'\s,]+)[\"']?", line)
                 if match:
                     return match.group(1).strip()
+                # Match paladin=...
+                match = re.match(r"^(\w+)=[\"']?([^\"'\s,]+)[\"']?", line)
+                if match:
+                    key, val = match.groups()
+                    if key.lower() in classes:
+                        return val.strip()
     except Exception as e:
         print(f"Warning: Could not extract character name from {input_file}: {e}")
     return None
 
-def count_combos(input_file, current_name=None):
+def get_all_combos(input_file, current_name=None):
     """
-    Iterates through the input file to count how many 'copy=' profiles exist.
-    The current character profile is excluded from this count as it's the baseline.
+    Returns a list of all combo names found in the input file.
     """
-    count = 0
+    combos = []
     try:
         with open(input_file, "r", encoding='utf-8', errors='replace') as f:
             for line in f:
@@ -61,10 +75,10 @@ def count_combos(input_file, current_name=None):
                 if match:
                     name = match.group(1).strip()
                     if name != current_name:
-                        count += 1
+                        combos.append(name)
     except Exception as e:
         print(f"Error counting combos: {e}")
-    return count
+    return combos
 
 def get_default_filter(stage, count):
     """
@@ -203,6 +217,35 @@ def filter_best(log_path, filter_arg, current_name=None):
 
     return combos_only[:target_n]
 
+def get_all_dps(log_path, current_name=None):
+    """
+    Parses a SimulationCraft log file to extract all (name, dps) tuples.
+    """
+    if not os.path.exists(log_path):
+        return []
+
+    results = []
+    ranking_started = False
+
+    with open(log_path, "r", encoding='utf-8', errors='replace') as f:
+        for line in f:
+            line = line.strip()
+            if not ranking_started:
+                if line.startswith("DPS Ranking:"):
+                    ranking_started = True
+                continue
+            
+            if not line or line.startswith("HPS Ranking:"):
+                break
+            
+            match = re.match(r"^(\d+)\s+[\d.]+%?\s+(.+)$", line)
+            if match:
+                dps = int(match.group(1))
+                name = match.group(2).strip()
+                if name != "Raid" and name != current_name:
+                    results.append((name, dps))
+    return results
+
 def prepare_stage(base_simc, combos, output_simc, extra_params, current_name=None):
     """
     Generates a new .simc input file for the next simulation stage.
@@ -286,6 +329,8 @@ def main():
     Orchestrates the 3-stage workflow.
     Handles argument parsing, dynamic filtering, and stage execution.
     """
+    script_start_time = time.time()
+    
     if "-h" in sys.argv or "--help" in sys.argv:
         print(__doc__)
         sys.exit(0)
@@ -307,7 +352,8 @@ def main():
     char_name = get_character_name(input_file)
     print(f"Detected character name: {char_name}")
     
-    initial_combo_count = count_combos(input_file, current_name=char_name)
+    all_combos = get_all_combos(input_file, current_name=char_name)
+    initial_combo_count = len(all_combos)
     print(f"Found {initial_combo_count} combinations.")
 
     s1_filter = args.get("stage1_percent_best")
@@ -322,13 +368,54 @@ def main():
     tmp_dir = f"/tmp/simc_{start_time}"
     os.makedirs(tmp_dir, exist_ok=True)
     
-    report_name = f"report_{start_time}.html"
+    reports_dir = "/tmp/simc_reports"
+    os.makedirs(reports_dir, exist_ok=True)
+    report_file = f"report_{start_time}.html"
+    report_name = os.path.join(reports_dir, report_file)
     
+    BATCH_SIZE = 400
+    top_combos_s1 = []
+
     # Stage 1: Fast Filtering
-    print(f"\n--- STAGE 1: Fast Filtering (iterations=100) using {s1_filter} ---")
-    stage1_log = os.path.join(tmp_dir, "stage1.log")
-    run_simc(simc_path, input_file, "iterations=100", stage1_log)
-    top_combos_s1 = filter_best(stage1_log, s1_filter, current_name=char_name)
+    if initial_combo_count > BATCH_SIZE:
+        print(f"\n--- STAGE 1: Fast Filtering (iterations=100) using {s1_filter} [BATCHED] ---")
+        chunks = [all_combos[i:i + BATCH_SIZE] for i in range(0, len(all_combos), BATCH_SIZE)]
+        all_batch_results = []
+        for idx, chunk in enumerate(chunks):
+            print(f"\n--- Processing Batch {idx + 1}/{len(chunks)} ({len(chunk)} combos) ---")
+            chunk_simc = os.path.join(tmp_dir, f"stage1_batch{idx+1}.simc")
+            prepare_stage(input_file, chunk, chunk_simc, "iterations=100", current_name=char_name)
+            
+            chunk_log = os.path.join(tmp_dir, f"stage1_batch{idx+1}.log")
+            exit_code = run_simc(simc_path, chunk_simc, "iterations=100", chunk_log)
+            if exit_code != 0:
+                print(f"Error: simc failed on batch {idx+1} with exit code {exit_code}. It might have run out of memory.")
+                sys.exit(1)
+                
+            batch_results = get_all_dps(chunk_log, current_name=char_name)
+            all_batch_results.extend(batch_results)
+            print(f"Parsed {len(batch_results)} results from batch {idx+1}")
+            
+        # Global sorting and filtering
+        all_batch_results.sort(key=lambda x: x[1], reverse=True)
+        
+        if s1_filter.endswith("%"):
+            percentage = float(s1_filter.replace("%", "")) / 100
+            target_n = max(1, math.ceil(initial_combo_count * percentage))
+        else:
+            target_n = int(s1_filter)
+            
+        top_combos_s1 = [item[0] for item in all_batch_results[:target_n]]
+        print(f"\nAggregated {len(all_batch_results)} total profiles across all batches.")
+        print(f"Kept global top {target_n} profiles for Stage 2.")
+    else:
+        print(f"\n--- STAGE 1: Fast Filtering (iterations=100) using {s1_filter} ---")
+        stage1_log = os.path.join(tmp_dir, "stage1.log")
+        exit_code = run_simc(simc_path, input_file, "iterations=100", stage1_log)
+        if exit_code != 0:
+            print(f"Error: simc failed with exit code {exit_code}. It might have run out of memory.")
+            sys.exit(1)
+        top_combos_s1 = filter_best(stage1_log, s1_filter, current_name=char_name)
     
     if not top_combos_s1:
         print("Error: No combos found to refine after Stage 1. Stopping.")
@@ -344,7 +431,10 @@ def main():
     # Stage 2: Refinement
     print(f"\n--- STAGE 2: Refinement (iterations=2000) using {s2_filter} ---")
     stage2_log = os.path.join(tmp_dir, "stage2.log")
-    run_simc(simc_path, stage2_simc, "iterations=2000", stage2_log)
+    exit_code = run_simc(simc_path, stage2_simc, "iterations=2000", stage2_log)
+    if exit_code != 0:
+        print(f"Error: simc failed on stage 2 with exit code {exit_code}.")
+        sys.exit(1)
     top_combos_s2 = filter_best(stage2_log, s2_filter, current_name=char_name)
     
     if not top_combos_s2:
@@ -357,10 +447,46 @@ def main():
     # Stage 3: Final Selection
     print("\n--- STAGE 3: Final Selection ---")
     stage3_log = os.path.join(tmp_dir, "stage3.log")
-    run_simc(simc_path, stage3_simc, "", stage3_log, html_report=report_name)
+    exit_code = run_simc(simc_path, stage3_simc, "", stage3_log, html_report=report_name)
+    if exit_code != 0:
+        print(f"Error: simc failed on stage 3 with exit code {exit_code}.")
+        sys.exit(1)
     
     print(f"\nSimcraft Helper complete! Results in {report_name}")
     print(f"Temporary files are in {tmp_dir}")
+    
+    elapsed_time = time.time() - script_start_time
+    minutes, seconds = divmod(int(elapsed_time), 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours > 0:
+        print(f"Total execution time: {hours}h {minutes}m {seconds}s")
+    elif minutes > 0:
+        print(f"Total execution time: {minutes}m {seconds}s")
+    else:
+        print(f"Total execution time: {seconds}s")
+
+    if str(args.get("start_server", "")).lower() in ("1", "true"):
+        print(f"\nStarting local HTTP server on port 8000 in {reports_dir} (if not already running)...")
+        # Try to start the server in the background
+        subprocess.Popen(
+            [sys.executable, "-m", "http.server", "8000", "-d", reports_dir], 
+            stdout=subprocess.DEVNULL, 
+            stderr=subprocess.DEVNULL
+        )
+        # Give it a tiny bit of time to spin up
+        time.sleep(1)
+        
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            host_ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            host_ip = "localhost"
+            
+        url = f"http://{host_ip}:8000/{report_file}"
+        print(f"Opening report: {url}")
+        webbrowser.open(url)
 
 if __name__ == "__main__":
     main()

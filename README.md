@@ -25,19 +25,27 @@ An interactive script to generate a `.simc` input file by combining your charact
 ---
 
 ### 2. `sim_helper.py`
-A robust wrapper for running SimulationCraft with real-time progress updates and automated report management.
+A robust wrapper for running SimulationCraft with real-time progress updates, OOM-safe batching, and automated report management.
 
 #### Features
-- **3-Stage Refinement:** (Optional) Can perform multi-stage simulations to filter out poor combinations early, saving CPU time.
-- **Real-time Progress Bar:** Captures SimC's interactive output to show a progress bar in your terminal.
-- **Timestamped Reports:** Automatically generates and organizes HTML reports (e.g., `report_20260406_120000.html`).
-- **Temporary File Management:** Stores all logs and intermediate files in `/tmp/simc_<timestamp>/` to keep your workspace clean.
+- **3-Stage Refinement:** Performs multi-stage simulations (100 -> 2000 -> Final iterations) to quickly filter out poor combinations, saving massive CPU time.
+- **OOM-Safe Batching:** Automatically splits large combo datasets (>400 profiles) into memory-safe batches to prevent SimulationCraft from crashing your system. Uses global sorting to guarantee the absolute top performers are kept across all batches.
+- **Real-time Progress & Timing:** Captures SimC's interactive output to show a progress bar in your terminal and calculates total execution time upon completion.
+- **Organized Reports:** Automatically generates and saves HTML reports to a dedicated `/tmp/simc_reports/` directory.
+- **Auto-Serve & View:** Start a local HTTP server in the background and instantly open the final HTML report in your browser when the simulation completes.
 
 #### Usage
 Run the script providing the path to your `simc` executable and your input file:
 ```bash
-./sim_helper.py simc_path=/path/to/simc input_file=generated_sim.simc
+./sim_helper.py simc_path=/path/to/simc input_file=generated_sim.simc [stage1_percent_best=25%] [stage2_percent_best=25%] [start_server=1]
 ```
+
+**Arguments:**
+- `simc_path`: Path to the SimulationCraft executable.
+- `input_file`: Path to the `.simc` file containing profiles.
+- `stage1_percent_best`: % or number of profiles to keep after Stage 1 (Default: Dynamic).
+- `stage2_percent_best`: % or number of profiles to keep after Stage 2 (Default: Dynamic).
+- `start_server`: Set to `1` to automatically start a local HTTP server and open the final report.
 
 ## Configuration (`config.json`)
 The `config.json` file allows you to specify lists of IDs to test for each slot. 
