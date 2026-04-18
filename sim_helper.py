@@ -290,7 +290,7 @@ def prepare_stage(base_simc, combos, output_simc, extra_params, current_name=Non
                 # Add active=0 to the base actor definition in the header to avoid name conflicts
                 if line.strip().startswith("name=") and current_name and current_name in line:
                     header += line
-                    header += "active=0\n"
+                    # header += "active=0\n"
                 else:
                     header += line
                 
@@ -387,7 +387,7 @@ def main():
             prepare_stage(input_file, chunk, chunk_simc, "iterations=100", current_name=char_name)
             
             chunk_log = os.path.join(tmp_dir, f"stage1_batch{idx+1}.log")
-            exit_code = run_simc(simc_path, chunk_simc, "iterations=100", chunk_log)
+            exit_code = run_simc(simc_path, chunk_simc, "iterations=100 single_actor_batch=1", chunk_log)
             if exit_code != 0:
                 print(f"Error: simc failed on batch {idx+1} with exit code {exit_code}. It might have run out of memory.")
                 sys.exit(1)
@@ -411,7 +411,7 @@ def main():
     else:
         print(f"\n--- STAGE 1: Fast Filtering (iterations=100) using {s1_filter} ---")
         stage1_log = os.path.join(tmp_dir, "stage1.log")
-        exit_code = run_simc(simc_path, input_file, "iterations=100", stage1_log)
+        exit_code = run_simc(simc_path, input_file, "iterations=100 single_actor_batch=1", stage1_log)
         if exit_code != 0:
             print(f"Error: simc failed with exit code {exit_code}. It might have run out of memory.")
             sys.exit(1)
@@ -431,7 +431,7 @@ def main():
     # Stage 2: Refinement
     print(f"\n--- STAGE 2: Refinement (iterations=2000) using {s2_filter} ---")
     stage2_log = os.path.join(tmp_dir, "stage2.log")
-    exit_code = run_simc(simc_path, stage2_simc, "iterations=2000", stage2_log)
+    exit_code = run_simc(simc_path, stage2_simc, "iterations=2000 single_actor_batch=1", stage2_log)
     if exit_code != 0:
         print(f"Error: simc failed on stage 2 with exit code {exit_code}.")
         sys.exit(1)
@@ -447,7 +447,7 @@ def main():
     # Stage 3: Final Selection
     print("\n--- STAGE 3: Final Selection ---")
     stage3_log = os.path.join(tmp_dir, "stage3.log")
-    exit_code = run_simc(simc_path, stage3_simc, "", stage3_log, html_report=report_name)
+    exit_code = run_simc(simc_path, stage3_simc, "single_actor_batch=1", stage3_log, html_report=report_name)
     if exit_code != 0:
         print(f"Error: simc failed on stage 3 with exit code {exit_code}.")
         sys.exit(1)
@@ -468,7 +468,7 @@ def main():
     if str(args.get("start_server", "")).lower() in ("1", "true"):
         print(f"\nStarting local HTTP server on port 8000 in {reports_dir} (if not already running)...")
         # Try to start the server in the background
-        subprocess.Popen(
+        server_process = subprocess.Popen(
             [sys.executable, "-m", "http.server", "8000", "-d", reports_dir], 
             stdout=subprocess.DEVNULL, 
             stderr=subprocess.DEVNULL
@@ -487,6 +487,15 @@ def main():
         url = f"http://{host_ip}:8000/{report_file}"
         print(f"Opening report: {url}")
         webbrowser.open(url)
+        
+        try:
+            input("\nPress Enter to stop the server and exit...")
+        except KeyboardInterrupt:
+            pass
+        finally:
+            print("Stopping the HTTP server...")
+            server_process.terminate()
+            server_process.wait()
 
 if __name__ == "__main__":
     main()
