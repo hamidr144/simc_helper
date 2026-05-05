@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SimulationCraft Helper GUI</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script>var whTooltips = {colorLinks: false, iconizeLinks: false, renameLinks: false};</script>
+    <script src="https://wow.zamimg.com/widgets/power.js"></script>
+</head>
+<body>
+    <header>
+        <h1>SimC Web Helper</h1>
+        <div id="status-bar">
+            <span>SimC Engine: <span id="simc-status">Checking...</span></span>
+            <button id="btn-update-simc">Update/Build SimC</button>
+        </div>
+    </header>
+
+    <div class="tabs">
+        <button class="tab-btn active" data-target="tab-setup">1. Setup & Addon</button>
+        <button class="tab-btn" data-target="tab-gear" id="btn-tab-gear" disabled>2. Gear Selection</button>
+        <button class="tab-btn" data-target="tab-sim" id="btn-tab-sim" disabled>3. Run Simulation</button>
+        <button class="tab-btn" data-target="tab-report" id="btn-tab-report" disabled>4. Final Report</button>
+    </div>
+
+    <main>
+        <!-- Tab 1: Setup -->
+        <section id="tab-setup" class="tab-content active">
+            <h2>SimulationCraft Engine</h2>
+            <p>Make sure the engine is installed and up to date before running simulations.</p>
+            <button id="btn-update-simc-main" class="primary-btn">Download / Update & Rebuild SimC Engine</button>
+            <hr style="margin: 2rem 0; border-color: var(--border-color);">
+            
+            <h2>Paste SimulationCraft Addon Input</h2>
+            <textarea id="addon-input" placeholder="Paste your /simc output here..."></textarea>
+            <button id="btn-parse-addon" class="primary-btn">Parse Addon Data</button>
+        </section>
+
+        <!-- Tab 2: Gear Selection -->
+        <section id="tab-gear" class="tab-content">
+            <h2>Gear Selection</h2>
+            <div id="character-info"></div>
+            <div id="gear-form" class="grid-container">
+                <!-- Dynamically populated via JS -->
+            </div>
+            <button id="btn-generate-sim" class="primary-btn">Generate Combinations & Continue</button>
+            <div id="combination-count"></div>
+        </section>
+
+        <!-- Tab 3: Simulation -->
+        <section id="tab-sim" class="tab-content">
+            <h2>Run Simulation</h2>
+            <button id="btn-run-sim" class="primary-btn">Start Simulation</button>
+            
+            <div class="terminal-container">
+                <div class="terminal-header">Simulation Console</div>
+                <pre id="sim-console"></pre>
+            </div>
+        </section>
+
+        <!-- Tab 4: Report -->
+        <section id="tab-report" class="tab-content">
+            <h2>Simulation Report</h2>
+            <p>Your simulation has completed.</p>
+            
+            <div id="results-container" style="margin: 2rem 0;">
+                <h3>DPS Rankings & Gear</h3>
+                <div id="results-table-wrapper" style="overflow-x: auto;">
+                    <!-- Dynamically populated via JS -->
+                </div>
+            </div>
+
+            <a id="report-link" href="#" target="_blank" class="primary-btn">Open Full HTML Report in New Tab</a>
+            <iframe id="report-frame" src="" frameborder="0"></iframe>
+        </section>
+    </main>
+
+    <!-- Global Modal for streaming Output (e.g. build logs) -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3 id="modal-title">System Log</h3>
+            <pre id="modal-console"></pre>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
