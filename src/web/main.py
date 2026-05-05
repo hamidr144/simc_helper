@@ -156,30 +156,48 @@ class SimPayload(BaseModel):
     equipped_gear: Dict[str, str]
     selected_items: Dict[str, List[str]]
 
+@app.get("/api/config")
+def get_config():
+    try:
+        from src.cli.generate_input import load_config
+    except ImportError:
+        def load_config(path): return {"enchantments": {}, "gems": {}}
+    return load_config("config.json")
+
+class ConfigPayload(BaseModel):
+    enchantments: Dict[str, List[int]]
+    gems: Dict[str, List[int]]
+
+@app.post("/api/config")
+def save_config(payload: ConfigPayload):
+    with open("config.json", "w", encoding="utf-8") as f:
+        json.dump(payload.dict(), f, indent=4)
+    return {"status": "success"}
+
 @app.post("/api/generate-simc")
 def generate_simc(payload: SimPayload):
     # This will create a file in /tmp/simc_tmp that can be passed to sim_helper
     try:
-        from cli.generate_input import generate_variations
+        from src.cli.generate_input import generate_variations, load_config
     except ImportError:
+        def load_config(path): return {"enchantments": {}, "gems": {}}
         def generate_variations(item_list, slot_name, config):
             return item_list # Fallback
 
+    config = load_config("config.json")
     output_file = "/tmp/simc_tmp/generated_sim.simc"
     
-    # We will just write a simple version, simulating what generate_input.py does.
-    # In a fully robust version, we'd reuse its exact code.
     from itertools import product
     
     choices = []
     group_slots = ["head", "neck", "shoulder", "back", "chest", "wrist", "hands", "waist", "legs", "feet", "main_hand", "off_hand"]
     for slot in group_slots:
         items = payload.selected_items.get(slot, [payload.equipped_gear.get(slot, "")])
-        # Add basic enchants if you wanted, skipping config for now or loading it
-        choices.append(items)
+        # Add enchants/gems variations based on config
+        choices.append(generate_variations(items, slot, config))
 
-    finger_vars = payload.selected_items.get("finger", [payload.equipped_gear.get("finger1", "")])
-    trinket_vars = payload.selected_items.get("trinket", [payload.equipped_gear.get("trinket1", "")])
+    finger_vars = generate_variations(payload.selected_items.get("finger", [payload.equipped_gear.get("finger1", "")]), "finger", config)
+    trinket_vars = generate_variations(payload.selected_items.get("trinket", [payload.equipped_gear.get("trinket1", "")]), "trinket", config)
     
     finger_pairs = [(finger_vars[i], finger_vars[j]) for i in range(len(finger_vars)) for j in range(i+1, len(finger_vars))] if len(finger_vars)>=2 else [(finger_vars[0], "")] if len(finger_vars)==1 else [("", "")]
     trinket_pairs = [(trinket_vars[i], trinket_vars[j]) for i in range(len(trinket_vars)) for j in range(i+1, len(trinket_vars))] if len(trinket_vars)>=2 else [(trinket_vars[0], "")] if len(trinket_vars)==1 else [("", "")]

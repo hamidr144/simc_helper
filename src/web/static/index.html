@@ -19,9 +19,10 @@
 
     <div class="tabs">
         <button class="tab-btn active" data-target="tab-setup">1. Setup & Addon</button>
-        <button class="tab-btn" data-target="tab-gear" id="btn-tab-gear" disabled>2. Gear Selection</button>
-        <button class="tab-btn" data-target="tab-sim" id="btn-tab-sim" disabled>3. Run Simulation</button>
-        <button class="tab-btn" data-target="tab-report" id="btn-tab-report" disabled>4. Final Report</button>
+        <button class="tab-btn" data-target="tab-config" id="btn-tab-config">2. Configuration</button>
+        <button class="tab-btn" data-target="tab-gear" id="btn-tab-gear" disabled>3. Gear Selection</button>
+        <button class="tab-btn" data-target="tab-sim" id="btn-tab-sim" disabled>4. Run Simulation</button>
+        <button class="tab-btn" data-target="tab-report" id="btn-tab-report" disabled>5. Final Report</button>
     </div>
 
     <main>
@@ -37,7 +38,25 @@
             <button id="btn-parse-addon" class="primary-btn">Parse Addon Data</button>
         </section>
 
-        <!-- Tab 2: Gear Selection -->
+        <!-- Tab 2: Configuration -->
+        <section id="tab-config" class="tab-content">
+            <h2>Gems & Enchants Configuration</h2>
+            <p>Configure the item IDs for gems and enchants you want to automatically test for each slot. Enter comma-separated IDs.</p>
+            <div id="config-form" style="display: flex; gap: 2rem; margin-bottom: 1rem;">
+                <div style="flex: 1;">
+                    <h3>Enchantments</h3>
+                    <div id="config-enchantments" class="config-grid"></div>
+                </div>
+                <div style="flex: 1;">
+                    <h3>Gems</h3>
+                    <div id="config-gems" class="config-grid"></div>
+                </div>
+            </div>
+            <button id="btn-save-config" class="primary-btn">Save Configuration</button>
+            <span id="config-save-status" style="margin-left: 1rem; color: var(--accent-color);"></span>
+        </section>
+
+        <!-- Tab 3: Gear Selection -->
         <section id="tab-gear" class="tab-content">
             <h2>Gear Selection</h2>
             <div id="character-info"></div>

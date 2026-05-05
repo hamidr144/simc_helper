@@ -18,6 +18,70 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnParseAddon = document.getElementById('btn-parse-addon');
     const btnGenerateSim = document.getElementById('btn-generate-sim');
     const btnRunSim = document.getElementById('btn-run-sim');
+    const btnSaveConfig = document.getElementById('btn-save-config');
+
+    // Config loading
+    const configSlots = {
+        enchantments: ["head", "neck", "shoulder", "back", "chest", "wrist", "hands", "waist", "legs", "feet", "finger", "main_hand", "off_hand"],
+        gems: ["head", "neck", "shoulder", "back", "chest", "wrist", "hands", "waist", "legs", "feet", "finger", "trinket"]
+    };
+
+    function renderConfigForm(config) {
+        ['enchantments', 'gems'].forEach(category => {
+            const container = document.getElementById(`config-${category}`);
+            container.innerHTML = '';
+            configSlots[category].forEach(slot => {
+                const label = document.createElement('label');
+                label.textContent = slot.replace('_', ' ').toUpperCase();
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.name = `${category}-${slot}`;
+                input.placeholder = "e.g., 1234, 5678";
+                const values = config[category] && config[category][slot] ? config[category][slot] : [];
+                input.value = values.join(', ');
+                label.appendChild(input);
+                container.appendChild(label);
+            });
+        });
+    }
+
+    fetch('/api/config')
+        .then(res => res.json())
+        .then(data => renderConfigForm(data))
+        .catch(err => console.error("Error loading config:", err));
+
+    if (btnSaveConfig) {
+        btnSaveConfig.addEventListener('click', async () => {
+            const newConfig = { enchantments: {}, gems: {} };
+            ['enchantments', 'gems'].forEach(category => {
+                configSlots[category].forEach(slot => {
+                    const input = document.querySelector(`input[name="${category}-${slot}"]`);
+                    if (input) {
+                        const val = input.value.trim();
+                        newConfig[category][slot] = val ? val.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n)) : [];
+                    }
+                });
+            });
+
+            btnSaveConfig.disabled = true;
+            try {
+                const res = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newConfig)
+                });
+                if (res.ok) {
+                    const status = document.getElementById('config-save-status');
+                    status.textContent = "Saved successfully!";
+                    setTimeout(() => status.textContent = "", 3000);
+                }
+            } catch (err) {
+                alert("Error saving configuration.");
+            } finally {
+                btnSaveConfig.disabled = false;
+            }
+        });
+    }
 
     // Tab Management
     function switchTab(targetId) {
