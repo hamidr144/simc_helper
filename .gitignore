@@ -1,11 +1,45 @@
+# Python
 __pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Runtime logs and temporary files
 *.log
 *.tmp
-*.html
-report_*
 /tmp/
-.gemini/
+master.log
+worker.log
+server.log
+
+# Generated SimulationCraft artifacts
+*.html
+!src/web/static/app.html
+!src/web/static/login.html
+!src/web/static/index.html
+*.simc
+report_*
 char_simc_addon.txt
 topgear.txt
+
+# Local configuration and secrets
+.env
 config.json
-*.simc
+deploy_configs/
+
+# Local AI/tooling notes
+.gemini/
+.geminiignore
+GEMINI.md
+
+# Build outputs
+build/
+build_macos/
+build_output/
+dist/
+*.spec
+
+# Runtime data
+data/

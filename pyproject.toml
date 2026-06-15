@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "simc-helper"
+version = "0.1.0"
+description = "Distributed SimulationCraft helper"
+requires-python = ">=3.9"
+
+[tool.setuptools]
+packages = ["src", "src.cli", "src.core", "src.web"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "src"]
+addopts = "-ra"
+
+[tool.coverage.run]
+source = ["src", "utils"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+fix = true
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+ignore = [
+  "S101",  # pytest asserts
+  "S603",  # subprocess use is intentional in deploy tooling and covered by redaction tests
+  "S607",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", "build", "dist"]
+skips = ["B101"]

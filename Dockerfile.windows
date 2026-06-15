@@ -1,0 +1,6 @@
+FROM tobix/pywine:3.9
+WORKDIR /app
+COPY requirements.txt .
+RUN wine pip install --no-cache-dir -r requirements.txt pyinstaller psutil requests
+ENV SIMC_PYINSTALLER_CMD="wine pyinstaller" SIMC_PYINSTALLER_WORKPATH="c:/temp/build" SIMC_ADD_DATA_SEP=";"
+ENTRYPOINT ["bash", "scripts/build_pyinstaller.sh"]

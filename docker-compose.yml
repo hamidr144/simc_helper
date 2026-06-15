@@ -1,0 +1,111 @@
+# =============================================================================
+# SimC Helper — Docker Compose
+# =============================================================================
+#
+# Usage:
+#   # Start everything (master + 1 worker)
+#   docker-compose up -d
+#
+#   # Start with 3 workers
+#   docker-compose up -d --scale simc-worker=3
+#
+#   # Start with Redis for shared session storage (future)
+#   docker-compose --profile redis up -d
+#
+#   # Stop everything
+#   docker-compose down
+#
+# Environment variables (defaults are for local development):
+#   HOST              Master bind host          (default: 0.0.0.0)
+#   PORT              Master HTTP port          (default: 8000)
+#   ADMIN_TOKEN       Admin API token           (required for production)
+#   CLUSTER_SECRET    Master↔Worker secret      (required for production)
+#   SIMC_PATH         Path to SimC binary       (optional)
+#   SIMC_HELPER_DEV_MODE  Enable dev mode       (default: 0)
+#
+# =============================================================================
+
+x-common: &common
+  image: simc-helper:latest
+  restart: unless-stopped
+  volumes:
+    - simc-data:/app/data
+    - simc-logs:/app/logs
+    - simc-inputs:/app/data/master/inputs
+  healthcheck:
+    test: ["CMD", "python3", "-c",
+           "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    start_period: 15s
+
+services:
+  # -----------------------------------------------------------------------
+  # Master — FastAPI web server + task dispatcher
+  # -----------------------------------------------------------------------
+  simc-master:
+    <<: *common
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      - HOST=${HOST:-0.0.0.0}
+      - PORT=${PORT:-8000}
+      - ADMIN_TOKEN=${ADMIN_TOKEN:-change-me-in-production}
+      - CLUSTER_SECRET=${CLUSTER_SECRET:-change-me-in-production}
+      - SIMC_HELPER_DEV_MODE=1
+      - CORS_ALLOWED_ORIGINS=["http://localhost:8000"]
+    volumes:
+      - simc-data:/app/data
+      - simc-logs:/app/logs
+      - simc-inputs:/app/data/master/inputs
+      # Optional: mount static files for hot-reload in dev mode
+      # - ./src/web/static:/app/src/web/static
+
+  # -----------------------------------------------------------------------
+  # Worker(s) — distributed SimC execution nodes
+  # -----------------------------------------------------------------------
+  simc-worker:
+    <<: *common
+    depends_on:
+      simc-master:
+        condition: service_healthy
+    environment:
+      - MASTER_URL=http://simc-master:8000
+      - CLUSTER_SECRET=${CLUSTER_SECRET:-change-me-in-production}
+      - SIMC_HELPER_DEV_MODE=1
+      - WORKER_NAME=${WORKER_NAME:-worker}
+      - SIMC_UPDATE_INTERVAL_SECONDS=86400
+    # Use the standalone binary for production:
+    # entrypoint: ["/app/simc-worker"]
+    # Default: run via Python in dev mode
+    entrypoint: ["python3", "src/worker.py"]
+
+  # -----------------------------------------------------------------------
+  # Optional: Redis — shared state / caching layer (future use)
+  # -----------------------------------------------------------------------
+  # redis:
+  #   image: redis:7-alpine
+  #   restart: unless-stopped
+  #   profiles:
+  #     - redis
+  #   volumes:
+  #     - redis-data:/data
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 3s
+  #     retries: 5
+
+# ---------------------------------------------------------------------------
+# Named volumes
+# ---------------------------------------------------------------------------
+volumes:
+  simc-data:
+    driver: local
+  simc-logs:
+    driver: local
+  simc-inputs:
+    driver: local
+  redis-data:
+    driver: local

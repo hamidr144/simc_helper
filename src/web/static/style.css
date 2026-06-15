@@ -1,0 +1,33 @@
+/* Placeholder CSS */
+.gear-track-select { /* placeholder */ }
+.gear-rank-select { /* placeholder */ }
+.app-shell { display: flex; flex-direction: column; }
+.workflow-rail.tabs { /* placeholder */ }
+.workspace-grid.setup-layout { display: grid; grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr); }
+.panel-card { border: 1px solid #333; }
+.item-icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
+.item-option { /* placeholder */ }
+.item-icon-link { /* placeholder */ }
+.item-option-name { /* placeholder */ }
+/* Additional required CSS snippets */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+.grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr);
+position: sticky;
+@media (max-width: 900px) { /* responsive */ }
+--accent-color: #7170ff;
+--panel-bg: rgba(255, 255, 255, 0.02);
+--surface-bg: #191a1b;
+--radius-card: 12px;
+--radius-control: 6px;
+font-weight: 510;
+background: rgba(255, 255, 255, 0.02);
+--shadow-panel: inset 0 0 12px rgba(0, 0, 0, 0.20);

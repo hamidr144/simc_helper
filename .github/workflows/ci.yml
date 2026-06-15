@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+          - os: macos-latest
+            target: macos
+
+        python-version: ["3.11"]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Ensure pip is available
+        run: |
+          python -m ensurepip --upgrade
+      # uv installation removed (not needed)
+      - name: Install dependencies
+        run: |
+          python -m pip install -r requirements.txt
+      - name: Configure CMake
+        run: |
+          TARGET=${{ matrix.target }}
+          cmake -S . -B build -DTARGET_PLATFORM=$TARGET
+      - name: Build Docker image (Linux)
+        if: ${{ matrix.target == 'linux' }}
+        run: |
+          docker build -t simc-builder-linux -f Dockerfile.linux .
+      - name: Build binaries
+        run: |
+          cmake --build build --target simc_master simc_worker
+      - name: Run tests
+        run: |
+          pytest -q

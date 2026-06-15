@@ -1,0 +1,23 @@
+{
+  "cluster_secret": "same-long-random-secret-as-master",
+  "master_ip": "master.example.local",
+  "master_port": 8000,
+  "nodes": [
+    {
+      "name": "Worker1",
+      "type": "worker",
+      "ip": "worker1.example.local",
+      "user": "deploy",
+      "target_dir": "/opt/simc_helper",
+      "access": {
+        "method": "key",
+        "key_path": "~/.ssh/id_ed25519"
+      },
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "SIM_COOLDOWN_SECONDS": 300,
+        "SIMC_UPDATE_INTERVAL_SECONDS": 86400
+      }
+    }
+  ]
+}

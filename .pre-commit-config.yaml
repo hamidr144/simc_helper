@@ -1,0 +1,35 @@
+# Pre-commit hooks for simc-helper
+# Install with: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  # --- Python linting & formatting ---
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.0
+    hooks:
+      # Ruff linter (fast, modern, Python 3.9+)
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      # Ruff formatter (black-compatible)
+      - id: ruff-format
+
+  # --- Security scanning ---
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.3
+    hooks:
+      - id: bandit
+        args: [-r, src/, -ll]  # Level: low (default), skip B104 (potential binding)
+        exclude: tests/
+
+  # --- Python syntax check ---
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-added-large-files
+        args: [--maxkb=5000]
+      - id: check-merge-conflict
+      - id: debug-statements

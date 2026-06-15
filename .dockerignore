@@ -1,0 +1,60 @@
+# Local build outputs should not be sent as Docker build context.
+build/
+build_macos/
+build_output/
+dist/
+*.spec
+
+# Python/test caches
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local config and generated runtime artifacts
+.env
+config.json
+deploy_configs/
+*.log
+*.tmp
+*.html
+*.simc
+report_*
+char_simc_addon.txt
+topgear.txt
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Docs (not needed in container — source is copied explicitly)
+*.md
+docs/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Root-level build configs (CMake)
+CMakeLists.txt

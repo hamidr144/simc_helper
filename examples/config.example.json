@@ -1,0 +1,21 @@
+{
+  "enchantments": {
+    "head": [],
+    "neck": [],
+    "shoulder": [],
+    "back": [],
+    "chest": [],
+    "wrist": [],
+    "hands": [],
+    "waist": [],
+    "legs": [],
+    "feet": [],
+    "finger": [],
+    "main_hand": [],
+    "off_hand": []
+  },
+  "gems": {
+    "meta": [],
+    "standard": []
+  }
+}
