@@ -1,10 +1,15 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
 
+/* --- Design System & CSS Variables --- */
 :root {
-  --surface-bg: #0a0b0d;
-  --panel-bg: rgba(18, 20, 26, 0.7);
-  --panel-border: rgba(255, 255, 255, 0.08);
+  --surface-bg: #191a1b;
+  --panel-bg: rgba(255, 255, 255, 0.02);
   --accent-color: #7170ff;
+  --radius-card: 12px;
+  --radius-control: 6px;
+  --shadow-panel: inset 0 0 12px rgba(0, 0, 0, 0.20);
+  
+  --panel-border: rgba(255, 255, 255, 0.08);
   --accent-hover: #5d5bf0;
   --accent-glow: rgba(113, 112, 255, 0.35);
   
@@ -12,16 +17,11 @@
   --text-secondary: #9ca3af;
   --text-muted: #6b7280;
   
-  --radius-card: 14px;
-  --radius-control: 8px;
-  
-  --shadow-panel: 0 10px 40px -10px rgba(0, 0, 0, 0.5), inset 0 0 12px rgba(255, 255, 255, 0.01);
-  --shadow-inset: inset 0 2px 4px 0 rgba(0, 0, 0, 0.3);
-  
   --font-display: 'Outfit', sans-serif;
   --font-sans: 'Plus Jakarta Sans', sans-serif;
 }
 
+/* --- Document Defaults & Resets --- */
 * {
   box-sizing: border-box;
   margin: 0;
@@ -30,8 +30,10 @@
 
 body {
   background-color: var(--surface-bg);
+  background: var(--surface-bg);
   color: var(--text-primary);
   font-family: var(--font-sans);
+  font-weight: 510;
   min-height: 100vh;
   display: flex;
   justify-content: center;
@@ -41,7 +43,7 @@ body {
     radial-gradient(circle at 90% 80%, rgba(113, 112, 255, 0.04) 0%, transparent 45%);
 }
 
-/* App Shell Layout */
+/* --- App Shell & Layout --- */
 .app-shell {
   display: flex;
   flex-direction: row;
@@ -51,10 +53,9 @@ body {
   min-height: 100vh;
 }
 
-/* Sidebar Navigation Rail */
 .workflow-rail.tabs {
   width: 80px;
-  background: var(--panel-bg);
+  background: rgba(255, 255, 255, 0.02);
   border-right: 1px solid var(--panel-border);
   display: flex;
   flex-direction: column;
@@ -80,12 +81,11 @@ body {
   to { transform: rotate(360deg); }
 }
 
-/* Main Workspace Grid */
 .workspace-grid.setup-layout {
   flex: 1;
   padding: 40px;
   display: grid;
-  grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.2fr);
+  grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr);
   gap: 30px;
   align-content: start;
 }
@@ -114,7 +114,7 @@ p {
   margin-bottom: 20px;
 }
 
-/* Controls */
+/* --- Interactive Elements & Controls --- */
 textarea {
   width: 100%;
   height: 180px;
@@ -128,12 +128,11 @@ textarea {
   resize: vertical;
   transition: all 0.3s ease;
   outline: none;
-  box-shadow: var(--shadow-inset);
 }
 
 textarea:focus {
   border-color: var(--accent-color);
-  box-shadow: 0 0 0 3px rgba(113, 112, 255, 0.2), var(--shadow-inset);
+  box-shadow: 0 0 0 3px rgba(113, 112, 255, 0.2);
 }
 
 button {
@@ -164,7 +163,7 @@ button:active {
   transform: translateY(0);
 }
 
-/* Panel Cards & Workspace blocks */
+/* --- Cards & Panels --- */
 .panel-card {
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
@@ -179,7 +178,7 @@ button:active {
   border-color: rgba(113, 112, 255, 0.25);
 }
 
-/* Item Grids */
+/* --- Gear Grid & Options --- */
 .item-icon-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
@@ -219,7 +218,7 @@ button:active {
   display: block;
 }
 
-/* Custom Select Dropdowns */
+/* --- Dropdown Selectors --- */
 .gear-track-select,
 .gear-rank-select {
   background: rgba(0, 0, 0, 0.4);
@@ -240,7 +239,7 @@ button:active {
   box-shadow: 0 0 0 2px rgba(113, 112, 255, 0.15);
 }
 
-/* Accessibility Helpers */
+/* --- Accessibility & Utilities --- */
 .sr-only {
   position: absolute;
   width: 1px;
@@ -252,7 +251,7 @@ button:active {
   border: 0;
 }
 
-/* Responsive adjustment */
+/* --- Responsive Adjustments --- */
 @media (max-width: 900px) {
   .app-shell {
     flex-direction: column;

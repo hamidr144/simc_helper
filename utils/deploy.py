@@ -385,11 +385,9 @@ def fallback_start_command(node: Dict[str, Any], cluster_secret: str, master_ip=
     bin_name = binary_name(node)
     log_file = f"{remote_dir}/logs/{node['type']}.out"
 
-    # Base environment variables required for both master and worker.
     common: List[str] = [
         f"cd {q(remote_dir)}",
-        # Use double quotes around the pkill pattern to avoid nested quoting issues.
-        # pkill omitted to avoid terminating the ssh session
+        f"pkill -f {q(process_match_pattern(bin_name))} || true",
         "sleep 1",
         f"export CLUSTER_SECRET={q(cluster_secret)}",
         f"export BASE_DIR={q(remote_dir)}",
