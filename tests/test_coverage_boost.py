@@ -13,21 +13,24 @@ client = TestClient(app)
 def test_api_run_simulation_no_idle_workers():
     # Ensure no workers
     manager.active_workers = {}
-    with patch.object(manager, "get_idle_worker", return_value=None):
+    with patch("web.main.session_get", return_value=None), \
+         patch.object(manager, "get_idle_worker", return_value=None):
         response = client.post("/api/run-simulation", params={"worker_id": "nonexistent"})
         assert response.status_code == 503
         assert "No idle workers available" in response.json()["detail"]
 
 def test_api_run_simulation_worker_busy():
     manager.active_workers["busy_worker"] = MagicMock(status="Busy")
-    response = client.post("/api/run-simulation", params={"worker_id": "busy_worker"})
+    with patch("web.main.session_get", return_value=None):
+        response = client.post("/api/run-simulation", params={"worker_id": "busy_worker"})
     assert response.status_code == 503
     # Our logic returns "No idle workers available" if the specific worker is busy too
     assert "workers available" in response.json()["detail"]
 
 def test_api_run_simulation_send_task_error():
     manager.active_workers["idle_worker"] = MagicMock(status="Idle")
-    with patch.object(manager, "send_task", side_effect=Exception("Failed")):
+    with patch("web.main.session_get", return_value=None), \
+         patch.object(manager, "send_task", side_effect=Exception("Failed")):
         response = client.post("/api/run-simulation", params={"worker_id": "idle_worker"})
         assert response.status_code == 500
 

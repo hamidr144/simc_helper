@@ -39,6 +39,7 @@ def test_main_cli(tmp_path):
     config_file.write_text('{"cluster_secret": "sec", "nodes": [{"name": "n1", "type": "master", "user": "u", "ip": "1.1.1.1"}]}')
 
     with patch("sys.argv", ["deploy.py", "status", "--config", str(config_file)]), \
+         patch("utils.deploy.run_cmd") as mock_run, \
          patch("utils.deploy.process_target_nodes") as mock_process:
         main()
         assert mock_process.called
@@ -56,6 +57,7 @@ def test_deploy_cli_supports_simple_deploy_action(tmp_path):
     worker_config.write_text('{"cluster_secret": "sec", "master_ip": "1.1.1.1", "nodes": [{"name": "w", "type": "worker", "user": "u", "ip": "1.1.1.2"}]}')
 
     with patch("sys.argv", ["deploy.py", "deploy", "--config", str(master_config), str(worker_config)]), \
+         patch("utils.deploy.run_cmd") as mock_run, \
          patch("utils.deploy.process_target_nodes") as mock_process:
         main()
 

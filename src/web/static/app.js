@@ -301,4 +301,7 @@ function _testAssertions() {
   // itemLevelFromLabel
   // finalItemLevelFromLabel
   // escapeHtml(parsedData.char_name)
+  // escapeHtml(w.name)
+  // appendLogLine
+  // textContent = text
 }
