@@ -204,11 +204,16 @@ button:active {
   display: inline-block;
   width: 48px;
   height: 48px;
-  background: #1e293b;
+  background-color: #1e293b;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  padding-left: 0 !important;
+  text-indent: -9999px;
+  overflow: hidden;
   border-radius: 8px;
   margin-bottom: 8px;
   border: 1px solid var(--panel-border);
-  overflow: hidden;
 }
 
 .item-icon-link img {

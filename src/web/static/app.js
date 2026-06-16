@@ -81,7 +81,7 @@ function filterSelectableGem(gemName) {
 
 // Helper to create Wowhead icon link
 function createWowheadIconLink(itemId, type = 'item') {
-  return `<a href="https://www.wowhead.com/${type}=${itemId}" class="item-icon-link" data-wowhead="domain=ptr" data-wh-rename="false" target="_blank"></a>`;
+  return `<a href="https://www.wowhead.com/${type}=${itemId}" class="item-icon-link" data-wowhead="domain=ptr&iconsize=large" data-wh-rename="false" target="_blank">&nbsp;</a>`;
 }
 
 // Hydrate grades directly from Wowhead
