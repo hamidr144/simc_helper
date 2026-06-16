@@ -81,7 +81,7 @@ function filterSelectableGem(gemName) {
 
 // Helper to create Wowhead icon link
 function createWowheadIconLink(itemId, type = 'item') {
-  return `<a href="https://www.wowhead.com/${type}=${itemId}" class="item-icon-link" data-wowhead="domain=ptr" target="_blank"></a>`;
+  return `<a href="https://www.wowhead.com/${type}=${itemId}" class="item-icon-link" data-wowhead="domain=ptr" data-wh-rename="false" target="_blank"></a>`;
 }
 
 // Hydrate grades directly from Wowhead
@@ -303,9 +303,10 @@ function renderGearInterface() {
       if (params.enchant_id) {
         const enchantBadge = document.createElement('a');
         enchantBadge.className = 'item-enchant-badge';
-        enchantBadge.href = `https://www.wowhead.com/spell=${params.enchant_id}`;
+        enchantBadge.href = `https://www.wowhead.com/enchant=${params.enchant_id}`;
         enchantBadge.target = '_blank';
         enchantBadge.dataset.wowhead = 'domain=ptr';
+        enchantBadge.setAttribute('data-wh-iconize', 'false');
         enchantBadge.textContent = `Enchant: ${params.enchant_id}`;
         badgesContainer.appendChild(enchantBadge);
       }
@@ -319,6 +320,7 @@ function renderGearInterface() {
             gemBadge.href = `https://www.wowhead.com/item=${gemId}`;
             gemBadge.target = '_blank';
             gemBadge.dataset.wowhead = 'domain=ptr';
+            gemBadge.setAttribute('data-wh-iconize', 'false');
             gemBadge.textContent = `Gem: ${gemId}`;
             badgesContainer.appendChild(gemBadge);
           }
@@ -335,6 +337,17 @@ function renderGearInterface() {
   
   gearPanel.appendChild(grid);
   container.appendChild(gearPanel);
+
+  // Trigger Wowhead tooltip hydration for dynamic links
+  if (typeof window.$WowheadPower !== 'undefined') {
+    window.$WowheadPower.refreshLinks();
+  } else {
+    setTimeout(() => {
+      if (typeof window.$WowheadPower !== 'undefined') {
+        window.$WowheadPower.refreshLinks();
+      }
+    }, 300);
+  }
 }
 
 function parseItemParams(itemStr) {
