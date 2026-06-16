@@ -1,21 +1,94 @@
 {
   "enchantments": {
-    "head": [],
+    "head": [
+      {"id": 8017, "name": "Incandescent Essence"}
+    ],
     "neck": [],
-    "shoulder": [],
-    "back": [],
-    "chest": [],
-    "wrist": [],
-    "hands": [],
+    "shoulder": [
+      {"id": 8001, "name": "Gilded Ribbon"}
+    ],
+    "back": [
+      {"id": 223731, "name": "Enchant Cloak - Chant of Winged Grace"},
+      {"id": 223737, "name": "Enchant Cloak - Chant of Leeching Fangs"},
+      {"id": 223800, "name": "Enchant Cloak - Chant of Burrowing Rapidity"}
+    ],
+    "chest": [
+      {"id": 223683, "name": "Enchant Chest - Stormrider's Agility"},
+      {"id": 223686, "name": "Enchant Chest - Council's Intellect"},
+      {"id": 223692, "name": "Enchant Chest - Crystalline Radiance"},
+      {"id": 223689, "name": "Enchant Chest - Oathsworn's Strength"}
+    ],
+    "wrist": [
+      {"id": 223713, "name": "Enchant Bracer - Chant of Armored Avoidance"},
+      {"id": 223719, "name": "Enchant Bracer - Chant of Armored Leech"},
+      {"id": 223725, "name": "Enchant Bracer - Chant of Armored Speed"}
+    ],
+    "hands": [
+      {"id": 2841, "name": "Gilded Thread"}
+    ],
     "waist": [],
-    "legs": [],
-    "feet": [],
-    "finger": [],
-    "main_hand": [],
+    "legs": [
+      {"id": 8159, "name": "Sunset Armor Patch"}
+    ],
+    "feet": [
+      {"id": 223650, "name": "Enchant Boots - Cavalry's March"},
+      {"id": 223653, "name": "Enchant Boots - Scout's March"},
+      {"id": 223656, "name": "Enchant Boots - Defender's March"}
+    ],
+    "finger": [
+      {"id": 223662, "name": "Enchant Ring - Radiant Critical Strike"},
+      {"id": 223674, "name": "Enchant Ring - Radiant Haste"},
+      {"id": 223677, "name": "Enchant Ring - Radiant Mastery"},
+      {"id": 223680, "name": "Enchant Ring - Radiant Versatility"},
+      {"id": 223787, "name": "Enchant Ring - Cursed Critical Strike"},
+      {"id": 223790, "name": "Enchant Ring - Cursed Haste"},
+      {"id": 223793, "name": "Enchant Ring - Cursed Mastery"},
+      {"id": 223796, "name": "Enchant Ring - Cursed Versatility"}
+    ],
+    "main_hand": [
+      {"id": 223775, "name": "Enchant Weapon - Authority of Air"},
+      {"id": 223778, "name": "Enchant Weapon - Authority of Fiery Resolve"},
+      {"id": 223781, "name": "Enchant Weapon - Authority of Radiant Power"},
+      {"id": 223784, "name": "Enchant Weapon - Authority of the Depths"},
+      {"id": 223772, "name": "Enchant Weapon - Authority of Storms"},
+      {"id": 223768, "name": "Enchant Weapon - Oathsworn's Tenacity"},
+      {"id": 223765, "name": "Enchant Weapon - Stonebound Artistry"},
+      {"id": 223762, "name": "Enchant Weapon - Stormrider's Fury"},
+      {"id": 223759, "name": "Enchant Weapon - Council's Guile"}
+    ],
     "off_hand": []
   },
   "gems": {
-    "meta": [],
-    "standard": []
+    "meta": [
+      {"id": 435392, "name": "Cubic Blasphemia"},
+      {"id": 435318, "name": "Culminating Blasphemite"},
+      {"id": 435319, "name": "Elusive Blasphemite"},
+      {"id": 435230, "name": "Insightful Blasphemite"},
+      {"id": 435321, "name": "Cognitive Bloodstone"},
+      {"id": 435322, "name": "Determined Bloodstone"},
+      {"id": 435320, "name": "Enduring Bloodstone"}
+    ],
+    "standard": [
+      {"id": 434563, "name": "Versatile Sapphire"},
+      {"id": 434554, "name": "Quick Sapphire"},
+      {"id": 434553, "name": "Deadly Sapphire"},
+      {"id": 434555, "name": "Masterful Sapphire"},
+      {"id": 434542, "name": "Quick Emerald"},
+      {"id": 434544, "name": "Versatile Emerald"},
+      {"id": 434541, "name": "Deadly Emerald"},
+      {"id": 434543, "name": "Masterful Emerald"},
+      {"id": 434549, "name": "Deadly Ruby"},
+      {"id": 434552, "name": "Versatile Ruby"},
+      {"id": 434550, "name": "Quick Ruby"},
+      {"id": 434551, "name": "Masterful Ruby"},
+      {"id": 434547, "name": "Masterful Onyx"},
+      {"id": 434548, "name": "Versatile Onyx"},
+      {"id": 434546, "name": "Quick Onyx"},
+      {"id": 434545, "name": "Deadly Onyx"},
+      {"id": 434536, "name": "Solid Amber"},
+      {"id": 434540, "name": "Versatile Amber"},
+      {"id": 434538, "name": "Quick Amber"},
+      {"id": 434537, "name": "Deadly Amber"}
+    ]
   }
 }

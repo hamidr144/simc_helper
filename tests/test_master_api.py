@@ -140,7 +140,11 @@ def test_api_generate_simc_applies_item_level_overrides_to_equipped_and_selected
         },
     }
 
-    response = client.post("/api/generate-simc", json=payload)
+    with patch(
+        "src.cli.generate_input.load_config",
+        return_value={"gems": {"meta": [], "standard": []}, "enchantments": {}},
+    ):
+        response = client.post("/api/generate-simc", json=payload)
     assert response.status_code == 200
 
     with open("char_simc_addon.txt") as f:
@@ -171,7 +175,11 @@ def test_api_generate_simc_applies_midnight_track_rank_upgrades():
         "item_levels": {"head": {"id=1,bonus_id=100": 220}},
     }
 
-    response = client.post("/api/generate-simc", json=payload)
+    with patch(
+        "src.cli.generate_input.load_config",
+        return_value={"gems": {"meta": [], "standard": []}, "enchantments": {}},
+    ):
+        response = client.post("/api/generate-simc", json=payload)
     assert response.status_code == 200
 
     with open("char_simc_addon.txt") as f:
@@ -207,7 +215,11 @@ def test_api_generate_simc_applies_voidforge_only_to_selected_weapons_and_trinke
         },
     }
 
-    response = client.post("/api/generate-simc", json=payload)
+    with patch(
+        "src.cli.generate_input.load_config",
+        return_value={"gems": {"meta": [], "standard": []}, "enchantments": {}},
+    ):
+        response = client.post("/api/generate-simc", json=payload)
     assert response.status_code == 200
 
     with open("char_simc_addon.txt") as f:
@@ -265,7 +277,11 @@ def test_api_generate_simc_does_not_add_standard_gems_to_unsocketed_items():
         "extra_sockets": {"head": True, "wrist": False, "waist": False},
     }
 
-    response = client.post("/api/generate-simc", json=payload)
+    with patch(
+        "src.cli.generate_input.load_config",
+        return_value={"gems": {"meta": [], "standard": []}, "enchantments": {}},
+    ):
+        response = client.post("/api/generate-simc", json=payload)
     assert response.status_code == 200
 
     with open("char_simc_addon.txt") as f:
