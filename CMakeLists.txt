@@ -24,7 +24,7 @@ if(TARGET_PLATFORM STREQUAL "linux")
             COMMAND docker run ${DOCKER_PLATFORM_ARGS} --rm
                 -e SIMC_BUILD_ARTIFACTS=${artifact_name}
                 -e SIMC_PYINSTALLER_CLEAN=${PYINSTALLER_CLEAN_VALUE}
-                -e SIMC_PYINSTALLER_WORKPATH=/app/build_output/pyinstaller-work
+                -e SIMC_PYINSTALLER_WORKPATH=/app/build_output/pyinstaller-work-${artifact_name}
                 -v ${CMAKE_SOURCE_DIR}:/app
                 -v ${CMAKE_BINARY_DIR}:/app/build_output
                 ${BUILDER_IMAGE}
@@ -49,7 +49,7 @@ elseif(TARGET_PLATFORM STREQUAL "windows")
             COMMAND docker run --rm
                 -e SIMC_BUILD_ARTIFACTS=${artifact_name}
                 -e SIMC_PYINSTALLER_CLEAN=${PYINSTALLER_CLEAN_VALUE}
-                -e SIMC_PYINSTALLER_WORKPATH=z:/app/build_output/pyinstaller-work
+                -e SIMC_PYINSTALLER_WORKPATH=z:/app/build_output/pyinstaller-work-${artifact_name}
                 -v ${CMAKE_SOURCE_DIR}:/app
                 -v ${CMAKE_BINARY_DIR}:/app/build_output
                 ${BUILDER_IMAGE}
@@ -72,7 +72,7 @@ elseif(TARGET_PLATFORM STREQUAL "macos")
                 SIMC_BUILD_ARTIFACTS=${artifact_name}
                 SIMC_PYINSTALLER_CLEAN=${PYINSTALLER_CLEAN_VALUE}
                 SIMC_PYINSTALLER_CMD=python3\ -m\ PyInstaller
-                SIMC_PYINSTALLER_WORKPATH=${CMAKE_BINARY_DIR}/pyinstaller-work
+                SIMC_PYINSTALLER_WORKPATH=${CMAKE_BINARY_DIR}/pyinstaller-work-${artifact_name}
                 SIMC_PYINSTALLER_DISTPATH=${CMAKE_BINARY_DIR}
                 bash ${PYINSTALLER_SCRIPT}
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}

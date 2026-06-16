@@ -412,7 +412,10 @@ def fallback_start_command(node: Dict[str, Any], cluster_secret: str, master_ip=
         common.append(f"export {key}={q(str(value))}")
 
     # Finally launch the binary under nohup, directing output to a log file.
-    common.append(f"nohup ./bin/{q(bin_name)} > {q(log_file)} 2>&1 < /dev/null &")
+    # We escape the hyphen to prevent the running bash shell command line from matching
+    # the pkill -f pattern, which would cause the SSH session to terminate itself with code 255.
+    bin_name_escaped = bin_name.replace("-", '"-"')
+    common.append(f"nohup ./bin/{bin_name_escaped} > {q(log_file)} 2>&1 < /dev/null &")
     return join_remote(common)
 
 
