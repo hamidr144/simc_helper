@@ -57,4 +57,4 @@ docs/
 .gitlab-ci.yml
 
 # Root-level build configs (CMake)
-CMakeLists.txt
+

@@ -36,7 +36,7 @@ GEMINI.md
 
 # Build outputs
 build/
-build_macos/
+build_*/
 build_output/
 dist/
 *.spec

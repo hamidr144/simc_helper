@@ -28,6 +28,7 @@ if(TARGET_PLATFORM STREQUAL "linux")
                 -v ${CMAKE_SOURCE_DIR}:/app
                 -v ${CMAKE_BINARY_DIR}:/app/build_output
                 ${BUILDER_IMAGE}
+            COMMAND test -f ${CMAKE_BINARY_DIR}/${artifact_name}
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             COMMENT ${comment_text}
         )
@@ -65,8 +66,8 @@ elseif(TARGET_PLATFORM STREQUAL "windows")
 elseif(TARGET_PLATFORM STREQUAL "macos")
     function(add_macos_artifact_target target_name artifact_name comment_text)
         add_custom_target(${target_name}
-            COMMAND python3 -m pip install -r requirements.txt
-            COMMAND python3 -m pip install pyinstaller
+            COMMAND python3 -m pip install --break-system-packages -r requirements.txt
+            COMMAND python3 -m pip install --break-system-packages pyinstaller
             COMMAND ${CMAKE_COMMAND} -E env
                 SIMC_BUILD_ARTIFACTS=${artifact_name}
                 SIMC_PYINSTALLER_CLEAN=${PYINSTALLER_CLEAN_VALUE}

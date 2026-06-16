@@ -1,5 +1,18 @@
-# Dockerfile.linux – placeholder for CI
-FROM alpine:latest
-RUN echo "Docker placeholder for simc_helper CI"
-# Use shared build script
-# scripts/build_pyinstaller.sh
+# Dockerfile.linux – builds Linux x86_64 binaries for SimC Helper
+FROM --platform=linux/amd64 python:3.9-slim
+
+# Install build dependencies (including bash for script)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential cmake git bash && \
+    rm -rf /var/lib/apt/lists/* && \
+    python3 -m pip install --no-cache-dir pyinstaller
+
+WORKDIR /app
+# Copy project files
+COPY requirements.txt /app/requirements.txt
+RUN python3 -m pip install --no-cache-dir pyinstaller -r requirements.txt
+
+COPY . /app
+
+ENTRYPOINT ["bash", "scripts/build_pyinstaller.sh"]

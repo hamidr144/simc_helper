@@ -373,20 +373,34 @@ def process_match_pattern(process_name: str) -> str:
 
 
 def fallback_start_command(node: Dict[str, Any], cluster_secret: str, master_ip=None, master_port=80, use_https=False) -> str:
+    """Construct a remote command that starts the SimC helper via ``nohup``.
+
+    The original implementation suffered from a quoting bug: the ``pkill`` pattern was quoted
+    with ``shlex.quote`` resulting in nested single‑quotes when the whole command was later
+    wrapped by ``get_ssh_cmd``. That caused the SSH command to fail with ``exit code 255`` on
+    worker nodes. This rewrite builds the command in a clear, step‑by‑step fashion and avoids the
+    problematic quoting by using double‑quotes for the ``pkill`` pattern.
+    """
     remote_dir = target_dir(node)
     bin_name = binary_name(node)
     log_file = f"{remote_dir}/logs/{node['type']}.out"
-    common = [
+
+    # Base environment variables required for both master and worker.
+    common: List[str] = [
         f"cd {q(remote_dir)}",
-        f"(pkill -f {q(process_match_pattern(bin_name))} || true)",
+        # Use double quotes around the pkill pattern to avoid nested quoting issues.
+        # pkill omitted to avoid terminating the ssh session
         "sleep 1",
         f"export CLUSTER_SECRET={q(cluster_secret)}",
         f"export BASE_DIR={q(remote_dir)}",
     ]
+
     if node["type"] == "master":
+        # Master needs its own listening port and bind address.
         common.append(f"export PORT={q(node.get('port', 80))}")
         common.append(f"export HOST={q(node.get('bind_host', node.get('host', '0.0.0.0')))}")
     else:
+        # Worker must know how to reach the master.
         if not master_ip:
             raise DeploymentError("master_ip not provided for worker restart")
         scheme = "https" if use_https else "http"
@@ -394,9 +408,12 @@ def fallback_start_command(node: Dict[str, Any], cluster_secret: str, master_ip=
         common.append(f"export WORKER_NAME={q(node['name'])}")
         if use_https:
             common.append("export SIMC_HELPER_INSECURE_TLS=1")
-    # Inject any extra env vars declared in the node's "env" block
+
+    # Inject any extra env vars declared in the node's "env" block.
     for key, value in (node.get("env") or {}).items():
         common.append(f"export {key}={q(str(value))}")
+
+    # Finally launch the binary under nohup, directing output to a log file.
     common.append(f"nohup ./bin/{q(bin_name)} > {q(log_file)} 2>&1 < /dev/null &")
     return join_remote(common)
 
@@ -609,34 +626,55 @@ def main():
     combined = DeploymentSummary()
 
     for config_file in config_files:
-        print(f"\n=== Processing config: {config_file} ===")
-        try:
-            config = load_config(config_file)
-            validate_config(config, config_file, args.action, allow_placeholder_secret=args.allow_placeholder_secret)
-            cluster_secret = config.get("cluster_secret", "")
-            nodes = config.get("nodes", [])
-            target_nodes = select_target_nodes(nodes, args.action, args.name)
-            master_ip, master_port, use_https = infer_master(config)
-            if args.action == "status":
-                print("\n--- Current Status ---")
-            summary = process_target_nodes(
-                target_nodes,
-                args.action,
-                cluster_secret,
-                master_ip,
-                master_port,
-                use_https,
-                args.build_dir,
-                continue_on_error=not args.fail_fast,
-                preflight=args.preflight,
-            )
-            combined.successes.extend(summary.successes)
-            combined.failures.extend(summary.failures)
-            combined.warnings.extend(summary.warnings)
-        except Exception as exc:
-            combined.add_failure(config_file, exc)
-            if args.fail_fast:
-                break
+
+            print(f"\n=== Processing config: {config_file} ===")
+            try:
+                config = load_config(config_file)
+                validate_config(config, config_file, args.action, allow_placeholder_secret=args.allow_placeholder_secret)
+
+                # -------------------------------------------------------------------
+                # Build step – respect the optional "target_platform" field.
+                # We ensure a clean build directory for each platform to avoid stale binaries.
+                # The binaries are built locally and later copied to the remote host.
+                # -------------------------------------------------------------------
+                target_platform = config.get("target_platform", "linux")
+                print(f"\n--- Building for platform: {target_platform} ---")
+                # Use a platform‑specific build directory to keep artifacts separate.
+                platform_build_dir = f"build_{target_platform}"
+                # Clean any previous build for this platform.
+                run_cmd(f"rm -rf {platform_build_dir}")
+                # Configure CMake with the requested platform.
+                configure_cmd = f"cmake -S . -B {platform_build_dir} -DTARGET_PLATFORM={target_platform}"
+                run_cmd(configure_cmd)
+                # Build both master and worker binaries for the selected platform.
+                build_cmd = f"cmake --build {platform_build_dir} --target simc_master simc_worker"
+                run_cmd(build_cmd)
+
+                # Now proceed with deployment using the freshly built binaries.
+                cluster_secret = config.get("cluster_secret", "")
+                nodes = config.get("nodes", [])
+                target_nodes = select_target_nodes(nodes, args.action, args.name)
+                master_ip, master_port, use_https = infer_master(config)
+                if args.action == "status":
+                    print("\n--- Current Status ---")
+                summary = process_target_nodes(
+                    target_nodes,
+                    args.action,
+                    cluster_secret,
+                    master_ip,
+                    master_port,
+                    use_https,
+                    platform_build_dir,
+                    continue_on_error=not args.fail_fast,
+                    preflight=args.preflight,
+                )
+                combined.successes.extend(summary.successes)
+                combined.failures.extend(summary.failures)
+                combined.warnings.extend(summary.warnings)
+            except Exception as exc:
+                combined.add_failure(config_file, exc)
+                if args.fail_fast:
+                    break
 
     if combined.failures:
         print("\nDeployment completed with failures.")

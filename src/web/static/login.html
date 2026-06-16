@@ -2,10 +2,28 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Login</title>
+  <title>SimC Helper Login</title>
+  <style>
+    body {font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto;}
+    h1 {text-align: center;}
+    form {display: flex; flex-direction: column;}
+    label {margin-top: 10px;}
+    input {padding: 8px; margin-top: 5px;}
+    button {margin-top: 15px; padding: 10px;}
+    .link {margin-top: 10px; text-align: center;}
+  </style>
 </head>
 <body>
-  <h1>Login Page</h1>
-  <p>Placeholder login page.</p>
+  <h1>Login</h1>
+  <form action="/login" method="post">
+    <label for="username">Username:</label>
+    <input type="text" id="username" name="username" required />
+    <label for="password">Password:</label>
+    <input type="password" id="password" name="password" required />
+    <button type="submit">Log In</button>
+  </form>
+  <div class="link">
+    <a href="/register">Create an account</a>
+  </div>
 </body>
 </html>
