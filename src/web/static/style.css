@@ -29,7 +29,6 @@
 }
 
 body {
-  background-color: var(--surface-bg);
   background: var(--surface-bg);
   color: var(--text-primary);
   font-family: var(--font-sans);
