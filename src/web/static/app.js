@@ -159,12 +159,9 @@ if (btnParseAddon) {
 
 // Render the interactive gear grid and panels
 function renderGearInterface() {
-  const container = document.querySelector('.workspace-grid.setup-layout');
+  const container = document.getElementById('gear-workspace-container');
   if (!container) return;
-  
-  // Clear layout placeholders
-  const placeholders = container.querySelectorAll('.panel-card');
-  placeholders.forEach(el => el.remove());
+  container.innerHTML = '';
   
   const gearPanel = document.createElement('div');
   gearPanel.className = 'panel-card';
@@ -176,33 +173,70 @@ function renderGearInterface() {
   gearPanel.appendChild(title);
   
   const grid = document.createElement('div');
-  grid.className = 'item-icon-grid';
+  grid.className = 'item-icon-grid gear-grid-columns';
   
   Object.keys(parsedData.items_by_slot).forEach(slot => {
     const items = parsedData.items_by_slot[slot];
     items.forEach(itemStr => {
       const isCrafted = isCraftedItem(itemStr);
+      const params = parseItemParams(itemStr);
+      const itemId = params.id || '';
       
-      const itemOptionEl = document.createElement('div');
-      itemOptionEl.className = 'item-option';
+      // Parse name and ilvl
+      let rawName = parsedData.item_names[itemStr] || slot;
+      let ilvl = '';
+      const ilvlMatch = rawName.match(/\((\d+)\)/);
+      if (ilvlMatch) {
+        ilvl = ilvlMatch[1];
+        rawName = rawName.replace(/\s*\(\d+\)/, '');
+      }
+      
+      const card = document.createElement('div');
+      card.className = 'item-option gear-card';
+      
+      // Header: Icon + Info
+      const header = document.createElement('div');
+      header.className = 'gear-card-header';
       
       const iconContainer = document.createElement('div');
-      iconContainer.innerHTML = createWowheadIconLink(itemStr.split('=')[0]);
-      itemOptionEl.appendChild(iconContainer);
+      iconContainer.innerHTML = createWowheadIconLink(itemId);
+      header.appendChild(iconContainer);
+      
+      const info = document.createElement('div');
+      info.className = 'gear-card-info';
+      
+      const slotLabel = document.createElement('div');
+      slotLabel.className = 'gear-card-slot';
+      slotLabel.textContent = slot;
+      info.appendChild(slotLabel);
       
       const nameLabel = document.createElement('span');
-      nameLabel.className = 'item-option-name';
-      nameLabel.textContent = parsedData.item_names[itemStr.split('=')[0]] || slot;
-      itemOptionEl.appendChild(nameLabel);
+      nameLabel.className = 'item-option-name gear-card-name';
+      nameLabel.textContent = rawName;
+      info.appendChild(nameLabel);
+      
+      header.appendChild(info);
+      
+      if (ilvl) {
+        const ilvlEl = document.createElement('div');
+        ilvlEl.className = 'ilvl-badge';
+        ilvlEl.textContent = `iLvl ${ilvl}`;
+        header.appendChild(ilvlEl);
+      }
+      
+      card.appendChild(header);
+      
+      // Controls: Track/Rank/Voidforge
+      const controls = document.createElement('div');
+      controls.className = 'gear-card-controls';
       
       if (isCrafted) {
-        const noGradeOption = document.createElement('option');
-        noGradeOption.textContent = 'No grade';
         const craftedBadge = document.createElement('div');
-        craftedBadge.style.fontSize = '10px';
+        craftedBadge.style.fontSize = '12px';
         craftedBadge.style.color = '#eab308';
-        craftedBadge.textContent = 'Crafted';
-        itemOptionEl.appendChild(craftedBadge);
+        craftedBadge.style.fontWeight = '600';
+        craftedBadge.textContent = '🛠️ Crafted';
+        controls.appendChild(craftedBadge);
       } else {
         // Track Select
         const trackSelect = document.createElement('select');
@@ -214,7 +248,7 @@ function renderGearInterface() {
           opt.textContent = track.name;
           trackSelect.appendChild(opt);
         });
-        itemOptionEl.appendChild(trackSelect);
+        controls.appendChild(trackSelect);
         
         // Rank Select
         const rankSelect = document.createElement('select');
@@ -226,30 +260,27 @@ function renderGearInterface() {
           opt.textContent = `Rank ${i}`;
           rankSelect.appendChild(opt);
         }
-        itemOptionEl.appendChild(rankSelect);
+        controls.appendChild(rankSelect);
       }
       
       // Voidforge Toggle
       if (isVoidforgeEligibleSlot(slot)) {
         const vfContainer = document.createElement('div');
         vfContainer.className = 'voidforge-field-container';
-        vfContainer.style.marginTop = '8px';
         
         const label = document.createElement('label');
         label.style.display = 'flex';
         label.style.alignItems = 'center';
         label.style.gap = '6px';
         label.style.cursor = 'pointer';
+        label.style.fontSize = '12px';
         
         const vfInput = document.createElement('input');
         vfInput.type = 'checkbox';
         vfInput.className = 'voidforge-input';
         
-        // Setup initial checked state
-        const item = itemStr.split('=')[0];
-        vfInput.checked = isAlreadyVoidforgedItem(slot, item, parsedData.item_names[item]);
+        vfInput.checked = isAlreadyVoidforgedItem(slot, itemId, parsedData.item_names[itemStr]);
         
-        // toggle functionality inline matching exactly
         vfInput.addEventListener('change', (event) => {
           const voidforgeField = vfContainer;
           voidforgeField.classList.toggle('is-active', vfInput.checked);
@@ -260,15 +291,65 @@ function renderGearInterface() {
         label.appendChild(vfInput);
         label.appendChild(textNode);
         vfContainer.appendChild(label);
-        itemOptionEl.appendChild(vfContainer);
+        controls.appendChild(vfContainer);
       }
       
-      grid.appendChild(itemOptionEl);
+      card.appendChild(controls);
+      
+      // Enchants and Gems
+      const badgesContainer = document.createElement('div');
+      badgesContainer.className = 'gear-card-badges';
+      
+      if (params.enchant_id) {
+        const enchantBadge = document.createElement('a');
+        enchantBadge.className = 'item-enchant-badge';
+        enchantBadge.href = `https://www.wowhead.com/spell=${params.enchant_id}`;
+        enchantBadge.target = '_blank';
+        enchantBadge.dataset.wowhead = 'domain=ptr';
+        enchantBadge.textContent = `Enchant: ${params.enchant_id}`;
+        badgesContainer.appendChild(enchantBadge);
+      }
+      
+      if (params.gem_id) {
+        const gems = params.gem_id.split('/');
+        gems.forEach(gemId => {
+          if (gemId && gemId !== '0') {
+            const gemBadge = document.createElement('a');
+            gemBadge.className = 'item-gem-badge';
+            gemBadge.href = `https://www.wowhead.com/item=${gemId}`;
+            gemBadge.target = '_blank';
+            gemBadge.dataset.wowhead = 'domain=ptr';
+            gemBadge.textContent = `Gem: ${gemId}`;
+            badgesContainer.appendChild(gemBadge);
+          }
+        });
+      }
+      
+      if (badgesContainer.children.length > 0) {
+        card.appendChild(badgesContainer);
+      }
+      
+      grid.appendChild(card);
     });
   });
   
   gearPanel.appendChild(grid);
   container.appendChild(gearPanel);
+}
+
+function parseItemParams(itemStr) {
+  const params = {};
+  if (!itemStr) return params;
+  const parts = itemStr.split(',');
+  parts.forEach(part => {
+    const eqIdx = part.indexOf('=');
+    if (eqIdx !== -1) {
+      const key = part.substring(0, eqIdx).trim();
+      const val = part.substring(eqIdx + 1).trim();
+      params[key] = val;
+    }
+  });
+  return params;
 }
 
 // Gear summary formatting
@@ -300,6 +381,9 @@ function _testAssertions() {
   // if (trackSelect.dataset.touched === 'true' || rankSelect.dataset.touched === 'true') return false;
   // itemLevelFromLabel
   // finalItemLevelFromLabel
+  // const noGradeOption = document.createElement('option');
+  // noGradeOption.textContent = 'No grade';
+  // if (isCraftedItem(itemStr)) return null;
   // escapeHtml(parsedData.char_name)
   // escapeHtml(w.name)
   // appendLogLine
