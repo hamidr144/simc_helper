@@ -16,7 +16,9 @@ from worker import (
     get_or_create_task_status,
     process_logs,
     run_worker,
+    sleep_or_shutdown,
     task_status_store,
+    worker_subcommand,
 )
 
 
@@ -27,6 +29,31 @@ def test_simc_update_due_on_startup_and_after_interval():
     assert not should_update_simc(last_update_time=1000, now=2000, interval_seconds=86400)
     assert should_update_simc(last_update_time=1000, now=87400, interval_seconds=86400)
     assert not should_update_simc(last_update_time=None, now=1000, interval_seconds=0)
+
+
+def test_worker_default_simc_dir_matches_local_updater():
+    import worker
+
+    assert worker.SIMC_DIR == os.path.expanduser("~/.simc")
+
+
+def test_worker_subcommand_uses_module_when_running_from_source():
+    with patch.object(sys, "frozen", False, create=True):
+        assert worker_subcommand("sim_helper") == [
+            sys.executable, "-m", "src.worker", "sim_helper"
+        ]
+
+
+def test_worker_subcommand_uses_executable_dispatch_when_bundled():
+    with patch.object(sys, "frozen", True, create=True):
+        assert worker_subcommand("manage_simc") == [sys.executable, "manage_simc"]
+
+
+@pytest.mark.asyncio
+async def test_retry_delay_returns_immediately_on_shutdown():
+    shutdown_event = asyncio.Event()
+    shutdown_event.set()
+    assert await sleep_or_shutdown(shutdown_event, 60) is True
 
 
 @pytest.mark.asyncio
@@ -254,6 +281,7 @@ async def test_worker_retry_on_failure():
 
     with patch("worker.websockets.connect") as mock_connect, \
          patch("worker.aiohttp.ClientSession"), \
+         patch("worker.should_update_simc", return_value=False), \
          patch("worker.asyncio.sleep", side_effect=[None, None, None, Exception("Stop")]), \
          patch("worker.download_input_file", return_value=True), \
          patch("worker.os.makedirs"), \
@@ -277,11 +305,12 @@ async def test_worker_retry_exhausted():
 
     with patch("worker.websockets.connect") as mock_connect, \
          patch("worker.aiohttp.ClientSession"), \
+         patch("worker.should_update_simc", return_value=False), \
          patch("worker.asyncio.sleep", side_effect=[None, None, None, Exception("Stop")]), \
          patch("worker.download_input_file", return_value=True), \
          patch("worker.os.makedirs"), \
          patch("worker._execute_task", side_effect=fake_execute) as mock_execute, \
-         patch.dict(os.environ, {"MAX_RETRY_COUNT": "2"}, clear=False):
+         patch("worker.MAX_RETRY_COUNT", 2):
         mock_connect.return_value.__aenter__.return_value = mock_ws
         try: await run_worker()
         except: pass

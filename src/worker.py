@@ -14,10 +14,15 @@ from typing import Any, Dict
 import aiohttp
 import websockets
 
-BASE_DIR = os.environ.get("BASE_DIR", ".")
+CONFIGURED_BASE_DIR = os.environ.get("BASE_DIR")
+BASE_DIR = CONFIGURED_BASE_DIR or "."
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 DATA_DIR = os.path.join(BASE_DIR, "data", "worker")
-SIMC_DIR = os.path.join(BASE_DIR, "thirdparties", "simc")
+SIMC_DIR = (
+    os.path.join(CONFIGURED_BASE_DIR, "thirdparties", "simc")
+    if CONFIGURED_BASE_DIR
+    else os.path.expanduser("~/.simc")
+)
 os.makedirs(LOG_DIR, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -49,7 +54,7 @@ DEFAULT_SIMC_UPDATE_INTERVAL_SECONDS = 24 * 60 * 60
 SIMC_UPDATE_INTERVAL_SECONDS = int(os.environ.get("SIMC_UPDATE_INTERVAL_SECONDS", DEFAULT_SIMC_UPDATE_INTERVAL_SECONDS))
 
 # Retry settings
-DEFAULT_MAX_RETRY_COUNT = 0  # 0 = unlimited retries
+DEFAULT_MAX_RETRY_COUNT = 3
 MAX_RETRY_COUNT = int(os.environ.get("MAX_RETRY_COUNT", str(DEFAULT_MAX_RETRY_COUNT)))
 DEFAULT_RETRY_BACKOFF_BASE = 2.0  # base for exponential backoff
 RETRY_BACKOFF_BASE = float(os.environ.get("RETRY_BACKOFF_BASE", str(DEFAULT_RETRY_BACKOFF_BASE)))
@@ -145,10 +150,32 @@ def should_update_simc(last_update_time, now, interval_seconds=SIMC_UPDATE_INTER
     return last_update_time is None or now - last_update_time >= interval_seconds
 
 
+def worker_subcommand(subcommand: str) -> list[str]:
+    """Build a worker helper command for source and bundled executions."""
+    if getattr(sys, "frozen", False):
+        return [sys.executable, subcommand]
+    return [sys.executable, "-m", "src.worker", subcommand]
+
+
+async def sleep_or_shutdown(shutdown_event: asyncio.Event, delay: float) -> bool:
+    """Wait for a retry delay, returning early when shutdown is requested."""
+    sleep_task = asyncio.create_task(asyncio.sleep(delay))
+    shutdown_task = asyncio.create_task(shutdown_event.wait())
+    done, pending = await asyncio.wait(
+        {sleep_task, shutdown_task}, return_when=asyncio.FIRST_COMPLETED
+    )
+    for task in pending:
+        task.cancel()
+    await asyncio.gather(*pending, return_exceptions=True)
+    if sleep_task in done:
+        await sleep_task
+    return shutdown_event.is_set()
+
+
 async def run_manage_simc_update(websocket=None, task_id=None):
     """Run manage_simc and optionally stream its output to the master."""
     logger.info("Updating SimulationCraft engine...")
-    cmd = [sys.executable, "manage_simc"]
+    cmd = worker_subcommand("manage_simc")
     master_fd_upd, slave_fd_upd = pty.openpty()
     proc = subprocess.Popen(cmd, stdout=slave_fd_upd, stderr=slave_fd_upd, close_fds=True, start_new_session=True, env=get_clean_env())  # nosec B603
     os.close(slave_fd_upd)
@@ -265,7 +292,11 @@ async def _push_task_status(websocket, task_id: str, status: TaskStatus):
 async def _execute_task(session, task_id: str, input_file: str, websocket) -> tuple:
     """Execute a single task attempt. Returns (exit_code, report_file, error)."""
     simc_engine = os.path.join(SIMC_DIR, "engine", "simc")
-    cmd = [sys.executable, "sim_helper", f"simc_path={simc_engine}", f"input_file={input_file}", "start_server=0"]
+    cmd = worker_subcommand("sim_helper") + [
+        f"simc_path={simc_engine}",
+        f"input_file={input_file}",
+        "start_server=0",
+    ]
     logger.info(f"[{task_id}] Executing: {' '.join(cmd)}")
 
     try:
@@ -452,6 +483,14 @@ async def run_worker():
                                             attempt = 0
 
                                             while True:
+                                                if _shutdown_event.is_set():
+                                                    final_error = "Worker shutdown requested"
+                                                    task_status.status = "failed"
+                                                    task_status.exit_code = final_exit_code
+                                                    task_status.error = final_error
+                                                    task_status.updated_at = time.time()
+                                                    await _push_task_status(websocket, task_id, task_status)
+                                                    break
                                                 attempt += 1
                                                 logger.info(f"[{task_id}] Execution attempt {attempt}")
 
@@ -486,7 +525,16 @@ async def run_worker():
                                                     task_status.error = error
                                                     task_status.updated_at = time.time()
                                                     await _push_task_status(websocket, task_id, task_status)
-                                                    await asyncio.sleep(backoff)
+                                                    if await sleep_or_shutdown(_shutdown_event, backoff):
+                                                        final_exit_code = exit_code
+                                                        final_report_file = report_file
+                                                        final_error = "Worker shutdown requested"
+                                                        task_status.status = "failed"
+                                                        task_status.exit_code = exit_code
+                                                        task_status.error = final_error
+                                                        task_status.updated_at = time.time()
+                                                        await _push_task_status(websocket, task_id, task_status)
+                                                        break
                                                 else:
                                                     final_exit_code = exit_code
                                                     final_report_file = report_file

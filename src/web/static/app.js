@@ -412,7 +412,12 @@ async function runSimulation() {
       if (message.type === 'log_batch') log.textContent += `${message.lines.join('\n')}\n`;
       log.scrollTop = log.scrollHeight;
       if (message.type === 'done' || message.type === 'error') {
-        status.textContent = message.text;
+        if (message.type === 'done' && message.report_file && message.task_id) {
+          const reportUrl = `/reports/${encodeURIComponent(message.task_id)}/${encodeURIComponent(message.report_file)}`;
+          status.innerHTML = `${escapeHtml(message.text)} <a href="${reportUrl}" target="_blank">Open report</a>`;
+        } else {
+          status.textContent = message.text;
+        }
         events.close();
       }
     };

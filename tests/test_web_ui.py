@@ -292,3 +292,13 @@ def test_report_separates_baseline_and_only_lists_combo_differences():
     assert "Baseline Gear" in js
     assert "selectedItems" in js
     assert "estimateCombinations" in js
+
+
+def test_successful_simulation_exposes_uploaded_report_link():
+    response = client.get("/static/app.js")
+    assert response.status_code == 200
+    js = response.text
+
+    assert "message.report_file && message.task_id" in js
+    assert "`/reports/${encodeURIComponent(message.task_id)}/${encodeURIComponent(message.report_file)}`" in js
+    assert '>Open report</a>' in js
