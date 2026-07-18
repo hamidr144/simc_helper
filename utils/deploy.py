@@ -16,10 +16,10 @@ import shutil
 import subprocess  # nosec B404
 import sys
 import tempfile
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence
-
+from typing import Any, Dict, List, Optional
 
 VALID_ACTIONS = ["deploy", "master", "worker", "simc", "setup-service", "stop", "status", "doctor"]
 VALID_NODE_TYPES = {"master", "worker"}

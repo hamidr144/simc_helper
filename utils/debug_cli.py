@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-import sys
-import requests
-import json
 import argparse
+import sys
+
+import requests
 
 SERVER_URL = "http://localhost:8000"
 REQUEST_TIMEOUT = 5

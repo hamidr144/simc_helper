@@ -1,8 +1,9 @@
-import os
-import sys
-import subprocess  # nosec B404
 import multiprocessing
+import os
 import shutil
+import subprocess  # nosec B404
+import sys
+
 
 def get_clean_env():
     env = os.environ.copy()

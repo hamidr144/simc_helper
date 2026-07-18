@@ -81,15 +81,15 @@ def get_memory_based_batch_size(buffer_gb=4.0, mb_per_profile=90.0):
                         usable_mb = available_mb - (buffer_gb * 1024)
                         calculated = max(50, int(usable_mb / mb_per_profile))
                         return min(calculated, max_batch_size)
-        except:
-            return max_batch_size # Conservative fallback
+        except (OSError, ValueError, IndexError):
+            return max_batch_size  # Conservative fallback
 
     try:
         available_mb = psutil.virtual_memory().available / (1024 * 1024)
         usable_mb = available_mb - (buffer_gb * 1024)
         calculated = max(50, int(usable_mb / mb_per_profile))
         return min(calculated, max_batch_size)
-    except:
+    except (AttributeError, OSError, ValueError):
         return max_batch_size
 
 def get_character_name(input_file):
@@ -167,7 +167,6 @@ def run_simc(simc_path, input_file, extra_args, output_log, html_report=None, pr
     process = subprocess.Popen(cmd, stdout=slave_fd, stderr=slave_fd, close_fds=True, env=get_clean_env())  # nosec B603
     os.close(slave_fd)
 
-    last_p = -1
     with open(output_log, "wb") as f_log:
         buffer = b""
         while True:
@@ -201,7 +200,6 @@ def run_simc(simc_path, input_file, extra_args, output_log, html_report=None, pr
                                 if curr_a_int % 5 == 0 or curr_a == tot_a or curr_i == tot_i:
                                     percent = int((curr_a_int / int(tot_a)) * 100)
                                     print(f"\r{prefix}Progress: {percent}% ({curr_a}/{tot_a} profiles)", end="", flush=True)
-                                    last_p = curr_a
                             elif "Progress:" in line and "combos" not in line:
                                 print(f"\r{prefix}{line}", end="", flush=True)
                         except ValueError as exc:

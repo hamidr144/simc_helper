@@ -2,17 +2,20 @@ import asyncio
 import glob
 import hashlib
 import json
+import logging
 import os
 import re
 import signal
-signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
 import sys
 import time
-import logging
-import datetime
 import uuid
+import datetime
+
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
+
+signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
+
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -51,17 +54,16 @@ import httpx
 from fastapi import (
     FastAPI,
     File,
+    Form,
     HTTPException,
     Query,
     Request,
-    Response,
-    Form,
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, StreamingResponse, RedirectResponse, FileResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -93,7 +95,7 @@ class GenerateSimcRequest(BaseModel):
     base_profile: str
     equipped_gear: Dict[str, str]
     selected_items: Dict[str, List[str]]
-    selected_enchants: Optional[Dict[str, str]] = {}
+    selected_enchants: Optional[Dict[str, Any]] = {}
     selected_gems: Optional[List[Union[str, int]]] = []
     selected_meta_gems: Optional[List[Union[str, int]]] = []
     item_levels: Optional[Dict[str, Dict[str, Optional[int]]]] = {}
@@ -299,6 +301,8 @@ user_last_sim_time = load_sessions()
 generated_inputs_by_user: dict = load_inputs()
 generated_inputs_by_user["latest"] = None
 wowhead_upgrade_cache = {}
+wowhead_icon_cache: Dict[str, tuple[bytes, str]] = {}
+wowhead_tooltip_script_cache: Optional[bytes] = None
 
 MIDNIGHT_WOWHEAD_TRACKS = {
     "Adventurer": "adventurer",
@@ -371,10 +375,13 @@ class WorkerManager:
 
             # If worker was busy, notify the task queue that it failed
             if worker.current_task and worker.current_task in self.task_queues:
-                asyncio.create_task(self.task_queues[worker.current_task].put({
-                    "type": "error",
-                    "text": f"Worker {worker.name} disconnected abruptly."
-                }))
+                queue = self.task_queues[worker.current_task]
+                queue.put_nowait(
+                    {
+                        "type": "error",
+                        "text": f"Worker {worker.name} disconnected abruptly.",
+                    }
+                )
 
             del self.active_workers[worker_id]
 
@@ -710,6 +717,119 @@ def parse_wowhead_upgrade(xml_text: str) -> Optional[Dict[str, Any]]:
     }
 
 
+def parse_wowhead_icon_name(xml_text: str) -> Optional[str]:
+    """Extract a safe icon name from a Wowhead item XML response."""
+    try:
+        root = ElementTree.fromstring(xml_text)
+    except ElementTree.ParseError:
+        return None
+    icon_name = (root.findtext("item/icon") or "").strip().lower()
+    return icon_name if re.fullmatch(r"[a-z0-9_]+", icon_name) else None
+
+
+@app.get("/api/item-icon/{item_id}", tags=["Gear"])
+async def get_item_icon(item_id: int):
+    """Proxy Wowhead item icons so the UI does not depend on external JavaScript."""
+    cache_key = str(item_id)
+    cached = wowhead_icon_cache.get(cache_key)
+    if cached:
+        image_bytes, media_type = cached
+        return Response(
+            content=image_bytes,
+            media_type=media_type,
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    xml_url = f"https://www.wowhead.com/item={item_id}?xml"
+    try:
+        async with httpx.AsyncClient(
+            timeout=8.0,
+            follow_redirects=True,
+            headers={"User-Agent": "simc-helper/1.0"},
+        ) as client:
+            xml_response = await client.get(xml_url)
+            xml_response.raise_for_status()
+            icon_name = parse_wowhead_icon_name(xml_response.text)
+            if not icon_name:
+                raise ValueError("Wowhead response did not contain a valid icon name")
+            icon_response = await client.get(
+                f"https://wow.zamimg.com/images/wow/icons/large/{icon_name}.jpg"
+            )
+            icon_response.raise_for_status()
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("Unable to load icon for item %s: %s", item_id, exc)
+        raise HTTPException(status_code=404, detail="Item icon unavailable") from exc
+
+    media_type = icon_response.headers.get("content-type", "image/jpeg").split(";", 1)[0]
+    image_bytes = icon_response.content
+    wowhead_icon_cache[cache_key] = (image_bytes, media_type)
+    return Response(
+        content=image_bytes,
+        media_type=media_type,
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+@app.get("/api/wowhead-tooltips.js", tags=["Gear"])
+async def get_wowhead_tooltip_script():
+    """Serve Wowhead's official tooltip bundle through the local origin."""
+    global wowhead_tooltip_script_cache
+    if wowhead_tooltip_script_cache is None:
+        try:
+            async with httpx.AsyncClient(
+                timeout=15.0,
+                follow_redirects=True,
+                headers={"User-Agent": "simc-helper/1.0"},
+            ) as client:
+                response = await client.get("https://wow.zamimg.com/js/tooltips.js")
+                response.raise_for_status()
+        except httpx.HTTPError as exc:
+            logger.warning("Unable to load Wowhead tooltip script: %s", exc)
+            raise HTTPException(status_code=502, detail="Wowhead tooltip script unavailable") from exc
+        script = response.text
+        route_marker = "function Se(e){"
+        if route_marker not in script:
+            raise HTTPException(status_code=502, detail="Unexpected Wowhead tooltip script")
+        script = script.replace(
+            route_marker,
+            'function Se(e){if(e==="nether"){return location.origin+"/api/wowhead-nether"}',
+            1,
+        )
+        wowhead_tooltip_script_cache = script.encode("utf-8")
+
+    return Response(
+        content=wowhead_tooltip_script_cache,
+        media_type="text/javascript",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@app.get("/api/wowhead-nether/{path:path}", tags=["Gear"])
+async def proxy_wowhead_tooltip_data(path: str, request: Request):
+    """Proxy native Wowhead tooltip data for browsers that block third parties."""
+    upstream_url = f"https://nether.wowhead.com/{path}"
+    if request.url.query:
+        upstream_url = f"{upstream_url}?{request.url.query}"
+    try:
+        async with httpx.AsyncClient(
+            timeout=15.0,
+            follow_redirects=True,
+            headers={"User-Agent": "simc-helper/1.0"},
+        ) as client:
+            response = await client.get(upstream_url)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.warning("Unable to load Wowhead tooltip data: %s", exc)
+        raise HTTPException(status_code=502, detail="Wowhead tooltip data unavailable") from exc
+
+    media_type = response.headers.get("content-type", "application/json").split(";", 1)[0]
+    return Response(
+        content=response.content,
+        media_type=media_type,
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
 async def fetch_wowhead_upgrade(item: str) -> Optional[Dict[str, Any]]:
     url = wowhead_xml_url(item)
     if not url:
@@ -933,18 +1053,22 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest):
         config = load_config("config.json")
         if payload.selected_enchants:
             config["enchantments"] = payload.selected_enchants
-        if payload.selected_gems:
-            selected_gems = payload.selected_gems
-            selected_meta_gems = set(payload.selected_meta_gems or [])
-            configured_meta_gems = config.get("gems", {}).get("meta", []) if isinstance(config.get("gems"), dict) else []
-            configured_meta_ids = {gem["id"] if isinstance(gem, dict) else gem for gem in configured_meta_gems}
-            config["gems"] = {
-                "meta": list(selected_meta_gems or (set(selected_gems) & configured_meta_ids)),
-                "standard": [gem for gem in selected_gems if gem not in configured_meta_ids],
-            }
+        selected_gems = payload.selected_gems or []
+        selected_meta_gems = set(payload.selected_meta_gems or [])
+        configured_meta_gems = (
+            config.get("gems", {}).get("meta", [])
+            if isinstance(config.get("gems"), dict)
+            else []
+        )
+        configured_meta_ids = {
+            gem["id"] if isinstance(gem, dict) else gem for gem in configured_meta_gems
+        }
+        config["gems"] = {
+            "meta": list(selected_meta_gems or (set(selected_gems) & configured_meta_ids)),
+            "standard": [gem for gem in selected_gems if gem not in configured_meta_ids],
+        }
 
         items_by_slot = payload.selected_items
-        char_class = payload.char_class
         char_name = payload.char_name
         equipped_gear = payload.equipped_gear
         item_levels = payload.item_levels or {}

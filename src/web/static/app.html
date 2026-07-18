@@ -4,25 +4,25 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SimulationCraft Helper GUI</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v=20260718-workflow">
 </head>
 <body class="app-shell">
   <script>const whTooltips = {colorLinks: true, iconizeLinks: true, renameLinks: true};</script>
-  <script src="https://wow.zamimg.com/js/power.js"></script>
+  <script src="/api/wowhead-tooltips.js?v=20260718-proxy"></script>
   <aside class="workflow-rail tabs" aria-label="Navigation Rail"></aside>
   
   <main class="workspace-grid setup-layout">
     <h1>SimC Web Helper</h1>
-    <p>1. Setup &amp; Addon</p>
+    <p>1. Setup &amp; Addon · Paste your SimulationCraft character export</p>
     
     <div class="panel-card" id="addon-input-card">
       <textarea id="addon-input" placeholder="Paste addon text here..."></textarea>
-      <button id="btn-parse-addon">Parse Addon</button>
+      <button id="btn-parse-addon">Parse character</button>
     </div>
 
     <div id="gear-workspace-container"></div>
   </main>
 
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=20260718-enhancement-tooltips"></script>
 </body>
 </html>

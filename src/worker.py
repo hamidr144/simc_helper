@@ -320,7 +320,6 @@ async def run_worker():
 
     active_process = None
     active_task_id = None
-    master_fd = None
     last_simc_update_time = None
 
     # Graceful shutdown flag

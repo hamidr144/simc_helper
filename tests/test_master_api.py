@@ -8,7 +8,13 @@ from fastapi.testclient import TestClient
 
 # Add src to sys.path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
-from web.main import app, manager, parse_wowhead_upgrade, wowhead_xml_url
+from web.main import (
+    app,
+    manager,
+    parse_wowhead_icon_name,
+    parse_wowhead_upgrade,
+    wowhead_xml_url,
+)
 
 client = TestClient(app)
 
@@ -38,6 +44,12 @@ def test_parse_wowhead_upgrade_extracts_track_rank_and_item_level():
     ]]></htmlTooltip></item></wowhead>"""
 
     assert parse_wowhead_upgrade(xml) == {"track": "myth", "rank": 6, "item_level": 289}
+
+
+def test_parse_wowhead_icon_name_accepts_only_safe_icon_names():
+    xml = '<wowhead><item><icon displayId="0">inv_helmet_204_plate_raidpaladin</icon></item></wowhead>'
+    assert parse_wowhead_icon_name(xml) == "inv_helmet_204_plate_raidpaladin"
+    assert parse_wowhead_icon_name("<wowhead><item><icon>../secret</icon></item></wowhead>") is None
 
 
 def test_wowhead_upgrades_endpoint_maps_exact_item_back_to_slot():
@@ -466,4 +478,3 @@ def test_api_task_status_not_found():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "not_found"
-

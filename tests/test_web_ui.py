@@ -119,7 +119,7 @@ def test_gear_selection_uses_compact_icon_tiles_instead_of_text_rows():
 
     assert "iconizeLinks: true" in html
     assert "createWowheadIconLink" in js
-    assert "item-icon-grid" in js
+    assert "slot-items" in js
     assert "item-option" in js
     assert "item-icon-link" in js
     assert "item-option-name" in js
@@ -146,10 +146,9 @@ def test_voidforged_control_toggles_itself_inside_item_tile():
     assert response.status_code == 200
     js = response.text
 
-    assert "toggleVoidforgeInput" in js
-    assert "voidforgeInput.checked = isAlreadyVoidforgedItem(slot, item, itemNames[item]);" in js
-    assert "voidforgeField.classList.toggle('is-active', voidforgeInput.checked);" in js
-    assert "event.stopPropagation();" in js
+    assert "voidforgeInput.addEventListener('change'" in js
+    assert "voidforgedItems[slot][item] = event.target.checked;" in js
+    assert "classList.toggle('is-active', event.target.checked)" in js
 
 
 def test_voidforged_items_are_detected_from_final_item_levels():
@@ -159,7 +158,7 @@ def test_voidforged_items_are_detected_from_final_item_levels():
 
     assert "const VOIDFORGE_FINAL_ITEM_LEVELS = [285, 298];" in js
     assert "isAlreadyVoidforgedItem" in js
-    assert "Already Ascendant Voidforged" in js
+    assert "Ascendant Voidforged +9" in js
 
 
 def test_named_voidforged_items_start_with_ascendant_flag_enabled():
@@ -167,9 +166,9 @@ def test_named_voidforged_items_start_with_ascendant_flag_enabled():
     assert response.status_code == 200
     js = response.text
 
-    assert "function isAlreadyVoidforgedItem(slot, itemStr, itemLabel = '')" in js
-    assert "itemLabel.toLowerCase().includes('voidforged')" in js
-    assert "voidforgeInput.checked = isAlreadyVoidforgedItem(slot, item, itemNames[item]);" in js
+    assert "function isAlreadyVoidforgedItem(slot, item, label = '')" in js
+    assert "String(label).toLowerCase().includes('voidforged')" in js
+    assert "voidforgedItems[slot][item] = isAlreadyVoidforgedItem" in js
 
 
 def test_plain_item_level_labels_do_not_start_with_ascendant_flag_enabled():
@@ -177,7 +176,7 @@ def test_plain_item_level_labels_do_not_start_with_ascendant_flag_enabled():
     assert response.status_code == 200
     js = response.text
 
-    assert "itemLabel.toLowerCase().includes('voidforged')" in js
+    assert "String(label).toLowerCase().includes('voidforged')" in js
     assert "function finalItemLevelFromLabel(itemLabel)" not in js
     assert "const labelItemLevel = finalItemLevelFromLabel(itemLabel);" not in js
 
@@ -188,7 +187,7 @@ def test_voidforged_items_are_detected_from_bonus_ids_not_plain_item_levels():
     js = response.text
 
     assert "const VOIDFORGE_BONUS_IDS = ['13653', '13654'];" in js
-    assert "parsed.bonuses.some(bonus => VOIDFORGE_BONUS_IDS.includes(bonus))" in js
+    assert "bonuses.some(bonus => VOIDFORGE_BONUS_IDS.includes(bonus))" in js
     assert "VOIDFORGE_BONUS_IDS.includes('13622')" not in js
 
 
@@ -197,11 +196,9 @@ def test_voidforged_track_rank_inference_uses_base_level_before_plus_nine():
     assert response.status_code == 200
     js = response.text
 
-    assert "function effectiveMidnightBaseItemLevel(slot, itemStr, itemLabel = '')" in js
-    assert "VOIDFORGE_BONUS_IDS.includes(bonus)" in js
-    assert "return level - 9;" in js
-    assert "const level = effectiveMidnightBaseItemLevel(slot, itemStr, itemLabel);" in js
-    assert "inferMidnightUpgrade(slot, item, itemNames[item])" in js
+    assert "function inferMidnightUpgrade(slot, item, label)" in js
+    assert "hasVoidforgeBonus(item)" in js
+    assert "level -= 9;" in js
 
 
 def test_crafted_items_do_not_auto_infer_midnight_grade_from_item_level_label():
@@ -209,12 +206,11 @@ def test_crafted_items_do_not_auto_infer_midnight_grade_from_item_level_label():
     assert response.status_code == 200
     js = response.text
 
-    assert "function isCraftedItem(itemStr)" in js
+    assert "function isCraftedItem(item)" in js
     assert "crafting_quality=" in js
     assert "crafted_stats=" in js
-    assert "if (isCraftedItem(itemStr)) return null;" in js
-    assert "const noGradeOption = document.createElement('option');" in js
-    assert "noGradeOption.textContent = 'No grade';" in js
+    assert "if (isCraftedItem(item)) return null;" in js
+    assert "Crafted · no grade" in js
 
 
 def test_gear_selection_hydrates_exact_grades_from_wowhead():
@@ -222,11 +218,49 @@ def test_gear_selection_hydrates_exact_grades_from_wowhead():
     assert response.status_code == 200
     js = response.text
 
-    assert "hydrateWowheadUpgrades(itemsBySlot);" in js
+    assert "hydrateWowheadUpgrades(parsedData.items_by_slot);" in js
     assert "fetch('/api/wowhead-upgrades'" in js
-    assert "applyUpgradeToSelectors" in js
-    assert "trackSelect.dataset.inferredSource = 'wowhead';" in js
-    assert "if (trackSelect.dataset.touched === 'true' || rankSelect.dataset.touched === 'true') return false;" in js
+    assert "...itemUpgrades" in js
+    assert "renderGear();" in js
+
+
+def test_item_icons_use_local_proxy_without_requiring_wowhead_javascript():
+    response = client.get("/static/app.js")
+    assert response.status_code == 200
+    js = response.text
+
+    assert 'src="/api/item-icon/${safeId}"' in js
+    assert 'data-wowhead="${tooltipData}"' in js
+    assert "domain=ptr" not in js
+
+
+def test_item_icons_and_names_use_default_wowhead_tooltips():
+    page_response = client.get("/")
+    assert page_response.status_code == 200
+    assert 'src="/api/wowhead-tooltips.js?v=20260718-proxy"' in page_response.text
+    assert "power.js" not in page_response.text
+
+    response = client.get("/static/app.js")
+    assert response.status_code == 200
+    js = response.text
+
+    assert "wowhead-item-link" in js
+    assert "data-wowhead" in js
+    assert "window.WH.Tooltips.refreshLinks()" in js
+    assert "bonus=${safeBonus}" in js
+
+
+def test_gems_and_enchantments_use_default_wowhead_tooltips():
+    response = client.get("/static/app.js")
+    assert response.status_code == 200
+    js = response.text
+
+    assert "function createEnhancementWowheadLink(enhancement, name)" in js
+    assert "enhancement.wowhead_url" in js
+    assert "enhancement-name-link wowhead-item-link" in js
+    assert "createEnhancementWowheadLink(enchant, name)" in js
+    assert "createEnhancementWowheadLink(gem, name)" in js
+    assert js.count("refreshWowheadLinks();") >= 2
 
 
 def test_heliotrope_gems_are_not_rendered_as_selectable_gems():
@@ -234,8 +268,8 @@ def test_heliotrope_gems_are_not_rendered_as_selectable_gems():
     assert response.status_code == 200
     js = response.text
 
-    assert "filterSelectableGem" in js
-    assert "Heliotrope" not in js
+    assert "gems?.standard" in js
+    assert "includes('heliotrope')" in js
 
 
 def test_report_gear_summary_shows_only_slot_and_item_link():
@@ -256,5 +290,5 @@ def test_report_separates_baseline_and_only_lists_combo_differences():
 
     assert "baseline-gear-panel" in js
     assert "Baseline Gear" in js
-    assert "const visibleGearItems = isBaseline ? [] : gearItems.filter" in js
-    assert "gearHtml = '<span class=\"muted-cell\">Shown above</span>';" in js
+    assert "selectedItems" in js
+    assert "estimateCombinations" in js

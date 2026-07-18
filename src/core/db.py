@@ -1,8 +1,8 @@
 import os
 import sqlite3
-import uuid
-import time
 import sys
+import time
+import uuid
 from typing import Any, Dict, Optional
 
 # Determine PROJECT_ROOT
@@ -28,7 +28,6 @@ db_dir = os.path.abspath(os.path.join(PROJECT_ROOT, "data", "master"))
 os.makedirs(db_dir, exist_ok=True)
 
 _DB_PATH = os.path.abspath(os.path.join(db_dir, "simc_helper.sqlite"))
-print(f"DEBUG: DB_PATH is {_DB_PATH}")
 
 def get_db_path() -> str:
     """Return the absolute path to the SQLite database file."""

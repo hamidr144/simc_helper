@@ -94,9 +94,9 @@ def test_frontend_escapes_dynamic_values_before_html_insertion():
     js = Path("src/web/static/app.js").read_text()
     assert "function escapeHtml" in js
     assert "escapeHtml(parsedData.char_name)" in js
-    assert "escapeHtml(w.name)" in js
-    assert "appendLogLine" in js
-    assert "textContent = text" in js
+    assert "escapeHtml(name)" in js
+    assert "escapeHtml(label.replace" in js
+    assert "log.textContent +=" in js
 
 
 def test_ignored_local_config_files_are_not_tracked():
