@@ -253,7 +253,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 ## Deployment
 
-The deployer (`utils/deploy.py`) manages standalone binaries on remote nodes via SSH without requiring root access. All deployment config lives in `deploy_configs/*.json` — no `.env` file needed on remote nodes.
+The deployer (`utils/deploy.py`) manages standalone binaries over SSH without requiring root access. Choose an explicit `local` topology (master and worker on one installation node) or `remote` topology (master and workers on separate nodes) using the unified examples in `examples/`. All deployment config lives in `deploy_configs/*.json`.
 
 See [`docs/deployment.md`](docs/deployment.md) for the full command reference, and [`docs/configuration.md`](docs/configuration.md) for the JSON schema and `env` block.
 

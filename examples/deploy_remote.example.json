@@ -1,0 +1,39 @@
+{
+  "installation_mode": "remote",
+  "target_platform": "linux",
+  "cluster_secret": "replace-with-a-long-random-secret",
+  "nodes": [
+    {
+      "name": "PrimaryMaster",
+      "type": "master",
+      "ip": "master.example.local",
+      "port": 8000,
+      "bind_host": "0.0.0.0",
+      "user": "deploy",
+      "target_dir": "/opt/simc_helper",
+      "access": {
+        "method": "key",
+        "key_path": "~/.ssh/id_ed25519"
+      },
+      "env": {
+        "ADMIN_TOKEN": "replace-with-a-long-random-token",
+        "LOG_LEVEL": "INFO"
+      }
+    },
+    {
+      "name": "Worker1",
+      "type": "worker",
+      "ip": "worker1.example.local",
+      "user": "deploy",
+      "target_dir": "/opt/simc_helper",
+      "access": {
+        "method": "key",
+        "key_path": "~/.ssh/id_ed25519"
+      },
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "SIMC_UPDATE_INTERVAL_SECONDS": 86400
+      }
+    }
+  ]
+}

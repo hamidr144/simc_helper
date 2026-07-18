@@ -23,6 +23,20 @@ def test_read_root():
     assert response.status_code == 200
     assert "user_id" in client.cookies
 
+
+def test_disabled_auth_serves_app_without_login(monkeypatch):
+    monkeypatch.setenv("AUTHENTICATION_ENABLED", "false")
+    response = client.get("/dashboard", follow_redirects=False)
+    assert response.status_code == 200
+    assert "user_id" in response.cookies or "user_id" in client.cookies
+
+    login_page = client.get("/login", follow_redirects=False)
+    assert login_page.status_code == 303
+    assert login_page.headers["location"] == "/dashboard"
+
+    register = client.post("/register", data={"username": "unused", "password": "unused"})
+    assert register.status_code == 403
+
 def test_api_state():
     response = client.get("/api/state")
     assert response.status_code == 200
@@ -162,7 +176,7 @@ def test_api_generate_simc_applies_item_level_overrides_to_equipped_and_selected
     with open("char_simc_addon.txt") as f:
         generated = f.read()
 
-    assert generated.count("head=,id=1,ilevel=626,bonus_id=100") == 2
+    assert generated.count("head=,id=1,ilevel=626,bonus_id=100") == 1
     assert "chest=,id=20,ilevel=640" in generated
     assert "ilevel=430" not in generated
 
@@ -197,7 +211,7 @@ def test_api_generate_simc_applies_midnight_track_rank_upgrades():
     with open("char_simc_addon.txt") as f:
         generated = f.read()
 
-    assert generated.count("head=,id=1,ilevel=289,bonus_id=100") == 2
+    assert generated.count("head=,id=1,ilevel=289,bonus_id=100") == 1
     assert "head=,id=1,ilevel=220" not in generated
     assert "trinket1=,id=2,ilevel=298" in generated
     assert "trinket1=,id=20,ilevel=285" in generated

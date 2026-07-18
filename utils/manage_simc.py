@@ -3,6 +3,7 @@ import os
 import shutil
 import subprocess  # nosec B404
 import sys
+from datetime import datetime, timezone
 
 
 def get_clean_env():
@@ -37,6 +38,12 @@ def main():
     print(f"Checking SimulationCraft repository at {simc_dir}...")
 
     try:
+        git_dir = os.path.join(simc_dir, ".git")
+        if os.path.isdir(simc_dir) and not os.path.isdir(git_dir):
+            backup_dir = f"{simc_dir}.invalid-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+            print(f"SimulationCraft directory is not a Git checkout. Preserving it as {backup_dir}.")
+            shutil.move(simc_dir, backup_dir)
+
         if not os.path.isdir(simc_dir):
             print("SimulationCraft repository not found. Cloning...")
             subprocess.run([git_bin, "clone", "https://github.com/simulationcraft/simc.git", simc_dir], check=True, env=env)  # nosec B603

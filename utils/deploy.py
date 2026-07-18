@@ -7,6 +7,7 @@ nohup-managed process when user-systemd is not usable over SSH.
 """
 
 import argparse
+import getpass
 import glob
 import json
 import os
@@ -16,6 +17,7 @@ import shutil
 import subprocess  # nosec B404
 import sys
 import tempfile
+import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,6 +25,7 @@ from typing import Any, Dict, List, Optional
 
 VALID_ACTIONS = ["deploy", "master", "worker", "simc", "setup-service", "stop", "status", "doctor"]
 VALID_NODE_TYPES = {"master", "worker"}
+VALID_INSTALLATION_MODES = {"local", "remote"}
 PLACEHOLDER_SECRETS = {"", "YOUR_SECURE_SECRET_HERE", "changeme", "change-me", "secret"}
 
 
@@ -79,15 +82,51 @@ def load_config(config_file: str):
 
 
 def discover_config_files(action: str) -> List[str]:
-    if action == "master":
-        return ["deploy_configs/master.json"]
-    if action in {"worker", "simc"}:
-        return ["deploy_configs/worker1.json"]
     config_files = sorted(glob.glob("deploy_configs/*.json"))
     if not config_files:
         print("Error: no deploy_configs/*.json files found. Pass --config explicitly.")
         sys.exit(1)
     return config_files
+
+
+def node_location(node: Dict[str, Any]) -> tuple[str, str, str]:
+    """Return the fields that identify where a role is installed."""
+    return (node["user"], node["ip"], target_dir(node))
+
+
+def validate_installation_topology(config: Dict[str, Any], config_file: str) -> None:
+    """Validate the two supported installation layouts.
+
+    Legacy configs without ``installation_mode`` remain valid. New configs should
+    always set it so an accidental same-host or cross-host deployment fails before
+    any remote changes are made.
+    """
+    mode = config.get("installation_mode")
+    if mode is None:
+        return
+    if mode not in VALID_INSTALLATION_MODES:
+        raise DeploymentError(
+            f"{config_file}: installation_mode must be one of {sorted(VALID_INSTALLATION_MODES)}"
+        )
+
+    nodes = config["nodes"]
+    masters = [node for node in nodes if node["type"] == "master"]
+    workers = [node for node in nodes if node["type"] == "worker"]
+    if len(masters) != 1:
+        raise DeploymentError(f"{config_file}: {mode} installation requires exactly one master node")
+    if not workers:
+        raise DeploymentError(f"{config_file}: {mode} installation requires at least one worker node")
+
+    master_location = node_location(masters[0])
+    worker_locations = [node_location(worker) for worker in workers]
+    if mode == "local" and any(location != master_location for location in worker_locations):
+        raise DeploymentError(
+            f"{config_file}: local installation requires master and every worker to use the same user, ip, and target_dir"
+        )
+    if mode == "remote" and any(worker["ip"] == masters[0]["ip"] for worker in workers):
+        raise DeploymentError(
+            f"{config_file}: remote installation requires master and workers to have different ip values"
+        )
 
 
 def _require_string(obj: Dict[str, Any], key: str, context: str) -> str:
@@ -115,12 +154,16 @@ def validate_config(config: Any, config_file: str, action: str, *, allow_placeho
             "Use a long random value; the example placeholder is not safe."
         )
 
+    is_local_installation = config.get("installation_mode") == "local"
     for index, node in enumerate(nodes):
         context = f"{config_file}: node[{index}]"
         if not isinstance(node, dict):
             raise DeploymentError(f"{context}: node must be an object")
         _require_string(node, "name", context)
         _require_string(node, "type", context)
+        if is_local_installation:
+            node.setdefault("user", getpass.getuser())
+            node.setdefault("ip", "127.0.0.1")
         _require_string(node, "user", context)
         _require_string(node, "ip", context)
         if node["type"] not in VALID_NODE_TYPES:
@@ -128,6 +171,8 @@ def validate_config(config: Any, config_file: str, action: str, *, allow_placeho
         access = node.get("access", {"method": "key"})
         if not isinstance(access, dict):
             raise DeploymentError(f"{context}: access must be an object")
+        if is_local_installation:
+            continue
         method = access.get("method", "key")
         if method not in {"key", "password"}:
             raise DeploymentError(f"{context}: access.method must be 'key' or 'password'")
@@ -139,6 +184,8 @@ def validate_config(config: Any, config_file: str, action: str, *, allow_placeho
                 raise DeploymentError(f"{context}: SSH key does not exist: {key_path}")
         if node.get("target_dir") and not str(node["target_dir"]).startswith("/"):
             raise DeploymentError(f"{context}: target_dir must be an absolute path")
+
+    validate_installation_topology(config, config_file)
 
     if action in {"worker", "simc"} and not config.get("master_ip"):
         raise DeploymentError(f"{config_file}: master_ip is required for worker-oriented actions")
@@ -181,6 +228,8 @@ def join_remote(commands: Iterable[str]) -> str:
 
 
 def get_ssh_cmd(node: Dict[str, Any], remote_cmd: str) -> str:
+    if node.get("_deployment_local"):
+        return remote_cmd
     access = node.get("access", {})
     method = access.get("method", "key")
     user = node["user"]
@@ -228,6 +277,8 @@ def get_rsync_cmd(node: Dict[str, Any], local_path: str, remote_path: str, exclu
 
 
 def get_scp_cmd(node: Dict[str, Any], local_path: str, remote_path: str) -> str:
+    if node.get("_deployment_local"):
+        return f"cp {q(local_path)} {q(remote_path)}"
     access = node.get("access", {})
     method = access.get("method", "key")
     user = node["user"]
@@ -307,9 +358,11 @@ def write_remote_env(node: Dict[str, Any], cluster_secret: str) -> None:
 
 
 def preflight_node(node: Dict[str, Any], action: str, build_dir: str) -> None:
-    ensure_local_tool("ssh")
+    if not node.get("_deployment_local"):
+        ensure_local_tool("ssh")
     if action in {"deploy", "master", "worker"}:
-        ensure_local_tool("scp")
+        if not node.get("_deployment_local"):
+            ensure_local_tool("scp")
         local_bin = Path(build_dir) / binary_name(node)
         if not local_bin.exists():
             raise DeploymentError(
@@ -430,6 +483,50 @@ def restart_service(node, cluster_secret, master_ip=None, master_port=80, use_ht
 
     print(f"systemctl --user is unavailable on {node['name']}; using nohup fallback")
     run_cmd(get_ssh_cmd(node, fallback_start_command(node, cluster_secret, master_ip, master_port, use_https)))
+
+
+def verify_process_running(node: Dict[str, Any]) -> bool:
+    """Check whether the role survived a nohup startup attempt."""
+    return remote_check(node, f"pgrep -f {q(process_match_pattern(binary_name(node)))} >/dev/null")
+
+
+def start_master_from_source(node: Dict[str, Any], cluster_secret: str) -> None:
+    """Fallback for hosts where the packaged PyInstaller executable is killed at startup."""
+    remote_dir = target_dir(node)
+    if not node.get("_deployment_local"):
+        ensure_local_tool("rsync")
+        run_cmd(get_ssh_cmd(node, f"mkdir -p {q(remote_dir + '/src')}"))
+        run_cmd(get_rsync_cmd(node, "src/", f"{remote_dir}/src/", []))
+    else:
+        run_cmd(f"mkdir -p {q(remote_dir + '/src')}")
+        run_cmd(f"rsync -a src/ {q(remote_dir + '/src/')}")
+
+    command = join_remote(
+        [
+            f"cd {q(remote_dir)}",
+            f"export CLUSTER_SECRET={q(cluster_secret)}",
+            f"export BASE_DIR={q(remote_dir)}",
+            f"export PORT={q(node.get('port', 80))}",
+            f"export HOST={q(node.get('bind_host', node.get('host', '0.0.0.0')))}",
+            *[f"export {key}={q(str(value))}" for key, value in (node.get("env") or {}).items()],
+            f"nohup python3 -m src.web.main > {q(remote_dir + '/logs/master.out')} 2>&1 < /dev/null &",
+        ]
+    )
+    run_cmd(get_ssh_cmd(node, command))
+
+
+def ensure_master_started(node: Dict[str, Any], cluster_secret: str, master_ip=None, master_port=80, use_https=False) -> None:
+    restart_service(node, cluster_secret, master_ip, master_port, use_https)
+    if systemd_user_available(node):
+        return
+    time.sleep(1)
+    if verify_process_running(node):
+        return
+    print(f"Packaged master failed to start on {node['name']}; falling back to Python source runtime")
+    start_master_from_source(node, cluster_secret)
+    time.sleep(1)
+    if not remote_check(node, "pgrep -f '[p]ython3 -m src.web.main' >/dev/null"):
+        raise DeploymentError("master failed to start as both packaged binary and Python source fallback; inspect logs/master.out")
 
 
 def systemd_escape_assignment(key: str, value: Any) -> str:
@@ -583,7 +680,10 @@ def process_target_nodes(
                 setup_remote(n)
                 # Ensure the secret is available on the remote host as a .env file.
                 write_remote_env(n, cluster_secret)
-                restart_service(n, cluster_secret, master_ip=master_ip, master_port=master_port, use_https=use_https)
+                if n["type"] == "master":
+                    ensure_master_started(n, cluster_secret, master_ip=master_ip, master_port=master_port, use_https=use_https)
+                else:
+                    restart_service(n, cluster_secret, master_ip=master_ip, master_port=master_port, use_https=use_https)
             elif action == "stop":
                 stop_node(n)
             elif action == "status":
@@ -608,6 +708,9 @@ def infer_master(config: Dict[str, Any]) -> tuple[Optional[str], int, bool]:
         if master_node:
             master_ip = master_node["ip"]
             master_port = master_node.get("port", 80)
+    if config.get("installation_mode") == "local" and master_ip:
+        # Both processes share a host, so avoid DNS/routing dependencies.
+        master_ip = "127.0.0.1"
     return master_ip, master_port, use_https
 
 
@@ -617,9 +720,11 @@ def main():
     parser.add_argument("--name", help="Filter by node name")
     parser.add_argument("--config", nargs="+", help="Specify config file(s) manually")
     parser.add_argument("--build-dir", default="build", help="Build directory containing simc-master/simc-worker")
+    parser.add_argument("--skip-build", action="store_true", help="Use existing binaries from --build-dir")
     parser.add_argument("--preflight", action="store_true", help="Check local tools, binaries, SSH connectivity before action")
     parser.add_argument("--fail-fast", action="store_true", help="Stop after first node failure instead of continuing")
     parser.add_argument("--allow-placeholder-secret", action="store_true", help="Allow example/empty cluster_secret (unsafe; for local testing only)")
+    parser.add_argument("--install-simc", action="store_true", help="Build/update SimulationCraft on selected worker nodes after deployment")
 
     args = parser.parse_args()
 
@@ -639,21 +744,23 @@ def main():
                 # The binaries are built locally and later copied to the remote host.
                 # -------------------------------------------------------------------
                 target_platform = config.get("target_platform", "linux")
-                print(f"\n--- Building for platform: {target_platform} ---")
-                # Use a platform‑specific build directory to keep artifacts separate.
-                platform_build_dir = f"build_{target_platform}"
-                # Clean any previous build for this platform.
-                run_cmd(f"rm -rf {platform_build_dir}")
-                # Configure CMake with the requested platform.
-                configure_cmd = f"cmake -S . -B {platform_build_dir} -DTARGET_PLATFORM={target_platform}"
-                run_cmd(configure_cmd)
-                # Build both master and worker binaries for the selected platform.
-                build_cmd = f"cmake --build {platform_build_dir} --target simc_master simc_worker"
-                run_cmd(build_cmd)
+                platform_build_dir = args.build_dir if args.build_dir != "build" else f"build_{target_platform}"
+                build_actions = {"deploy", "master", "worker"}
+                if args.action in build_actions and not args.skip_build:
+                    print(f"\n--- Building for platform: {target_platform} ---")
+                    configure_cmd = f"cmake -S . -B {platform_build_dir} -DTARGET_PLATFORM={target_platform}"
+                    run_cmd(configure_cmd)
+                    build_cmd = f"cmake --build {platform_build_dir} --target simc_master simc_worker"
+                    run_cmd(build_cmd)
+                elif args.action in build_actions:
+                    print(f"\n--- Using existing binaries from: {platform_build_dir} ---")
 
                 # Now proceed with deployment using the freshly built binaries.
                 cluster_secret = config.get("cluster_secret", "")
                 nodes = config.get("nodes", [])
+                if config.get("installation_mode") == "local":
+                    for node in nodes:
+                        node["_deployment_local"] = True
                 target_nodes = select_target_nodes(nodes, args.action, args.name)
                 master_ip, master_port, use_https = infer_master(config)
                 if args.action == "status":
@@ -669,6 +776,15 @@ def main():
                     continue_on_error=not args.fail_fast,
                     preflight=args.preflight,
                 )
+                if args.install_simc and args.action in {"deploy", "worker", "simc"}:
+                    simc_nodes = select_target_nodes(nodes, "simc", args.name)
+                    simc_summary = process_target_nodes(
+                        simc_nodes, "simc", cluster_secret, master_ip, master_port, use_https,
+                        platform_build_dir, continue_on_error=not args.fail_fast,
+                    )
+                    combined.successes.extend(simc_summary.successes)
+                    combined.failures.extend(simc_summary.failures)
+                    combined.warnings.extend(simc_summary.warnings)
                 combined.successes.extend(summary.successes)
                 combined.failures.extend(summary.failures)
                 combined.warnings.extend(summary.warnings)

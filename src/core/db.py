@@ -5,23 +5,16 @@ import time
 import uuid
 from typing import Any, Dict, Optional
 
-# Determine PROJECT_ROOT
-if hasattr(sys, 'frozen'):
-    # If running as a PyInstaller bundle
-    base_path = os.path.dirname(sys.executable)
-    PROJECT_ROOT = os.path.abspath(os.path.join(base_path, ".."))
+# Deployed binaries receive BASE_DIR from the deployer. When it is not set,
+# derive the project root from the executable (frozen) or source tree (dev).
+configured_base_dir = os.environ.get("BASE_DIR")
+if configured_base_dir:
+    PROJECT_ROOT = os.path.abspath(os.path.expanduser(configured_base_dir))
+elif getattr(sys, "frozen", False):
+    PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(sys.executable), ".."))
 else:
-    # If running normally
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, "..", ".."))
-
-# Fallback check
-if not os.path.exists(PROJECT_ROOT) or not os.path.exists(os.path.join(PROJECT_ROOT, "src")):
-    PROJECT_ROOT = os.path.abspath(os.path.join(PROJECT_ROOT, ".."))
-    if not os.path.exists(PROJECT_ROOT) or not os.path.exists(os.path.join(PROJECT_ROOT, "src")):
-        # Last resort: try to find where 'src' is relative to current file
-        # This is just a safety net
-        PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, "..", ".."))
+    module_dir = os.path.dirname(os.path.abspath(__file__))
+    PROJECT_ROOT = os.path.abspath(os.path.join(module_dir, "..", ".."))
 
 # Ensure DB directory exists
 db_dir = os.path.abspath(os.path.join(PROJECT_ROOT, "data", "master"))

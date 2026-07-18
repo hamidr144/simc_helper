@@ -1,0 +1,28 @@
+{
+  "installation_mode": "local",
+  "target_platform": "linux",
+  "cluster_secret": "replace-with-a-long-random-secret",
+  "nodes": [
+    {
+      "name": "LocalMaster",
+      "type": "master",
+      "port": 8000,
+      "bind_host": "127.0.0.1",
+      "target_dir": "/opt/simc_helper",
+      "env": {
+        "AUTHENTICATION_ENABLED": false,
+        "ADMIN_TOKEN": "replace-with-a-long-random-token",
+        "LOG_LEVEL": "INFO"
+      }
+    },
+    {
+      "name": "LocalWorker",
+      "type": "worker",
+      "target_dir": "/opt/simc_helper",
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "SIMC_UPDATE_INTERVAL_SECONDS": 86400
+      }
+    }
+  ]
+}

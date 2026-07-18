@@ -35,17 +35,17 @@ Describes SSH targets, directories, cluster keys, and runtime env vars for each 
 
 ```bash
 mkdir -p deploy_configs
-cp examples/deploy_master.example.json deploy_configs/master.json
-cp examples/deploy_worker.example.json deploy_configs/worker1.json
+cp examples/deploy_local.example.json deploy_configs/installation.json
+# OR
+cp examples/deploy_remote.example.json deploy_configs/installation.json
 ```
 
 Full schema example (master + worker in one file):
 
 ```json
 {
+  "installation_mode": "remote",
   "cluster_secret": "replace-with-a-long-random-secret",
-  "master_ip": "master.example.local",
-  "master_port": 8000,
   "use_https": false,
   "nodes": [
     {
@@ -90,9 +90,10 @@ Full schema example (master + worker in one file):
 
 | Parameter | Scope | Required | Description |
 | :--- | :--- | :--- | :--- |
+| `installation_mode` | Global | New installs | `local` requires co-located master/worker roles; `remote` requires different master/worker IPs. |
 | `cluster_secret` | Global | Yes | Shared authentication token between master and all workers. |
-| `master_ip` | Global | Worker configs | IP/hostname workers connect to. |
-| `master_port` | Global | No | Master HTTP/WebSocket port (Default: `8000`). |
+| `master_ip` | Global | No | Explicit master address override. Otherwise inferred from the master node; local mode always uses loopback. |
+| `master_port` | Global | No | Explicit master port override. Otherwise inferred from `nodes.port` (Default: `80`). |
 | `use_https` | Global | No | Generate a self-signed cert and use HTTPS/WSS URLs. |
 | `nodes.name` | Node | Yes | Identifier shown in CLI output and status commands. |
 | `nodes.type` | Node | Yes | `master` or `worker`. |
@@ -124,6 +125,7 @@ All vars are read by `src/core/config.py` at startup. Defaults are shown; unset 
 | `SSL_CERTFILE` | Master | — | Path to TLS certificate (PEM). Required for HTTPS. |
 | `CORS_ALLOWED_ORIGINS` | Master | — | Comma-separated or JSON array of allowed CORS origins. |
 | `ADMIN_TOKEN` | Master | — | Guards `/api/update-simc`, `/api/stop-simulation`, and `/api/shutdown`. |
+| `AUTHENTICATION_ENABLED` | Master | `true` | Set to `false` to serve the dashboard without registration or login. Admin and worker authentication are unaffected. |
 | `CLUSTER_SECRET` | Both | Ephemeral | Shared WebSocket auth key. An ephemeral key is generated if unset (workers cannot reconnect after a restart). |
 | `MASTER_URL` | Worker | `http://localhost:8000` | URL the worker connects to. |
 | `WORKER_NAME` | Worker | `LocalWorker` | Worker identifier shown in the dashboard. |

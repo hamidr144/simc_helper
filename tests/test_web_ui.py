@@ -292,6 +292,14 @@ def test_report_separates_baseline_and_only_lists_combo_differences():
     assert "Baseline Gear" in js
     assert "selectedItems" in js
     assert "estimateCombinations" in js
+    assert "window.location.assign(`/results?task_id=" in js
+
+
+def test_results_page_is_a_dedicated_user_friendly_view():
+    response = client.get("/results?task_id=test")
+    assert response.status_code == 200
+    assert "Best combinations" in response.text
+    assert "results.js" in response.text
 
 
 def test_successful_simulation_exposes_uploaded_report_link():

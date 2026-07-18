@@ -574,19 +574,28 @@ if not os.path.exists(static_dir):
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 LOGIN_PAGE = os.path.abspath(os.path.join(static_dir, "login.html"))
 APP_PAGE = os.path.abspath(os.path.join(static_dir, "app.html"))
+RESULTS_PAGE = os.path.abspath(os.path.join(static_dir, "results.html"))
 
 
 templates = Jinja2Templates(directory=static_dir)
 
+
+def authentication_enabled() -> bool:
+    """Return whether interactive user login is required."""
+    return os.environ.get("AUTHENTICATION_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"}
+
+
+def app_response(request: Request) -> FileResponse:
+    """Serve the app and ensure login-free users still get a stable identity."""
+    response = FileResponse(APP_PAGE)
+    if not request.cookies.get("user_id"):
+        response.set_cookie(key="user_id", value=str(uuid.uuid4()), max_age=31536000, samesite="lax")
+    return response
+
 @app.get("/")
 async def root(request: Request):
-    user_id = request.cookies.get("user_id")
-    if "pytest" in sys.modules or os.environ.get("SIMC_HELPER_DEV_MODE") == "1":
-        response = FileResponse(APP_PAGE)
-        if not user_id:
-            user_id = str(uuid.uuid4())
-            response.set_cookie(key="user_id", value=user_id, max_age=31536000)
-        return response
+    if not authentication_enabled() or "pytest" in sys.modules or os.environ.get("SIMC_HELPER_DEV_MODE") == "1":
+        return app_response(request)
     
     session_id = request.cookies.get("session_id")
     if session_id and session_get(session_id) is not None:
@@ -596,8 +605,8 @@ async def root(request: Request):
 
 @app.get("/dashboard")
 async def dashboard(request: Request):
-    if "pytest" in sys.modules or os.environ.get("SIMC_HELPER_DEV_MODE") == "1":
-        return FileResponse(APP_PAGE)
+    if not authentication_enabled() or "pytest" in sys.modules or os.environ.get("SIMC_HELPER_DEV_MODE") == "1":
+        return app_response(request)
         
     session_id = request.cookies.get("session_id")
     if session_id and session_get(session_id) is not None:
@@ -605,8 +614,20 @@ async def dashboard(request: Request):
     return RedirectResponse(url="/login", status_code=303)
 
 
+@app.get("/results")
+async def results_page(request: Request):
+    if not authentication_enabled() or "pytest" in sys.modules or os.environ.get("SIMC_HELPER_DEV_MODE") == "1":
+        return FileResponse(RESULTS_PAGE)
+    session_id = request.cookies.get("session_id")
+    if session_id and session_get(session_id) is not None:
+        return FileResponse(RESULTS_PAGE)
+    return RedirectResponse(url="/login", status_code=303)
+
+
 @app.get("/login")
 async def login_page(request: Request):
+    if not authentication_enabled():
+        return RedirectResponse(url="/dashboard", status_code=303)
     session_id = request.cookies.get("session_id")
     if session_id and session_get(session_id) is not None:
         return RedirectResponse(url="/dashboard", status_code=303)
@@ -615,6 +636,8 @@ async def login_page(request: Request):
 
 @app.post("/register")
 async def register(username: str = Form(...), password: str = Form(...)):
+    if not authentication_enabled():
+        raise HTTPException(status_code=403, detail="User authentication is disabled")
     if user_get(username):
         raise HTTPException(status_code=400, detail="Username already exists")
     
@@ -625,6 +648,8 @@ async def register(username: str = Form(...), password: str = Form(...)):
 
 @app.post("/login")
 async def login(response: Response, username: str = Form(...), password: str = Form(...)):
+    if not authentication_enabled():
+        raise HTTPException(status_code=403, detail="User authentication is disabled")
     user = user_get(username)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid username or password")
@@ -1118,6 +1143,19 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest):
         profile_content += "\n"
         count = 0
 
+        def canonical_item(item: str) -> str:
+            """Compare SimC items without formatting-only leading commas."""
+            return str(item or "").lstrip(",").strip()
+
+        def is_equipped_variation(slot: str, variation: str) -> bool:
+            if slot == "finger":
+                equipped = [equipped_gear.get("finger1"), equipped_gear.get("finger2")]
+            elif slot == "trinket":
+                equipped = [equipped_gear.get("trinket1"), equipped_gear.get("trinket2")]
+            else:
+                equipped = [equipped_gear.get(slot)]
+            return canonical_item(variation) in {canonical_item(item) for item in equipped if item}
+
         all_slots = set(items_by_slot.keys()) | set(config["enchantments"].keys())
         if payload.selected_gems:
             gem_slots = {slot for slot, items in items_by_slot.items() if any("gem_id=" in item for item in items)}
@@ -1138,6 +1176,10 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest):
 
             variations = generate_variations(item_list, slot, config, extra_sockets=extra_sockets)
             for var in variations:
+                # The base actor already represents equipped gear. Do not create
+                # fake candidates that simply reapply an unchanged slot.
+                if is_equipped_variation(slot, var):
+                    continue
                 if var.startswith("id=") or var.startswith("bonus_id="):
                     var = "," + var
                 profile_content += f'copy="{char_name}_{slot}_{count},{char_name}"\n{equipped_key}={var}\n\n'

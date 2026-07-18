@@ -28,6 +28,9 @@ class TestConfigDefaults:
     def test_default_admin_token_is_none(self):
         assert Config().admin_token is None
 
+    def test_authentication_enabled_by_default(self):
+        assert Config().authentication_enabled is True
+
     def test_default_cluster_secret_is_none(self):
         assert Config().cluster_secret is None
 
@@ -68,6 +71,11 @@ class TestConfigFromEnv:
         reset_config()
         config = Config()
         assert config.admin_token == "super-secret"
+
+    @patch.dict(os.environ, {"AUTHENTICATION_ENABLED": "false"})
+    def test_authentication_can_be_disabled(self):
+        reset_config()
+        assert Config().authentication_enabled is False
 
     @patch.dict(os.environ, {"CLUSTER_SECRET": "my-cluster-secret"})
     def test_env_override_cluster_secret(self):

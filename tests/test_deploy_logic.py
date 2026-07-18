@@ -7,11 +7,13 @@ from utils.deploy import (
     DeploymentError,
     discover_config_files,
     fallback_start_command,
+    get_scp_cmd,
     get_rsync_cmd,
     get_ssh_cmd,
     load_config,
     main,
     make_systemd_unit,
+    infer_master,
     process_target_nodes,
     restart_service,
     run_cmd,
@@ -86,6 +88,13 @@ def test_get_ssh_cmd():
     assert "sshpass -p p" in cmd
 
 
+def test_local_deployment_commands_do_not_use_ssh_or_scp():
+    node = {"name": "local", "type": "master", "user": "u", "ip": "127.0.0.1", "_deployment_local": True}
+
+    assert get_ssh_cmd(node, "printf ok") == "printf ok"
+    assert get_scp_cmd(node, "build/simc-master", "/tmp/simc-master") == "cp build/simc-master /tmp/simc-master"
+
+
 def test_deploy_commands_shell_quote_untrusted_values():
     import shlex
 
@@ -151,6 +160,46 @@ def test_validate_config_rejects_placeholder_secret_for_deploy():
     }
     with pytest.raises(DeploymentError, match="real cluster_secret"):
         validate_config(config, "deploy_configs/master.json", "deploy")
+
+
+def test_validate_local_installation_requires_colocated_roles():
+    config = {
+        "installation_mode": "local",
+        "cluster_secret": "test-cluster-secret-123",
+        "nodes": [
+            {"name": "m", "type": "master", "user": "simc", "ip": "node-a", "target_dir": "/opt/simc"},
+            {"name": "w", "type": "worker", "user": "simc", "ip": "node-b", "target_dir": "/opt/simc"},
+        ],
+    }
+
+    with pytest.raises(DeploymentError, match="same user, ip, and target_dir"):
+        validate_config(config, "local.json", "deploy")
+
+
+def test_validate_remote_installation_requires_separate_nodes():
+    config = {
+        "installation_mode": "remote",
+        "cluster_secret": "test-cluster-secret-123",
+        "nodes": [
+            {"name": "m", "type": "master", "user": "simc", "ip": "node-a", "target_dir": "/opt/simc"},
+            {"name": "w", "type": "worker", "user": "simc", "ip": "node-a", "target_dir": "/opt/simc"},
+        ],
+    }
+
+    with pytest.raises(DeploymentError, match="different ip values"):
+        validate_config(config, "remote.json", "deploy")
+
+
+def test_local_installation_worker_uses_loopback_master_address():
+    config = {
+        "installation_mode": "local",
+        "nodes": [
+            {"name": "m", "type": "master", "user": "simc", "ip": "node-a", "port": 8000},
+            {"name": "w", "type": "worker", "user": "simc", "ip": "node-a"},
+        ],
+    }
+
+    assert infer_master(config) == ("127.0.0.1", 8000, False)
 
 
 def test_process_target_nodes_continues_and_reports_failed_nodes():

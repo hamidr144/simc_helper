@@ -87,6 +87,7 @@ class Config(BaseModel):
     cors_enabled: bool = Field(default=False, description="Whether CORS is enabled.")
 
     # --- Authentication ---
+    authentication_enabled: bool = Field(default=True, description="Require user registration and login for the web UI.")
     admin_token: Optional[str] = Field(default=None, description="Admin API token for destructive endpoints.")
 
     # --- Cluster / Worker ---
@@ -132,6 +133,7 @@ class Config(BaseModel):
             "ssl_keyfile": _read_env("SSL_KEYFILE"),
             "ssl_certfile": _read_env("SSL_CERTFILE"),
             "cors_allowed_origins": _read_env("CORS_ALLOWED_ORIGINS"),
+            "authentication_enabled": _read_bool("AUTHENTICATION_ENABLED", True),
             "admin_token": _read_env("ADMIN_TOKEN"),
             "cluster_secret": _read_env("CLUSTER_SECRET"),
             "master_url": _read_env("MASTER_URL", "http://localhost:8000"),

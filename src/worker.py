@@ -9,6 +9,7 @@ import ssl
 import subprocess  # nosec B404
 import sys
 import time
+from pathlib import Path
 from typing import Any, Dict
 
 import aiohttp
@@ -152,6 +153,14 @@ def should_update_simc(last_update_time, now, interval_seconds=SIMC_UPDATE_INTER
 
 def worker_subcommand(subcommand: str) -> list[str]:
     """Build a worker helper command for source and bundled executions."""
+    # On some macOS hosts a bundled worker is killed when it spawns itself as
+    # a PyInstaller child. Prefer the deployed source helper when available.
+    if (
+        getattr(sys, "frozen", False)
+        and os.environ.get("SIMC_HELPER_USE_SOURCE_HELPERS") == "1"
+        and Path("src/worker.py").is_file()
+    ):
+        return ["python3", "-m", "src.worker", subcommand]
     if getattr(sys, "frozen", False):
         return [sys.executable, subcommand]
     return [sys.executable, "-m", "src.worker", subcommand]

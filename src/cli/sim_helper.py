@@ -157,6 +157,14 @@ def run_simc(simc_path, input_file, extra_args, output_log, html_report=None, pr
     Executes SimulationCraft via a pseudo-terminal (PTY) to capture real-time
     interactive progress bars while logging the full output to a file.
     """
+    if not os.path.isfile(simc_path) or not os.access(simc_path, os.X_OK):
+        print(
+            f"{prefix}SimulationCraft engine is unavailable: {simc_path}. "
+            "Install it with `python3 utils/deploy.py simc --config deploy_configs/installation.json` "
+            "(or deploy with `--install-simc`)."
+        )
+        return 127
+
     cmd = [simc_path, input_file] + extra_args.split()
     if html_report:
         cmd.append(f"html={html_report}")

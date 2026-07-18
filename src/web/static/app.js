@@ -19,6 +19,7 @@ let gearUpgrades = {};
 let voidforgedItems = {};
 let extraSockets = {};
 let generatedInput = null;
+let generationTimer = null;
 
 const addonInput = document.getElementById('addon-input');
 const btnParseAddon = document.getElementById('btn-parse-addon');
@@ -147,9 +148,11 @@ function estimateCombinations() {
   for (const [slot, items] of Object.entries(selectedItems)) {
     const enchantCount = selectedEnchants[slot]?.size || 0;
     for (const item of items) {
+      const equipped = normalizedEquippedItems(slot);
       const acceptsGem = item.includes('gem_id=') || extraSockets[slot];
       const gemCount = acceptsGem ? selectedGems.size : 0;
-      total += Math.max(1, enchantCount) * Math.max(1, gemCount);
+      const hasVariation = !equipped.includes(item) || enchantCount > 0 || gemCount > 0 || extraSockets[slot];
+      if (hasVariation) total += Math.max(1, enchantCount) * Math.max(1, gemCount);
     }
   }
   return total;
@@ -159,12 +162,20 @@ function updateSummary() {
   const count = estimateCombinations();
   const countEl = document.getElementById('combo-count');
   const itemCountEl = document.getElementById('selected-item-count');
-  const generateButton = document.getElementById('btn-generate');
   const runButton = document.getElementById('btn-run');
   if (countEl) countEl.textContent = count.toLocaleString();
   if (itemCountEl) itemCountEl.textContent = selectedItemCount().toLocaleString();
-  if (generateButton) generateButton.disabled = count === 0;
   if (runButton) runButton.disabled = !generatedInput;
+}
+
+function selectionChanged() {
+  generatedInput = null;
+  updateSummary();
+  clearTimeout(generationTimer);
+  if (!estimateCombinations()) return;
+  const status = document.getElementById('workflow-status');
+  if (status) status.textContent = 'Updating comparison…';
+  generationTimer = setTimeout(() => generateInput(true), 250);
 }
 
 function renderTrackControls(slot, item) {
@@ -209,8 +220,7 @@ function renderGear() {
         if (event.target.checked) selectedItems[slot].add(item);
         else selectedItems[slot].delete(item);
         card.classList.toggle('is-selected', event.target.checked);
-        generatedInput = null;
-        updateSummary();
+        selectionChanged();
       });
 
       const trackSelect = card.querySelector('.gear-track-select');
@@ -229,13 +239,11 @@ function renderGear() {
             ).join('');
             rankSelect.disabled = false;
           }
-          generatedInput = null;
-          updateSummary();
+          selectionChanged();
         });
         rankSelect.addEventListener('change', () => {
           if (gearUpgrades[slot][item]) gearUpgrades[slot][item].rank = Number(rankSelect.value);
-          generatedInput = null;
-          updateSummary();
+          selectionChanged();
         });
       }
 
@@ -244,8 +252,7 @@ function renderGear() {
         voidforgeInput.addEventListener('change', event => {
           voidforgedItems[slot][item] = event.target.checked;
           event.currentTarget.closest('.voidforge-field-container')?.classList.toggle('is-active', event.target.checked);
-          generatedInput = null;
-          updateSummary();
+          selectionChanged();
         });
       }
       itemGrid.appendChild(card);
@@ -257,8 +264,7 @@ function renderGear() {
       socketControl.innerHTML = `<input type="checkbox"> Add/test an extra socket on ${escapeHtml(slot)}`;
       socketControl.querySelector('input').addEventListener('change', event => {
         extraSockets[slot] = event.target.checked;
-        generatedInput = null;
-        updateSummary();
+        selectionChanged();
       });
       group.appendChild(socketControl);
     }
@@ -284,8 +290,7 @@ function renderEnhancements() {
       label.querySelector('input').addEventListener('change', event => {
         if (event.target.checked) selectedEnchants[slot].add(id);
         else selectedEnchants[slot].delete(id);
-        generatedInput = null;
-        updateSummary();
+        selectionChanged();
       });
       group.appendChild(label);
     }
@@ -308,8 +313,7 @@ function renderEnhancements() {
       label.querySelector('input').addEventListener('change', event => {
         if (event.target.checked) selectedGems.add(id);
         else selectedGems.delete(id);
-        generatedInput = null;
-        updateSummary();
+        selectionChanged();
       });
       group.appendChild(label);
     }
@@ -322,11 +326,10 @@ function renderWorkflow() {
   workflowContainer.innerHTML = `
     <section class="panel-card workflow-panel full-width" id="baseline-gear-panel"><div class="step-heading"><span>2</span><div><h2>Baseline Gear · select candidates for ${escapeHtml(parsedData.char_name)}</h2><small>Grades are inferred from the export and refined with Wowhead.</small></div></div><div id="gear-grid"></div></section>
     <section class="panel-card workflow-panel full-width"><div class="step-heading"><span>3</span><div><h2>Select gems and enchantments</h2><small>Only checked enhancements are included in generated variations.</small></div></div><div id="enhancement-options" class="enhancement-options"></div></section>
-    <section class="panel-card workflow-panel run-panel full-width"><div class="step-heading"><span>4</span><div><h2>Generate and run</h2><small>The count updates as selections change.</small></div></div><div class="combo-summary"><strong id="combo-count">0</strong><span>combinations from <b id="selected-item-count">0</b> selected items</span></div><div class="run-actions"><button id="btn-generate">Generate SimC input</button><button id="btn-run" disabled>Run simulation</button></div><div id="workflow-status" class="workflow-status" aria-live="polite"></div><pre id="simulation-log" class="simulation-log" hidden></pre></section>
+    <section class="panel-card workflow-panel run-panel full-width"><div class="step-heading"><span>4</span><div><h2>Run comparison</h2><small>Combinations update automatically as you change gear.</small></div></div><div class="combo-summary"><strong id="combo-count">0</strong><span>candidate combinations from <b id="selected-item-count">0</b> selected items</span></div><div class="run-actions"><button id="btn-run" disabled>Run comparison</button></div><div id="workflow-status" class="workflow-status" aria-live="polite"></div><pre id="simulation-log" class="simulation-log" hidden></pre></section>
   `;
   renderGear();
   renderEnhancements();
-  document.getElementById('btn-generate').addEventListener('click', generateInput);
   document.getElementById('btn-run').addEventListener('click', runSimulation);
   updateSummary();
 }
@@ -370,11 +373,9 @@ function buildPayload() {
   };
 }
 
-async function generateInput() {
-  const button = document.getElementById('btn-generate');
+async function generateInput(quiet = false) {
   const status = document.getElementById('workflow-status');
-  button.disabled = true;
-  status.textContent = 'Generating SimulationCraft input…';
+  if (!quiet) status.textContent = 'Preparing comparison…';
   try {
     const response = await fetch('/api/generate-simc', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -384,7 +385,7 @@ async function generateInput() {
     if (!response.ok) throw new Error(data.detail || 'Generation failed');
     generatedInput = data;
     document.getElementById('combo-count').textContent = data.combinations.toLocaleString();
-    status.innerHTML = `Generated <a href="${escapeHtml(data.input_url)}" target="_blank">${escapeHtml(data.input_id)}.simc</a> with ${data.combinations.toLocaleString()} combinations.`;
+    status.textContent = `Ready to run ${data.combinations.toLocaleString()} candidate combinations.`;
   } catch (error) {
     generatedInput = null;
     status.textContent = `Could not generate input: ${error.message}`;
@@ -394,6 +395,7 @@ async function generateInput() {
 }
 
 async function runSimulation() {
+  if (!generatedInput && estimateCombinations()) await generateInput();
   if (!generatedInput) return;
   const status = document.getElementById('workflow-status');
   const log = document.getElementById('simulation-log');
@@ -415,6 +417,8 @@ async function runSimulation() {
         if (message.type === 'done' && message.report_file && message.task_id) {
           const reportUrl = `/reports/${encodeURIComponent(message.task_id)}/${encodeURIComponent(message.report_file)}`;
           status.innerHTML = `${escapeHtml(message.text)} <a href="${reportUrl}" target="_blank">Open report</a>`;
+          const baseline = parsedData?.char_name || '';
+          window.location.assign(`/results?task_id=${encodeURIComponent(message.task_id)}&baseline=${encodeURIComponent(baseline)}`);
         } else {
           status.textContent = message.text;
         }

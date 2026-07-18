@@ -1,10 +1,31 @@
 # Deployment Guide
 
-The deployer (`utils/deploy.py`) orchestrates binaries on remote systems. It targets user-space folders, avoids root permissions, and uses user-level systemd services (with a `nohup` daemon fallback).
+The deployer (`utils/deploy.py`) supports exactly two installation topologies. A `local` deployment runs commands and copies binaries directly on the machine where you invoke the deployer; it never calls SSH or SCP. A `remote` deployment reaches installation nodes over SSH. Both use user-level systemd when available, with a `nohup` fallback.
 
----
+## 1. Choose an installation mode
 
-## 1. Compilation
+Copy one complete, unified config:
+
+```bash
+mkdir -p deploy_configs
+
+# Master and worker processes on the same installation node
+cp examples/deploy_local.example.json deploy_configs/installation.json
+
+# Or: master on one node and worker(s) on other nodes
+cp examples/deploy_remote.example.json deploy_configs/installation.json
+```
+
+`installation_mode` is validated before deployment:
+
+| Mode | Required topology | Worker connection |
+| :--- | :--- | :--- |
+| `local` | Exactly one master and at least one worker with the same `target_dir`. `user`, `ip`, and `access` are optional and default locally. | Automatically uses `127.0.0.1:<master port>`. |
+| `remote` | Exactly one master and at least one worker; workers must not share the master's installation location. | Uses the master's configured `ip` and `port`. |
+
+Configs without `installation_mode` remain supported for compatibility but do not receive topology checks.
+
+## 2. Compilation
 
 Build standalone binaries inside the `build/` directory before deploying:
 
@@ -20,18 +41,21 @@ cmake --build build --target simc_worker
 
 ---
 
-## 2. Command Reference
+## 3. Command Reference
 
 ```bash
 # Verify configs, tools, and remote SSH credentials
-python3 utils/deploy.py doctor
+python3 utils/deploy.py doctor --config deploy_configs/installation.json
 
 # Deploy both master and worker nodes with preflight checks
-python3 utils/deploy.py deploy --preflight
+python3 utils/deploy.py deploy --preflight --config deploy_configs/installation.json
+
+# Also clone/build the SimulationCraft engine for worker nodes
+python3 utils/deploy.py deploy --preflight --install-simc --config deploy_configs/installation.json
 
 # Deploy specific configurations or names
-python3 utils/deploy.py master --config deploy_configs/master.json
-python3 utils/deploy.py worker --name Worker1
+python3 utils/deploy.py master --config deploy_configs/installation.json
+python3 utils/deploy.py worker --name Worker1 --config deploy_configs/installation.json
 
 # Service control
 python3 utils/deploy.py status
@@ -58,6 +82,8 @@ python3 utils/deploy.py setup-service
 | :--- | :--- | :--- |
 | `--config <files>` | `deploy_configs/*.json` | Explicit paths to target configuration files. |
 | `--build-dir <dir>` | `build` | Directory where compiled binaries reside. |
+| `--skip-build` | None | Reuse existing binaries from the platform build directory (or `--build-dir`). |
+| `--install-simc` | None | Clone/build or update SimulationCraft on deployed worker nodes. |
 | `--name <name>` | None | Limits execution to a single node name. |
 | `--preflight` | None | Runs tool/binary validation checks immediately before mutating hosts. |
 | `--fail-fast` | None | Halts deployment immediately on the first node error. |
@@ -65,7 +91,7 @@ python3 utils/deploy.py setup-service
 
 ---
 
-## 3. Service Models
+## 4. Service Models
 
 `utils/deploy.py` attempts systemd-user daemon configurations, falling back to a `nohup` wrapper if systemd is unavailable:
 

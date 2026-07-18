@@ -1,12 +1,13 @@
 # Example configuration files
 
-These templates are safe to commit. Copy them to the local paths that are ignored by git, then replace placeholders on your machine:
+These templates are safe to commit. Choose one installation topology, copy it to the ignored deployment directory, then replace placeholders on your machine:
 
 ```bash
 cp examples/config.example.json config.json
 mkdir -p deploy_configs
-cp examples/deploy_master.example.json deploy_configs/master.json
-cp examples/deploy_worker.example.json deploy_configs/worker1.json
+cp examples/deploy_local.example.json deploy_configs/installation.json
+# OR
+cp examples/deploy_remote.example.json deploy_configs/installation.json
 ```
 
 Files and directories intentionally ignored by git:
@@ -19,5 +20,7 @@ Use a long random `cluster_secret` shared by the master and all workers. Do not 
 Before deploying, validate your local files with:
 
 ```bash
-python3 utils/deploy.py doctor --config deploy_configs/master.json deploy_configs/worker1.json
+python3 utils/deploy.py doctor --config deploy_configs/installation.json
 ```
+
+The older split master/worker examples remain available for legacy deployments. New installations should use one unified config with an explicit `installation_mode` so topology mistakes are rejected before deployment.
