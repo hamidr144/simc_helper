@@ -122,13 +122,17 @@ python3 src/cli/sim_helper.py \
   start_server=1
 ```
 
-### Build/update the SimC engine from the worker binary
+### Build/update the SimC engine
 
 ```bash
-./simc-worker manage_simc
+python3 utils/manage_simc.py
 ```
 
-The same management logic is also available through `utils/manage_simc.py` during development.
+For a deployed installation, run the same operation through the unified deployment configuration:
+
+```bash
+python3 utils/deploy.py simc --config deploy_configs/installation.json
+```
 
 ## Configuration files
 
@@ -142,8 +146,9 @@ Start from safe templates:
 ```bash
 cp examples/config.example.json config.json
 mkdir -p deploy_configs
-cp examples/deploy_master.example.json deploy_configs/master.json
-cp examples/deploy_worker.example.json deploy_configs/worker1.json
+# Master and worker on this machine (no SSH)
+cp examples/deploy_local.example.json deploy_configs/installation.json
+# Or use deploy_remote.example.json for separate hosts.
 ```
 
 Do not commit real hosts, usernames, passwords, keys, tokens, or cluster secrets.
@@ -259,14 +264,22 @@ See [`docs/deployment.md`](docs/deployment.md) for the full command reference, a
 
 ## Project structure
 
-- `src/web/`: FastAPI master app and vanilla HTML/CSS/JS dashboard.
-- `src/worker.py`: worker daemon and embedded worker commands.
-- `src/cli/`: standalone SimC input generation and staged run helpers.
-- `src/core/`: shared parsing, path-safety, and environment helpers.
-- `utils/`: deployment, debug, and SimC engine management utilities.
-- `examples/`: safe config templates.
-- `docs/`: deeper technical documentation.
-- `tests/`: regression tests for CLI, web, deployment, and hardening behavior.
+The repository keeps application code, operational tooling, documentation, and generated state separate:
+
+```text
+src/                  Application code
+├── web/              FastAPI master and browser UI
+├── worker.py         Worker daemon
+├── cli/              CLI input-generation and simulation helpers
+└── core/             Shared parsing, configuration, paths, and logging
+utils/                Deployment, diagnostics, and SimC engine maintenance
+examples/             Safe configuration templates
+docs/                 Architecture, configuration, and deployment guides
+scripts/              Build and test entry points
+tests/                Regression and hardening tests
+```
+
+Local state is intentionally outside that hierarchy: `config.json`, `deploy_configs/`, `data/`, `logs/`, and all build output are ignored by Git.
 
 ## Testing and checks
 

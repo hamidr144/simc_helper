@@ -113,8 +113,8 @@ def test_ignored_local_config_files_are_not_tracked():
 
 def test_examples_exist_for_untracked_configs():
     assert Path("examples/config.example.json").exists()
-    assert Path("examples/deploy_master.example.json").exists()
-    assert Path("examples/deploy_worker.example.json").exists()
+    assert Path("examples/deploy_local.example.json").exists()
+    assert Path("examples/deploy_remote.example.json").exists()
 
 
 def test_dev_tooling_config_exists():

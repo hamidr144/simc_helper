@@ -6,15 +6,17 @@ The Worker Node runs as a headless worker daemon (`src/worker.py`, compiled as `
 
 ## 1. Startup Options
 
-Running the worker binary without flags launches the persistent daemon. It also supports utility commands:
+Running `src/worker.py` without flags launches the persistent daemon. During development, use the source utilities directly:
 
 ```bash
 # Clone, build, or update local SimulationCraft engine
-./simc-worker manage_simc
+python3 utils/manage_simc.py
 
 # Run the staged simulation orchestrator directly (Command Line Workflow)
-./simc-worker sim_helper simc_path=<bin> input_file=<file> [stage1_percent_best=25%]
+python3 src/cli/sim_helper.py simc_path=<bin> input_file=<file> [stage1_percent_best=25%]
 ```
+
+For a deployed worker, use `python3 utils/deploy.py simc --config deploy_configs/installation.json` from the deployment machine. Packaged worker executables are generated into the selected CMake build directory and are not stored in the repository.
 
 ---
 

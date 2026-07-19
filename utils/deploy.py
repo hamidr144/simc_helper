@@ -425,6 +425,30 @@ def process_match_pattern(process_name: str) -> str:
     return f"[{process_name[0]}]{process_name[1:]}"
 
 
+def source_process_pattern(node: Dict[str, Any]) -> str:
+    """Pattern for a source-runtime fallback process for this node's role."""
+    return "[s]rc.web.main$" if node["type"] == "master" else "[s]rc.worker$"
+
+
+def stop_processes_command(node: Dict[str, Any], signal_name: str = "TERM") -> str:
+    """Stop only this role's packaged or source fallback process.
+
+    Patterns end in ``$`` so a deployer's own SSH command is never selected.
+    """
+    binary_pattern = process_match_pattern(binary_name(node)) + "$"
+    source_pattern = source_process_pattern(node)
+    return (
+        f"for pid in $(pgrep -f {q(binary_pattern)} || true) $(pgrep -f {q(source_pattern)} || true); "
+        f"do kill -{q(signal_name)} \"$pid\" || true; done"
+    )
+
+
+def role_process_running(node: Dict[str, Any]) -> str:
+    binary_pattern = process_match_pattern(binary_name(node)) + "$"
+    source_pattern = source_process_pattern(node)
+    return f"pgrep -f {q(binary_pattern)} >/dev/null || pgrep -f {q(source_pattern)} >/dev/null"
+
+
 def fallback_start_command(node: Dict[str, Any], cluster_secret: str, master_ip=None, master_port=80, use_https=False) -> str:
     """Construct a remote command that starts the SimC helper via ``nohup``.
 
@@ -629,7 +653,15 @@ def stop_node(node: Dict[str, Any]) -> None:
     svc_name = service_name(node)
     if systemd_user_available(node):
         run_cmd(get_ssh_cmd(node, f"systemctl --user stop {q(svc_name)}"), check=False)
-    run_cmd(get_ssh_cmd(node, f"pkill -f {q(process_match_pattern(binary_name(node)))} || true"))
+    run_cmd(get_ssh_cmd(node, stop_processes_command(node)), check=False)
+    # Give Uvicorn and workers a brief grace period, then stop only a process
+    # that demonstrably survived the requested shutdown.
+    time.sleep(2)
+    if remote_check(node, role_process_running(node)):
+        run_cmd(get_ssh_cmd(node, stop_processes_command(node, "KILL")), check=False)
+        time.sleep(1)
+    if remote_check(node, role_process_running(node)):
+        raise DeploymentError(f"{node['name']}: {node['type']} process is still running after stop")
 
 
 def status_node(node: Dict[str, Any]) -> None:
@@ -638,7 +670,7 @@ def status_node(node: Dict[str, Any]) -> None:
         res = run_cmd(get_ssh_cmd(node, f"systemctl --user is-active {q(svc_name)}"), stream=False, check=False)
         status = "RUNNING" if res.returncode == 0 else "STOPPED"
     else:
-        res = run_cmd(get_ssh_cmd(node, f"pgrep -f {q(process_match_pattern(binary_name(node)))} >/dev/null"), stream=False, check=False)
+        res = run_cmd(get_ssh_cmd(node, role_process_running(node)), stream=False, check=False)
         status = "RUNNING (nohup)" if res.returncode == 0 else "STOPPED"
     print(f"{node['name']} ({node['ip']}): {status}")
 

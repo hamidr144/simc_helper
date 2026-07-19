@@ -247,7 +247,9 @@ def test_stop_node_uses_process_pattern_that_does_not_match_pkill_command():
          patch("utils.deploy.get_ssh_cmd", side_effect=lambda _node, cmd: cmd):
         stop_node(node)
 
-    assert mock_run.call_args.args[0] == "pkill -f '[s]imc-master' || true"
+    commands = [call.args[0] for call in mock_run.call_args_list]
+    assert any("[s]imc-master$" in command for command in commands)
+    assert any("[s]rc.web.main$" in command for command in commands)
 
 
 def test_make_systemd_unit_quotes_environment_values():

@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.ruff_cache/
 .coverage
 coverage.xml
 htmlcov/
@@ -39,6 +40,7 @@ build/
 build_*/
 build_output/
 dist/
+bin/
 *.spec
 
 # Runtime data

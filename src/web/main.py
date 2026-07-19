@@ -5,7 +5,6 @@ import json
 import logging
 import os
 import re
-import signal
 import sys
 import time
 import uuid
@@ -13,9 +12,6 @@ import datetime
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
-
-signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
-
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -442,25 +438,6 @@ async def lifespan(app: FastAPI):
     # Startup
     init_db()
     asyncio.create_task(enforcer())
-
-    # Set up signal handlers for graceful shutdown
-    def _signal_handler():
-        logger.info("Shutdown signal received — marking workers as unavailable.")
-        manager._shutting_down = True
-        for wid, w in manager.active_workers.items():
-            w.status = "Unavailable"
-            try:
-                asyncio.create_task(w.ws.close(1001, "Server shutting down"))
-            except Exception:
-                pass
-            manager.disconnect(wid)
-
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        try:
-            loop.add_signal_handler(sig, _signal_handler)
-        except NotImplementedError:
-            pass  # Windows doesn't support add_signal_handler
 
     yield
 

@@ -22,5 +22,3 @@ Before deploying, validate your local files with:
 ```bash
 python3 utils/deploy.py doctor --config deploy_configs/installation.json
 ```
-
-The older split master/worker examples remain available for legacy deployments. New installations should use one unified config with an explicit `installation_mode` so topology mistakes are rejected before deployment.
