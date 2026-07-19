@@ -5,6 +5,7 @@ Simcraft Helper Suite is a Python/FastAPI toolchain for parsing World of Warcraf
 ## Navigation
 
 *   [**System Architecture**](architecture.md) – Components, network protocol, directory layout, and build pipeline.
+*   [**User Simulation Workflow**](user_workflow.md) – Importing a character, selecting gear and enhancements, running comparisons, and testing expectations.
 *   [**Master Node Guide**](master_node.md) – FastAPI master server, REST API reference, SSE log streaming, and worker management.
 *   [**Worker Node Guide**](worker_node.md) – Headless worker daemon, PTY log streaming, and SimC compilation.
 *   [**Deployment Guide**](deployment.md) – CMake packaging targets and `utils/deploy.py` commands.
@@ -12,25 +13,23 @@ Simcraft Helper Suite is a Python/FastAPI toolchain for parsing World of Warcraf
 
 ---
 
-## Quickstart (Local Development)
+## Quickstart (Local Docker)
 
 ```bash
-# 1. Set up virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+# 1. Configure local secrets
+cp .env.docker.example .env
 
-# 2. Copy config template
-cp examples/config.example.json config.json
-
-# 3. Paste your /simc addon export into char_simc_addon.txt, then start:
-python3 src/web/main.py
+# 2. Build and start the master + worker
+docker build -t simc-helper:latest .
+docker compose up -d
 ```
 
 Default URL: `http://127.0.0.1:8000`
 
+Stop with `docker compose down`; use `docker compose logs -f simc-master simc-worker` to follow the local run.
+
 > [!NOTE]
-> A `.env` file is only needed for Docker Compose deployments. For local dev, export variables directly in your shell or rely on the defaults.
+> The local workflow uses Docker Compose. The source-based Python commands in the node guides are intended for maintainers and troubleshooting.
 
 ---
 

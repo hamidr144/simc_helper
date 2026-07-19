@@ -79,7 +79,7 @@ services:
     # Use the standalone binary for production:
     # entrypoint: ["/app/simc-worker"]
     # Default: run via Python in dev mode
-    entrypoint: ["python3", "src/worker.py"]
+    entrypoint: ["python3", "-m", "src.worker"]
 
   # -----------------------------------------------------------------------
   # Optional: Redis — shared state / caching layer (future use)

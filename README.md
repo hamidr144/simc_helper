@@ -24,26 +24,38 @@ The current project favors a local web UI for day-to-day use, optional distribut
 - A World of Warcraft SimulationCraft addon export.
 - Optional deployment tools: `ssh`, `scp`, `rsync`, and `sshpass` if using password SSH auth.
 
-## Quick local setup
+## Quick local setup (Docker)
+
+Docker Compose is the supported local workflow. It starts the FastAPI master and a SimulationCraft worker together, so the browser can run comparisons without starting Python processes manually.
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python3 -m pip install -r requirements.txt
-cp examples/config.example.json config.json
+cp .env.docker.example .env
+docker build -t simc-helper:latest .
+docker compose up -d
 ```
 
-For Docker Compose, also copy `.env.docker.example` to `.env`.
-
-Put your addon export in `char_simc_addon.txt`, then run either the web app or CLI tools.
-
-### Run the web app locally
+Open `http://127.0.0.1:8000`. Stop the local installation with:
 
 ```bash
-python3 src/web/main.py
+docker compose down
 ```
 
-By default the web app binds to `127.0.0.1:8000`. Set `HOST=0.0.0.0` only when you intentionally want to expose it beyond localhost.
+Put your `/simc` addon export directly into the web UI. The source-based Python commands below are for maintainers and troubleshooting, not the normal user workflow.
+
+### Local Docker operations
+
+```bash
+# Follow master and worker logs
+docker compose logs -f simc-master simc-worker
+
+# Run with three workers
+docker compose up -d --scale simc-worker=3
+
+# Check service state and health
+docker compose ps
+```
+
+The web app binds to all container interfaces and is published on host port `8000` by default. Set `PORT` in `.env` to use another host port.
 
 Useful environment variables are fully documented in `.env.example` (copy it to `.env` and fill in your values). A quick reference:
 
@@ -293,32 +305,15 @@ See `docs/index.md` for architecture, deployment, and configuration details.
 
 ## GUI usage
 
-The web dashboard provides a guided workflow with 7 steps:
+The web dashboard follows one comparison workflow:
 
-### Workflow tabs
+1. Paste a complete `/simc` addon export and select **Parse character**.
+2. Keep equipped gear as the baseline and select the additional items, upgrade ranks, Voidforge
+   options, and sockets to compare.
+3. Select any gems and enchants to include as alternatives.
+4. Review the generated combination count and select **Run comparison**.
+5. Follow the live simulation log, then review alternatives ranked by DPS against the equipped
+   baseline.
 
-| Step | Tab | What you do |
-|------|-----|-------------|
-| 01 | Setup & Addon | Paste your `/simc` addon export and click **Parse Addon Data** |
-| 02 | Gear Selection | Pick gear for each slot, select enchantments/gems to test, enable extra sockets. Click **Generate Combinations & Continue** |
-| 03 | Run Simulation | Select a worker (or "Any Free Worker"), then **Start Simulation**. Watch live logs in the console. |
-| 04 | Final Report | View DPS rankings, gear differences vs baseline, and open the full HTML report |
-| 05 | Compare | Select two profiles to see a side-by-side gear comparison with delta DPS |
-| 06 | What-If | Build a hypothetical profile by swapping individual slots, then simulate it |
-| 07 | Settings | Configure connection, simulation, network, TLS, theme, and keyboard shortcuts |
-
-### Keyboard shortcuts
-
-| Keys | Action |
-|------|--------|
-| `1`–`7` | Switch to the corresponding workflow tab |
-| `Ctrl`+`Enter` | Run simulation (when on the Run Simulation tab) |
-| `Ctrl`+`S` | Save settings (when on the Settings tab) |
-| `Escape` | Close modal dialogs / reset selection |
-
-### Tips
-
-- The worker count in the top-right shows `free/total` workers, updated every 10 seconds.
-- Gear differences in the report are highlighted: purple for added items, red for removed items.
-- Comparison tables highlight rows where gear differs between profiles, with a delta DPS column.
-- The Settings tab persists to the server via `/api/settings` — changes apply on the next page load or restart.
+See [`docs/user_workflow.md`](docs/user_workflow.md) for the detailed user journey, selection
+rules, expected error states, and the acceptance criteria used when testing UI changes.
