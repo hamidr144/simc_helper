@@ -130,6 +130,7 @@ All vars are read by `src/core/config.py` at startup. Defaults are shown; unset 
 | `MASTER_URL` | Worker | `http://localhost:8000` | URL the worker connects to. |
 | `WORKER_NAME` | Worker | `LocalWorker` | Worker identifier shown in the dashboard. |
 | `SIMC_PATH` | Worker | — | Path to a pre-built SimC binary. Skipped if unset (worker builds its own). |
+| `SIMC_BUILD_JOBS` | Worker | `4` (capped by CPU count) | Maximum parallel compiler jobs when building SimulationCraft. Lower this if a memory-constrained worker is killed during compilation. |
 | `SIMC_UPDATE_INTERVAL_SECONDS` | Worker | `86400` | Auto-recompile SimC interval in seconds. Set `0` to disable. |
 | `SIMC_HELPER_INSECURE_TLS` | Worker | — | Set to `1` to skip TLS certificate verification (dev/self-signed only). |
 | `SIM_COOLDOWN_SECONDS` | Master | `300` | Minimum seconds between simulation requests per user. |

@@ -15,6 +15,8 @@ let appConfig = { enchantments: {}, gems: { meta: [], standard: [] } };
 let selectedItems = {};
 let selectedEnchants = {};
 let selectedGems = new Set();
+let equippedEnchants = {};
+let equippedGems = new Set();
 let gearUpgrades = {};
 let voidforgedItems = {};
 let extraSockets = {};
@@ -115,6 +117,8 @@ function initializeSelections() {
   selectedItems = {};
   selectedEnchants = {};
   selectedGems = new Set();
+  equippedEnchants = {};
+  equippedGems = new Set();
   gearUpgrades = {};
   voidforgedItems = {};
   extraSockets = {};
@@ -136,6 +140,25 @@ function initializeSelections() {
   }
   for (const slot of Object.keys(appConfig.enchantments || {})) {
     selectedEnchants[slot] = new Set();
+    equippedEnchants[slot] = new Set();
+    const configuredIds = new Set((appConfig.enchantments[slot] || []).map(enchant =>
+      String(typeof enchant === 'object' ? enchant.id : enchant)
+    ));
+    for (const item of normalizedEquippedItems(slot)) {
+      const enchantId = parseItemParams(item).enchant_id;
+      if (enchantId && configuredIds.has(String(enchantId))) {
+        equippedEnchants[slot].add(String(enchantId));
+      }
+    }
+  }
+
+  const configuredGemIds = new Set((appConfig.gems?.standard || []).map(gem =>
+    String(typeof gem === 'object' ? gem.id : gem)
+  ));
+  for (const item of Object.values(parsedData.equipped_gear || {})) {
+    for (const gemId of String(parseItemParams(item).gem_id || '').split('/')) {
+      if (configuredGemIds.has(gemId)) equippedGems.add(gemId);
+    }
   }
 }
 
@@ -144,7 +167,7 @@ function selectedItemCount() {
 }
 
 function estimateCombinations() {
-  let total = 0;
+  let total = 1;
   for (const [slot, items] of Object.entries(selectedItems)) {
     const enchantCount = selectedEnchants[slot]?.size || 0;
     for (const item of items) {
@@ -287,9 +310,14 @@ function renderEnhancements() {
       const label = document.createElement('label');
       label.className = 'choice-chip';
       label.innerHTML = `<input type="checkbox">${createEnhancementWowheadLink(enchant, name)}`;
-      label.querySelector('input').addEventListener('change', event => {
+      const input = label.querySelector('input');
+      input.checked = selectedEnchants[slot].has(id) || equippedEnchants[slot].has(id);
+      input.addEventListener('change', event => {
         if (event.target.checked) selectedEnchants[slot].add(id);
-        else selectedEnchants[slot].delete(id);
+        else {
+          selectedEnchants[slot].delete(id);
+          equippedEnchants[slot].delete(id);
+        }
         selectionChanged();
       });
       group.appendChild(label);
@@ -310,9 +338,14 @@ function renderEnhancements() {
       const label = document.createElement('label');
       label.className = 'choice-chip';
       label.innerHTML = `<input type="checkbox">${createEnhancementWowheadLink(gem, name)}`;
-      label.querySelector('input').addEventListener('change', event => {
+      const input = label.querySelector('input');
+      input.checked = selectedGems.has(id) || equippedGems.has(id);
+      input.addEventListener('change', event => {
         if (event.target.checked) selectedGems.add(id);
-        else selectedGems.delete(id);
+        else {
+          selectedGems.delete(id);
+          equippedGems.delete(id);
+        }
         selectionChanged();
       });
       group.appendChild(label);
@@ -332,6 +365,7 @@ function renderWorkflow() {
   renderEnhancements();
   document.getElementById('btn-run').addEventListener('click', runSimulation);
   updateSummary();
+  void generateInput(true);
 }
 
 async function hydrateWowheadUpgrades(itemsBySlot) {

@@ -37,3 +37,13 @@ def test_get_clean_env_removes_without_orig():
     finally:
         os.environ.clear()
         os.environ.update(original_environ)
+
+
+def test_get_build_jobs_respects_valid_override(monkeypatch):
+    monkeypatch.setenv("SIMC_BUILD_JOBS", "2")
+    assert manage_simc.get_build_jobs() == 2
+
+
+def test_get_build_jobs_rejects_invalid_override(monkeypatch):
+    monkeypatch.setenv("SIMC_BUILD_JOBS", "0")
+    assert manage_simc.get_build_jobs() == manage_simc.DEFAULT_SIMC_BUILD_JOBS

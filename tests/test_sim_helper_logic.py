@@ -49,11 +49,17 @@ def test_run_simc_progress_parsing(tmp_path):
     mock_proc.wait.return_value = 0
     mock_proc.returncode = 0
     master_fd = 10
-    with patch("cli.sim_helper.pty.openpty", return_value=(master_fd, 11)), \
+    # select: first call has data, then no-ready so the loop drains and exits
+    # once poll() reports the process finished.
+    select_ready = ([master_fd], [], [])
+    select_idle = ([], [], [])
+    with patch("cli.sim_helper.os.path.isfile", return_value=True), \
+         patch("cli.sim_helper.os.access", return_value=True), \
+         patch("cli.sim_helper.pty.openpty", return_value=(master_fd, 11)), \
          patch("cli.sim_helper.subprocess.Popen", return_value=mock_proc), \
          patch("cli.sim_helper.os.close"), \
-         patch("cli.sim_helper.select.select", return_value=([master_fd], [], [])), \
-         patch("cli.sim_helper.os.read", side_effect=[b"Test 50/100 [==>] 100/1000\r", b""]), \
+         patch("cli.sim_helper.select.select", side_effect=[select_ready, select_idle, select_idle]), \
+         patch("cli.sim_helper.os.read", side_effect=[b"Combo_50 50/100 [==>] 100/1000\r", b""]), \
          patch("cli.sim_helper.print") as mock_print:
         run_simc("simc", "in", "", str(tmp_path / "p.log"))
         found = False

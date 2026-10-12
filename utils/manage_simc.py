@@ -6,6 +6,30 @@ import sys
 from datetime import datetime, timezone
 
 
+DEFAULT_SIMC_BUILD_JOBS = 4
+
+
+def get_build_jobs() -> int:
+    """Return a bounded parallelism level suitable for local and Docker builds."""
+    configured_jobs = os.environ.get("SIMC_BUILD_JOBS")
+    if configured_jobs:
+        try:
+            jobs = int(configured_jobs)
+            if jobs > 0:
+                return jobs
+        except ValueError:
+            pass
+        print(
+            f"Ignoring invalid SIMC_BUILD_JOBS={configured_jobs!r}; "
+            f"using {DEFAULT_SIMC_BUILD_JOBS}."
+        )
+
+    try:
+        return min(multiprocessing.cpu_count(), DEFAULT_SIMC_BUILD_JOBS)
+    except NotImplementedError:
+        return DEFAULT_SIMC_BUILD_JOBS
+
+
 def get_clean_env():
     env = os.environ.copy()
     # PyInstaller sets these, which can break system binaries (symbol lookup errors)
@@ -52,15 +76,13 @@ def main():
             subprocess.run([git_bin, "pull"], cwd=simc_dir, check=True, env=env)  # nosec B603
 
         print("Building SimulationCraft Engine...")
-        try:
-            cores = multiprocessing.cpu_count()
-        except NotImplementedError:
-            cores = 4
+        jobs = get_build_jobs()
+        print(f"Building with {jobs} parallel job(s). Set SIMC_BUILD_JOBS to override.")
 
         engine_dir = os.path.join(simc_dir, "engine")
         
         # Simple cross-platform fallback
-        subprocess.run([make_bin, "-C", engine_dir, "optimized", f"-j{cores}"], check=True, env=env)  # nosec B603
+        subprocess.run([make_bin, "-C", engine_dir, "optimized", f"-j{jobs}"], check=True, env=env)  # nosec B603
 
         print("Build complete.")
         return 0

@@ -1121,8 +1121,20 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest):
         count = 0
 
         def canonical_item(item: str) -> str:
-            """Compare SimC items without formatting-only leading commas."""
-            return str(item or "").lstrip(",").strip()
+            """Normalize SimC item fields so equivalent profiles compare equally."""
+            fields = [field.strip() for field in str(item or "").lstrip(",").split(",") if field.strip()]
+            return ",".join(sorted(fields))
+
+        def profile_signature(override_slot: Optional[str] = None, override_item: Optional[str] = None):
+            """Return a stable identity for the baseline or one single-slot override."""
+            profile = {
+                slot: canonical_item(item)
+                for slot, item in equipped_gear.items()
+                if item
+            }
+            if override_slot and override_item:
+                profile[override_slot] = canonical_item(override_item)
+            return tuple(sorted(profile.items()))
 
         def is_equipped_variation(slot: str, variation: str) -> bool:
             if slot == "finger":
@@ -1139,7 +1151,8 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest):
             gem_slots |= {slot for slot, enabled in extra_sockets.items() if enabled}
             all_slots |= gem_slots
 
-        for slot in all_slots:
+        seen_profiles = {profile_signature()}
+        for slot in sorted(all_slots):
             equipped_key = "finger1" if slot == "finger" else "trinket1" if slot == "trinket" else slot
             item_list = items_by_slot.get(slot)
 
@@ -1157,6 +1170,10 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest):
                 # fake candidates that simply reapply an unchanged slot.
                 if is_equipped_variation(slot, var):
                     continue
+                signature = profile_signature(equipped_key, var)
+                if signature in seen_profiles:
+                    continue
+                seen_profiles.add(signature)
                 if var.startswith("id=") or var.startswith("bonus_id="):
                     var = "," + var
                 profile_content += f'copy="{char_name}_{slot}_{count},{char_name}"\n{equipped_key}={var}\n\n'
@@ -1178,7 +1195,9 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest):
         input_set(user_id, record)
         input_set("latest", record)
 
-        return {"status": "success", "file_path": file_path, "input_id": input_id, "input_url": record["input_url"], "combinations": count}
+        # The base actor is always a valid current-gear simulation, even if no
+        # alternate item profiles were generated.
+        return {"status": "success", "file_path": file_path, "input_id": input_id, "input_url": record["input_url"], "combinations": max(1, count)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

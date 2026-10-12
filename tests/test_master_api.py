@@ -151,6 +151,31 @@ def test_api_generate_simc():
     assert response.status_code == 200
     assert response.json()["status"] == "success"
 
+
+def test_api_generate_simc_deduplicates_equivalent_item_field_order():
+    payload = {
+        "base_profile": "paladin=Test",
+        "char_class": "paladin",
+        "char_name": "Test",
+        "equipped_gear": {"head": "id=1"},
+        "selected_items": {
+            "head": ["id=2,bonus_id=4,enchant_id=3", "bonus_id=4,enchant_id=3,id=2"]
+        },
+        "selected_enchants": {},
+        "selected_gems": [],
+    }
+
+    with patch(
+        "src.cli.generate_input.load_config",
+        return_value={"gems": {"meta": [], "standard": []}, "enchantments": {}},
+    ):
+        response = client.post("/api/generate-simc", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["combinations"] == 1
+    with open("char_simc_addon.txt") as generated_file:
+        assert generated_file.read().count('copy="Test_head_') == 1
+
 def test_api_generate_simc_applies_item_level_overrides_to_equipped_and_selected_items():
     payload = {
         "base_profile": "paladin=Test",

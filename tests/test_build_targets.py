@@ -35,10 +35,12 @@ def test_docker_builds_are_driven_by_shared_script_not_hardcoded_clean_commands(
 
     assert "scripts/build_pyinstaller.sh" in linux_dockerfile
     assert "scripts/build_pyinstaller.sh" in windows_dockerfile
-    assert "scripts/build_pyinstaller.sh" in dockerfile
+    # The local Dockerfile is a plain source runtime for Compose; packaged
+    # standalone artifacts are built only via CMake/Dockerfile.linux/windows.
+    assert "Packaged standalone artifacts are built separately via CMake" in dockerfile
+    assert "pyinstaller" not in dockerfile.lower()
     assert "pyinstaller --clean" not in linux_dockerfile
     assert "pyinstaller --clean" not in windows_dockerfile
-    assert "pyinstaller --clean" not in dockerfile
     assert "SIMC_BUILD_ARTIFACTS" in build_script
     assert "SIMC_PYINSTALLER_CLEAN" in build_script
     assert "simc-master)" in build_script
@@ -55,22 +57,38 @@ def test_docker_context_excludes_local_build_outputs():
     assert "*.spec" in dockerignore
 
 
-def test_dockerfile_has_multi_stage_build():
-    """The Dockerfile should have builder and runtime stages."""
+def test_dockerfile_is_single_stage_nonroot_runtime():
+    """The local Dockerfile is a deliberate single-stage source runtime.
+
+    Multi-stage packaging lives in Dockerfile.linux/.windows (CMake-driven);
+    the local image must stay lean and run as a non-root user.
+    """
     dockerfile = Path("Dockerfile").read_text()
 
-    assert "AS builder" in dockerfile
-    assert "AS runtime" in dockerfile
-    assert "COPY --from=builder" in dockerfile
+    assert dockerfile.count("FROM ") == 1
+    assert "useradd" in dockerfile
+    assert "USER appuser" in dockerfile
 
 
 def test_dockerfile_env_handling():
-    """The Dockerfile should define ENV variables for HOST, ADMIN_TOKEN, SIMC_PATH."""
-    dockerfile = Path("Dockerfile").read_text()
+    """Runtime knobs live in the Dockerfile; secrets come from the environment.
 
-    for var in ["HOST", "PORT", "ADMIN_TOKEN", "CLUSTER_SECRET", "SIMC_PATH",
-                "BASE_DIR", "SIMC_HELPER_DEV_MODE"]:
+    The local Dockerfile is a plain source runtime, so it must NOT bake in
+    secret defaults (ADMIN_TOKEN/CLUSTER_SECRET) — those are supplied by
+    docker-compose/.env at run time.
+    """
+    dockerfile = Path("Dockerfile").read_text()
+    compose = Path("docker-compose.yml").read_text()
+
+    for var in ["HOST", "PORT", "SIMC_HELPER_DEV_MODE"]:
         assert var in dockerfile
+
+    for var in ["ADMIN_TOKEN", "CLUSTER_SECRET", "SIMC_PATH"]:
+        assert var in compose
+
+    # Secrets must never have hardcoded defaults baked into the image.
+    assert "ADMIN_TOKEN=" not in dockerfile
+    assert "CLUSTER_SECRET=" not in dockerfile
 
 
 def test_dockerfile_healthcheck():

@@ -269,6 +269,17 @@ def test_heliotrope_gems_are_not_rendered_as_selectable_gems():
     js = response.text
 
     assert "gems?.standard" in js
+
+
+def test_current_gear_is_ready_to_run_and_selected_enhancements_are_checked():
+    response = client.get("/static/app.js")
+    assert response.status_code == 200
+    js = response.text
+
+    assert "let total = 1;" in js
+    assert "equippedEnchants[slot].has(id)" in js
+    assert "equippedGems.has(id)" in js
+    assert "void generateInput(true);" in js
     assert "includes('heliotrope')" in js
 
 

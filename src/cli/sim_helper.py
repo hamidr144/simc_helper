@@ -201,7 +201,7 @@ def run_simc(simc_path, input_file, extra_args, output_log, html_report=None, pr
                             line = line_bytes.decode('utf-8', errors='replace').strip()
                             # Match: Combo_400 401/401 [===================>] 100/100
                             # Groups: 1:curr_actor, 2:total_actors, 3:curr_iter, 4:total_iters
-                            m = re.search(r"(\d+)/(\d+)\s+\[.*?\]\s+(\d+)/(\d+)", line)
+                            m = re.search(r"(\d+)/(\d+)\s+\[[^\]]*\]\s+(\d+)/(\d+)", line)
                             if m:
                                 curr_a, tot_a, curr_i, tot_i = m.groups()
                                 curr_a_int = int(curr_a)
