@@ -10,6 +10,22 @@ const MIDNIGHT_UPGRADE_TRACKS = {
 const VOIDFORGE_FINAL_ITEM_LEVELS = [285, 298];
 const VOIDFORGE_BONUS_IDS = ['13653', '13654'];
 
+/* WoW class colors — identity accent only; the accent system stays --accent-color. */
+const CLASS_COLORS = {
+  deathknight: '#c41f3b', demonhunter: '#a335ee', druid: '#ff7c0a',
+  evoker: '#33937f', hunter: '#aad372', mage: '#3fc7eb',
+  monk: '#00ff98', paladin: '#f48cba', priest: '#ffffff',
+  rogue: '#fff468', shaman: '#2459ff', warlock: '#8788ee',
+  warrior: '#c69b66'
+};
+
+const RAIL_STEPS = [
+  { id: 'step-export', num: 1, label: 'Export' },
+  { id: 'step-gear', num: 2, label: 'Gear' },
+  { id: 'step-enhance', num: 3, label: 'Enhancements' },
+  { id: 'step-run', num: 4, label: 'Run' }
+];
+
 let parsedData = null;
 let appConfig = { enchantments: {}, gems: { meta: [], standard: [] } };
 let selectedItems = {};
@@ -22,10 +38,222 @@ let voidforgedItems = {};
 let extraSockets = {};
 let generatedInput = null;
 let generationTimer = null;
+let railObserver = null;
+let runTimer = null;
+let runStartedAt = null;
+let logLineCount = 0;
+let simulationDone = false;
 
 const addonInput = document.getElementById('addon-input');
 const btnParseAddon = document.getElementById('btn-parse-addon');
 const workflowContainer = document.getElementById('gear-workspace-container');
+
+/* ---------- Rail stepper ---------- */
+
+const RAIL_TARGETS = {
+  'step-export': 'addon-input-card',
+  'step-gear': 'baseline-gear-panel',
+  'step-enhance': 'step-enhance',
+  'step-run': 'step-run'
+};
+
+function renderRail() {
+  const nav = document.getElementById('rail-steps');
+  if (!nav || nav.childElementCount) return;
+  nav.innerHTML = RAIL_STEPS.map(step =>
+    `<button type="button" class="rail-step" data-step="${step.id}">` +
+    `<span class="rail-step-num">${step.num}</span><span class="rail-step-label">${step.label}</span></button>`
+  ).join('');
+  nav.querySelectorAll('.rail-step').forEach(button =>
+    button.addEventListener('click', () => {
+      document.getElementById(RAIL_TARGETS[button.dataset.step] || button.dataset.step)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }));
+  updateRailState();
+}
+
+function updateRailState() {
+  const stepDone = {
+    'step-export': Boolean(parsedData),
+    'step-gear': Boolean(generatedInput),
+    'step-enhance': simulationDone,
+    'step-run': simulationDone
+  };
+  document.querySelectorAll('.rail-step').forEach(button => {
+    const id = button.dataset.step;
+    const step = RAIL_STEPS.find(item => item.id === id);
+    const done = Boolean(stepDone[id]);
+    button.classList.toggle('is-done', done);
+    button.disabled = !(id === 'step-export' || parsedData);
+    button.querySelector('.rail-step-num').textContent = done ? '✓' : step.num;
+  });
+}
+
+function observeWorkflowSteps() {
+  if (railObserver) railObserver.disconnect();
+  railObserver = new IntersectionObserver(entries => {
+    const visible = entries.filter(entry => entry.isIntersecting)
+      .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+    if (!visible) return;
+    document.querySelectorAll('.rail-step').forEach(button =>
+      button.classList.toggle('is-active', button.dataset.step === visible.target.dataset.stepId));
+  }, { rootMargin: '-15% 0px -55% 0px', threshold: [0.05, 0.25] });
+  const sections = {
+    'step-export': document.getElementById('addon-input-card'),
+    'step-gear': document.getElementById('baseline-gear-panel'),
+    'step-enhance': document.getElementById('step-enhance'),
+    'step-run': document.getElementById('step-run')
+  };
+  for (const [id, element] of Object.entries(sections)) {
+    if (element) { element.dataset.stepId = id; railObserver.observe(element); }
+  }
+}
+
+/* ---------- Worker status ---------- */
+
+async function pollWorkerStatus() {
+  const chip = document.getElementById('worker-status');
+  const text = document.getElementById('worker-status-text');
+  if (!chip || !text) return;
+  try {
+    const response = await fetch('/api/state');
+    const data = await response.json();
+    const workers = data.workers || [];
+    const idle = workers.filter(worker => /idle/i.test(worker.status || '')).length;
+    if (!workers.length) {
+      chip.className = 'status-chip status-err';
+      text.textContent = 'No workers';
+      chip.title = 'No SimC worker is connected to the master.';
+    } else {
+      chip.className = 'status-chip status-ok';
+      text.textContent = `${idle}/${workers.length} workers idle`;
+      chip.title = workers.map(worker => `${worker.name}: ${worker.status}`).join('\n');
+    }
+  } catch {
+    chip.className = 'status-chip status-err';
+    text.textContent = 'Server offline';
+    chip.title = 'The master server could not be reached.';
+  }
+}
+
+/* ---------- Character chip ---------- */
+
+function renderCharChip() {
+  const chip = document.getElementById('char-chip');
+  if (!chip || !parsedData) return;
+  const cls = String(parsedData.char_class || '').toLowerCase();
+  const color = CLASS_COLORS[cls] || 'var(--accent-color)';
+  const slots = Object.keys(parsedData.items_by_slot || {}).length;
+  const candidates = Object.values(parsedData.items_by_slot || {})
+    .reduce((total, items) => total + items.length, 0);
+  chip.hidden = false;
+  chip.innerHTML = `<span class="char-class-dot" style="background:${color};color:${color}"></span>` +
+    `<b>${escapeHtml(parsedData.char_name)}</b> ${escapeHtml(cls ? cls[0].toUpperCase() + cls.slice(1) : 'Unknown class')}` +
+    ` · ${candidates} candidate items in ${slots} slots`;
+}
+
+/* ---------- Paste flow ---------- */
+
+function updateCharCount() {
+  const counter = document.getElementById('addon-char-count');
+  const length = addonInput.value.trim().length;
+  if (counter) counter.textContent = length
+    ? `${length.toLocaleString()} characters pasted`
+    : 'Nothing pasted yet';
+  btnParseAddon.disabled = !length;
+}
+
+function showParseError(message) {
+  const panel = document.getElementById('parse-error');
+  if (!panel) return;
+  panel.hidden = false;
+  panel.textContent = message;
+}
+
+function clearParseError() {
+  const panel = document.getElementById('parse-error');
+  if (panel) { panel.hidden = true; panel.textContent = ''; }
+}
+
+function collapsePastePanel() {
+  document.getElementById('paste-guide').hidden = true;
+  addonInput.hidden = true;
+  btnParseAddon.hidden = true;
+  document.getElementById('btn-new-export').hidden = false;
+  const counter = document.getElementById('addon-char-count');
+  if (counter) counter.textContent = 'Export parsed and ready below.';
+}
+
+function resetPastePanel() {
+  document.getElementById('paste-guide').hidden = false;
+  addonInput.hidden = false;
+  addonInput.value = '';
+  addonInput.focus();
+  btnParseAddon.hidden = false;
+  document.getElementById('btn-new-export').hidden = true;
+  clearParseError();
+  updateCharCount();
+}
+
+/* ---------- Run progress ---------- */
+
+function formatElapsed(ms) {
+  const secs = Math.floor(ms / 1000);
+  return `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
+}
+
+function startRunProgress() {
+  stopRunProgress();
+  simulationDone = false;
+  runStartedAt = Date.now();
+  logLineCount = 0;
+  document.getElementById('run-progress').hidden = false;
+  document.getElementById('run-progress-meta').textContent = 'Starting…';
+  document.getElementById('run-elapsed').textContent = '00:00';
+  runTimer = setInterval(() => {
+    document.getElementById('run-elapsed').textContent = formatElapsed(Date.now() - runStartedAt);
+  }, 1000);
+}
+
+function stopRunProgress() {
+  if (runTimer) { clearInterval(runTimer); runTimer = null; }
+}
+
+function updateRunProgressMeta(text) {
+  const meta = document.getElementById('run-progress-meta');
+  if (!meta) return;
+  const progress = String(text).match(/Progress:\s*(\d+)%\s*\(([^)]+)\)/);
+  if (progress) {
+    meta.textContent = `${progress[1]}% · ${progress[2]} profiles`;
+    return;
+  }
+  const line = String(text).trim();
+  if (line) meta.textContent = line.length > 90 ? `${line.slice(0, 90)}…` : line;
+}
+
+async function stopSimulation() {
+  const status = document.getElementById('workflow-status');
+  let token = window.localStorage.getItem('simc-admin-token') || '';
+  const entered = window.prompt(
+    'Stopping a simulation requires the master admin token (ADMIN_TOKEN):', token);
+  if (entered === null) return;
+  token = entered.trim();
+  try {
+    const response = await fetch('/api/stop-simulation', {
+      method: 'POST', headers: { 'X-Admin-Token': token }
+    });
+    if (response.status === 403) {
+      status.textContent = 'The admin token was rejected.';
+      window.localStorage.removeItem('simc-admin-token');
+      return;
+    }
+    const data = await response.json();
+    window.localStorage.setItem('simc-admin-token', token);
+    status.textContent = data.message || 'Stop requested.';
+  } catch (error) {
+    status.textContent = `Could not stop simulation: ${error.message}`;
+  }
+}
 
 function escapeHtml(value) {
   return String(value || '')
@@ -51,7 +279,7 @@ function createWowheadIconLink(itemId, bonusIds = '') {
   const safeBonus = String(bonusIds || '').split('/').filter(value => /^\d+$/.test(value)).join(':');
   const bonusQuery = safeBonus ? `?bonus=${encodeURIComponent(safeBonus)}` : '';
   const tooltipData = safeBonus ? `bonus=${safeBonus}&iconsize=large` : 'iconsize=large';
-  return `<a href="https://www.wowhead.com/item=${safeId}${bonusQuery}" class="item-icon-link wowhead-item-link" data-wowhead="${tooltipData}" data-wh-rename="false" target="_blank"><img src="/api/item-icon/${safeId}" alt="" loading="lazy"></a>`;
+  return `<a href="https://www.wowhead.com/item=${safeId}${bonusQuery}" class="item-icon-link wowhead-item-link" data-wowhead="${tooltipData}" data-wh-rename="false" target="_blank"><img src="/api/item-icon/${safeId}" alt="" loading="lazy" onerror="this.closest('.item-icon-link').classList.add('icon-missing')"></a>`;
 }
 
 function createEnhancementWowheadLink(enhancement, name) {
@@ -188,7 +416,12 @@ function updateSummary() {
   const runButton = document.getElementById('btn-run');
   if (countEl) countEl.textContent = count.toLocaleString();
   if (itemCountEl) itemCountEl.textContent = selectedItemCount().toLocaleString();
+  const comboWord = document.getElementById('combo-word');
+  const itemWord = document.getElementById('item-word');
+  if (comboWord) comboWord.textContent = count === 1 ? 'combination' : 'combinations';
+  if (itemWord) itemWord.textContent = selectedItemCount() === 1 ? 'item' : 'items';
   if (runButton) runButton.disabled = !generatedInput;
+  updateRailState();
 }
 
 function selectionChanged() {
@@ -211,7 +444,7 @@ function renderTrackControls(slot, item) {
   const rankOptions = levels.map((level, index) =>
     `<option value="${index + 1}" ${upgrade.rank === index + 1 ? 'selected' : ''}>Rank ${index + 1} · ${level}</option>`
   ).join('');
-  return `<select class="gear-track-select" aria-label="Track">${trackOptions}</select><select class="gear-rank-select" aria-label="Rank" ${levels.length ? '' : 'disabled'}>${rankOptions}</select>`;
+  return `<select class="gear-track-select" aria-label="Track">${trackOptions}</select><select class="gear-rank-select" aria-label="Rank" ${levels.length ? '' : 'disabled'}>${levels.length ? rankOptions : '<option value="">Rank</option>'}</select>`;
 }
 
 function renderGear() {
@@ -221,8 +454,28 @@ function renderGear() {
   for (const [slot, items] of Object.entries(parsedData.items_by_slot)) {
     const group = document.createElement('section');
     group.className = 'slot-group';
-    group.innerHTML = `<h3>${escapeHtml(slot.replace('_', ' '))}</h3><div class="slot-items"></div>`;
+    group.innerHTML = `<div class="slot-group-header"><h3>${escapeHtml(slot.replace('_', ' '))}</h3>` +
+      `<span class="slot-count"></span>` +
+      `<button type="button" class="slot-toggle-all">Select none</button></div><div class="slot-items"></div>`;
     const itemGrid = group.querySelector('.slot-items');
+    const slotCountEl = group.querySelector('.slot-count');
+    const slotToggleAll = group.querySelector('.slot-toggle-all');
+    const syncSlotHeader = () => {
+      slotCountEl.textContent = `${selectedItems[slot].size}/${items.length} selected`;
+      slotToggleAll.textContent = items.length && selectedItems[slot].size === items.length
+        ? 'Select none' : 'Select all';
+    };
+    syncSlotHeader();
+    slotToggleAll.addEventListener('click', () => {
+      const selectAll = !(items.length && selectedItems[slot].size === items.length);
+      selectedItems[slot] = new Set(selectAll ? items : []);
+      itemGrid.querySelectorAll('.item-select-input').forEach(input => {
+        input.checked = selectAll;
+        input.closest('.gear-card')?.classList.toggle('is-selected', selectAll);
+      });
+      syncSlotHeader();
+      selectionChanged();
+    });
     for (const item of items) {
       const params = parseItemParams(item);
       const label = parsedData.item_names[item] || `${slot} ${params.id || ''}`;
@@ -243,6 +496,7 @@ function renderGear() {
         if (event.target.checked) selectedItems[slot].add(item);
         else selectedItems[slot].delete(item);
         card.classList.toggle('is-selected', event.target.checked);
+        syncSlotHeader();
         selectionChanged();
       });
 
@@ -357,13 +611,17 @@ function renderEnhancements() {
 
 function renderWorkflow() {
   workflowContainer.innerHTML = `
-    <section class="panel-card workflow-panel full-width" id="baseline-gear-panel"><div class="step-heading"><span>2</span><div><h2>Baseline Gear · select candidates for ${escapeHtml(parsedData.char_name)}</h2><small>Grades are inferred from the export and refined with Wowhead.</small></div></div><div id="gear-grid"></div></section>
-    <section class="panel-card workflow-panel full-width"><div class="step-heading"><span>3</span><div><h2>Select gems and enchantments</h2><small>Only checked enhancements are included in generated variations.</small></div></div><div id="enhancement-options" class="enhancement-options"></div></section>
-    <section class="panel-card workflow-panel run-panel full-width"><div class="step-heading"><span>4</span><div><h2>Run comparison</h2><small>Combinations update automatically as you change gear.</small></div></div><div class="combo-summary"><strong id="combo-count">0</strong><span>candidate combinations from <b id="selected-item-count">0</b> selected items</span></div><div class="run-actions"><button id="btn-run" disabled>Run comparison</button></div><div id="workflow-status" class="workflow-status" aria-live="polite"></div><pre id="simulation-log" class="simulation-log" hidden></pre></section>
+    <section class="panel-card workflow-panel full-width baseline-gear-panel" id="baseline-gear-panel"><div class="step-heading"><span>2</span><div><h2>Baseline Gear · select candidates for ${escapeHtml(parsedData.char_name)}</h2><small>Grades are inferred from the export and refined with Wowhead. Toggle whole slots with Select all/none.</small></div></div><div id="gear-grid"></div></section>
+    <section class="panel-card workflow-panel full-width" id="step-enhance"><div class="step-heading"><span>3</span><div><h2>Select gems and enchantments</h2><small>Checked enhancements are included in generated variations; the ones you already wear are pre-checked as the baseline.</small></div></div><div id="enhancement-options" class="enhancement-options"></div></section>
+    <section class="panel-card workflow-panel run-panel full-width" id="step-run"><div class="step-heading"><span>4</span><div><h2>Run comparison</h2><small>Combinations update automatically as you change gear. Start the run from the bar at the bottom.</small></div></div><div id="run-progress" hidden><div class="progress-card"><span class="progress-dot" aria-hidden="true"></span><span class="progress-elapsed" id="run-elapsed">00:00</span><span class="progress-meta" id="run-progress-meta">Starting…</span><button type="button" id="btn-stop" class="btn-danger">Stop run</button></div></div><div class="log-toolbar" id="log-toolbar" hidden><label class="log-follow"><input type="checkbox" id="log-follow" checked> Follow log</label><span class="char-count" id="log-lines">0 lines</span></div><pre id="simulation-log" class="simulation-log" hidden></pre></section>
   `;
   renderGear();
   renderEnhancements();
+  renderCharChip();
+  document.getElementById('run-bar').hidden = false;
   document.getElementById('btn-run').addEventListener('click', runSimulation);
+  document.getElementById('btn-stop').addEventListener('click', stopSimulation);
+  observeWorkflowSteps();
   updateSummary();
   void generateInput(true);
 }
@@ -419,7 +677,7 @@ async function generateInput(quiet = false) {
     if (!response.ok) throw new Error(data.detail || 'Generation failed');
     generatedInput = data;
     document.getElementById('combo-count').textContent = data.combinations.toLocaleString();
-    status.textContent = `Ready to run ${data.combinations.toLocaleString()} candidate combinations.`;
+    status.textContent = `Ready to run ${data.combinations.toLocaleString()} candidate ${data.combinations === 1 ? 'combination' : 'combinations'}.`;
   } catch (error) {
     generatedInput = null;
     status.textContent = `Could not generate input: ${error.message}`;
@@ -441,24 +699,45 @@ async function runSimulation() {
     status.textContent = `Simulation ${data.task_id} is running on worker ${data.worker_id}.`;
     log.hidden = false;
     log.textContent = '';
+    document.getElementById('log-toolbar').hidden = false;
+    startRunProgress();
+    updateRailState();
     const events = new EventSource(`/api/simulation/stream/${data.task_id}?worker_id=${encodeURIComponent(data.worker_id)}`);
     events.onmessage = event => {
       const message = JSON.parse(event.data);
-      if (message.type === 'log') log.textContent += `${message.text}\n`;
-      if (message.type === 'log_batch') log.textContent += `${message.lines.join('\n')}\n`;
-      log.scrollTop = log.scrollHeight;
+      if (message.type === 'log') {
+        log.textContent += `${message.text}\n`;
+        logLineCount += 1;
+        updateRunProgressMeta(message.text);
+      }
+      if (message.type === 'log_batch') {
+        log.textContent += `${message.lines.join('\n')}\n`;
+        logLineCount += message.lines.length;
+      }
+      if (message.type === 'log' || message.type === 'log_batch') {
+        const linesEl = document.getElementById('log-lines');
+        if (linesEl) linesEl.textContent = `${logLineCount.toLocaleString()} lines`;
+        const follow = document.getElementById('log-follow');
+        if (!follow || follow.checked) log.scrollTop = log.scrollHeight;
+      }
       if (message.type === 'done' || message.type === 'error') {
+        stopRunProgress();
+        document.getElementById('run-progress').hidden = true;
+        if (message.type === 'done') simulationDone = true;
+        updateRailState();
         if (message.type === 'done' && message.report_file && message.task_id) {
           const reportUrl = `/reports/${encodeURIComponent(message.task_id)}/${encodeURIComponent(message.report_file)}`;
           status.innerHTML = `${escapeHtml(message.text)} <a href="${reportUrl}" target="_blank">Open report</a>`;
           const baseline = parsedData?.char_name || '';
           window.location.assign(`/results?task_id=${encodeURIComponent(message.task_id)}&baseline=${encodeURIComponent(baseline)}`);
         } else {
-          status.textContent = message.text;
+          status.textContent = message.text || 'The simulation stopped unexpectedly — see the log above.';
+          status.classList.add('error');
         }
         events.close();
       }
     };
+    events.onerror = () => { events.close(); stopRunProgress(); };
   } catch (error) {
     status.textContent = `Could not start simulation: ${error.message}`;
   }
@@ -469,24 +748,53 @@ btnParseAddon.addEventListener('click', async () => {
   if (!text) return;
   btnParseAddon.disabled = true;
   btnParseAddon.textContent = 'Parsing…';
+  clearParseError();
   try {
     const [parseResponse, configResponse] = await Promise.all([
       fetch('/api/parse-addon', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ addon_text: text }) }),
       fetch('/api/config')
     ]);
-    if (!parseResponse.ok) throw new Error('The addon export could not be parsed');
+    if (!parseResponse.ok) {
+      const detail = await parseResponse.json().catch(() => ({}));
+      throw new Error(detail.detail || 'The addon export could not be parsed. Make sure you copied the full text from the /simc export window.');
+    }
     parsedData = await parseResponse.json();
     appConfig = configResponse.ok ? await configResponse.json() : appConfig;
+    simulationDone = false;
     initializeSelections();
+    renderRail();
     renderWorkflow();
+    collapsePastePanel();
     hydrateWowheadUpgrades(parsedData.items_by_slot);
+    document.getElementById('baseline-gear-panel')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (error) {
-    workflowContainer.innerHTML = `<div class="panel-card workflow-status error">${escapeHtml(error.message)}</div>`;
+    showParseError(`Could not parse the export: ${error.message}`);
   } finally {
     btnParseAddon.disabled = false;
     btnParseAddon.textContent = 'Parse character';
   }
 });
+
+document.getElementById('btn-new-export').addEventListener('click', () => {
+  parsedData = null;
+  generatedInput = null;
+  simulationDone = false;
+  workflowContainer.innerHTML = '';
+  document.getElementById('run-bar').hidden = true;
+  document.getElementById('char-chip').hidden = true;
+  resetPastePanel();
+  updateRailState();
+  observeWorkflowSteps();
+});
+
+addonInput.addEventListener('input', updateCharCount);
+
+renderRail();
+observeWorkflowSteps();
+updateCharCount();
+pollWorkerStatus();
+setInterval(pollWorkerStatus, 15000);
 
 // Report helpers retained for the result views.
 function gearSummary(item) {

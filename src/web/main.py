@@ -1290,7 +1290,7 @@ async def simulation_event_generator(task_id: str, worker_id: str):
                     if data["code"] == 0:
                         yield f"data: {json.dumps({'type': 'done', 'text': 'Simulation finished successfully!', 'report_file': data.get('report_file'), 'task_id': task_id})}\n\n"
                     else:
-                        err = data.get("error", "Unknown error or process crash")
+                        err = data.get("error") or "the SimC process exited with a non-zero code — see the log above"
                         yield f"data: {json.dumps({'type': 'error', 'text': f'Simulation failed: {err}'})}\n\n"
                     break
             except asyncio.TimeoutError:

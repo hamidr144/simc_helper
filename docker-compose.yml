@@ -60,8 +60,8 @@ services:
       - simc-data:/app/data
       - simc-logs:/app/logs
       - simc-inputs:/app/data/master/inputs
-      # Optional: mount static files for hot-reload in dev mode
-      # - ./src/web/static:/app/src/web/static
+      # Hot-reload the UI without rebuilding the image (dev-mode compose).
+      - ./src/web/static:/app/src/web/static:ro
 
   # -----------------------------------------------------------------------
   # Worker(s) — distributed SimC execution nodes

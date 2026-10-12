@@ -4,25 +4,57 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SimulationCraft Helper GUI</title>
-  <link rel="stylesheet" href="/static/style.css?v=20260719-results-page">
+  <link rel="stylesheet" href="/static/style.css?v=20261013-redesign-3">
 </head>
 <body class="app-shell">
   <script>const whTooltips = {colorLinks: true, iconizeLinks: true, renameLinks: true};</script>
   <script src="/api/wowhead-tooltips.js?v=20260718-proxy"></script>
-  <aside class="workflow-rail tabs" aria-label="Navigation Rail"></aside>
-  
+
+  <aside class="workflow-rail tabs" aria-label="Navigation Rail">
+    <nav id="rail-steps" class="rail-steps" aria-label="Workflow steps"></nav>
+    <div class="rail-footer">
+      <div id="worker-status" class="status-chip status-unknown" title="Worker cluster status">
+        <span class="status-dot" aria-hidden="true"></span><span id="worker-status-text">Checking…</span>
+      </div>
+    </div>
+  </aside>
+
   <main class="workspace-grid setup-layout">
-    <h1>SimC Web Helper</h1>
+    <header class="page-header">
+      <h1>SimC Web Helper</h1>
+      <div id="char-chip" class="char-chip" hidden></div>
+    </header>
     <p>1. Setup &amp; Addon · Paste your SimulationCraft character export</p>
-    
+
     <div class="panel-card" id="addon-input-card">
-      <textarea id="addon-input" placeholder="Paste addon text here..."></textarea>
-      <button id="btn-parse-addon">Parse character</button>
+      <div class="paste-guide" id="paste-guide">
+        <span class="paste-step"><b>1</b> In WoW chat, type <code>/simc</code></span>
+        <span class="paste-step"><b>2</b> In the export window press <b>Copy as text</b></span>
+        <span class="paste-step"><b>3</b> Paste below, then parse</span>
+      </div>
+      <textarea id="addon-input" placeholder="Paste your /simc export here…" aria-label="SimulationCraft addon export"></textarea>
+      <div class="paste-footer">
+        <span id="addon-char-count" class="char-count">Nothing pasted yet</span>
+        <div class="paste-actions">
+          <button id="btn-new-export" class="btn-ghost" hidden>New export</button>
+          <button id="btn-parse-addon" disabled>Parse character</button>
+        </div>
+      </div>
+      <div id="parse-error" class="error-panel" role="alert" hidden></div>
     </div>
 
     <div id="gear-workspace-container"></div>
+
+    <div id="run-bar" class="run-bar" hidden>
+      <div class="run-bar-summary">
+        <strong id="combo-count">0</strong>
+        <span><span id="combo-word">combinations</span> · <b id="selected-item-count">0</b> <span id="item-word">items</span> selected</span>
+      </div>
+      <div id="workflow-status" class="workflow-status" aria-live="polite"></div>
+      <button id="btn-run" disabled>Run comparison</button>
+    </div>
   </main>
 
-  <script src="/static/app.js?v=20260719-current-gear-2"></script>
+  <script src="/static/app.js?v=20261013-redesign-3"></script>
 </body>
 </html>
