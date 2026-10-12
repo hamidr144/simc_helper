@@ -81,6 +81,10 @@ services:
       start_period: 5s
     environment:
       - MASTER_URL=http://simc-master:8000
+      # Engine lives under BASE_DIR/thirdparties (the simc-engine volume).
+      # Without BASE_DIR the worker falls back to ~/.simc, which is lost on
+      # every recreate and triggers a fresh 7.5 GB clone + full compile.
+      - BASE_DIR=/app
       - CLUSTER_SECRET=${CLUSTER_SECRET:-change-me-in-production}
       - SIMC_HELPER_DEV_MODE=1
       - WORKER_NAME=${WORKER_NAME:-worker}
