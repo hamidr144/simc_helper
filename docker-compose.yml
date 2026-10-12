@@ -71,6 +71,14 @@ services:
     depends_on:
       simc-master:
         condition: service_healthy
+    # The shared healthcheck probes an HTTP server; a worker runs none —
+    # its liveness is the worker process (and its WebSocket to the master).
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import pathlib,sys; ok=any('src.worker' in p.joinpath('cmdline').read_bytes().decode(errors='ignore') for p in pathlib.Path('/proc').iterdir() if p.name.isdigit() and p.joinpath('cmdline').exists()); sys.exit(0 if ok else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     environment:
       - MASTER_URL=http://simc-master:8000
       - CLUSTER_SECRET=${CLUSTER_SECRET:-change-me-in-production}
@@ -78,6 +86,10 @@ services:
       - WORKER_NAME=${WORKER_NAME:-worker}
       - SIMC_BUILD_JOBS=${SIMC_BUILD_JOBS:-2}
       - SIMC_UPDATE_INTERVAL_SECONDS=86400
+    volumes:
+      # Persist the cloned SimC source + compiled engine across recreates;
+      # otherwise every `up -d` re-clones ~7.5 GB and recompiles.
+      - simc-engine:/app/thirdparties
     # Use the standalone binary for production:
     # entrypoint: ["/app/simc-worker"]
     # Default: run via Python in dev mode
@@ -108,6 +120,8 @@ volumes:
   simc-logs:
     driver: local
   simc-inputs:
+    driver: local
+  simc-engine:
     driver: local
   redis-data:
     driver: local
