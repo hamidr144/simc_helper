@@ -130,6 +130,30 @@ def test_gear_selection_uses_compact_icon_tiles_instead_of_text_rows():
     assert "sr-only" in css
 
 
+def test_gear_selection_stacks_cards_vertically():
+    """Feature 1 (t_e431c027): gear candidate cards stack one per row at all
+    widths — .slot-items must be a single column, never an auto-fill grid."""
+    import re
+
+    css_response = client.get("/static/style.css")
+    assert css_response.status_code == 200
+    css = css_response.text
+
+    def rule_body(selector):
+        match = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", css)
+        assert match, f"missing rule for {selector}"
+        return match.group(1)
+
+    for selector in (".slot-items", ".gear-grid-columns"):
+        body = rule_body(selector)
+        assert "grid-template-columns: 1fr" in body, (
+            f"{selector} must be a single-column stack, got: {body.strip()}"
+        )
+        assert "auto-fill" not in body and "auto-fit" not in body, (
+            f"{selector} must not use an auto-fill/auto-fit grid"
+        )
+
+
 def test_gear_selection_allows_marking_voidforged_weapons_and_trinkets():
     response = client.get("/static/app.js")
     assert response.status_code == 200

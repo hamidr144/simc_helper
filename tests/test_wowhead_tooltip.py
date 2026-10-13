@@ -281,5 +281,5 @@ def test_style_css_defines_preview_classes():
 
 def test_app_html_cache_busted():
     html = _static("app.html")
-    assert "style.css?v=20261013-ui-polish" in html
+    assert "style.css?v=20261013-gear-vertical-stack" in html
     assert "app.js?v=20261013-ui-polish" in html
