@@ -27,6 +27,125 @@ CLASSES = {
 _UPGRADE_COMMENT_RE = re.compile(r"^#\s*upgrade_levels=(.*)$")
 _UPGRADE_COST_RE = re.compile(r"^([ci])#(\d+)#(\d+)#([01])$")
 
+# ---------------------------------------------------------------------------
+# WoW: Forever export detection
+#
+# WoW: Forever (launch 2026-11-04) is a separate game with its own level-60
+# gear economy and its own SimulationCraft engine branch
+# (github.com/simulationcraft/simc, branch "forever" — see also the
+# data-update-foreverBeta-* branches).  Our engine is the retail (Midnight)
+# nightly and cannot simulate Forever characters, so reject those exports
+# with a clear error instead of producing garbage sims.
+#
+# The official addon gained experimental Forever support (simc-addon release
+# #124, commit 703bc5c).  core.lua (master, fetched 2026-10-13) detects the
+# client via Forever-only APIs (IS_FOREVER, ~line 78) and gates whole export
+# sections through EXPORTS: FOREVER_EXPORTS = {character_stats, skills, buffs}
+# vs MODERN_EXPORTS = {spec, trait_systems, catalyst_currencies, ...}.  The
+# Forever-only sections are emitted as comment lines and NEVER appear in a
+# retail export (core.lua GetSimcProfile, ~lines 1477-1500; forever/stats.lua):
+#
+#   # skills=<skillID>:<rank>:<modifier>:<maxRank>[/...]      (GetSkillLevels)
+#   # buffs=<spellID>:<stacks>[/<spellID>:<stacks>...]        (GetActiveBuffs)
+#   # character_stats=<name>:<value>/...                      (+ _base/_bonus/_gear)
+#   # attack_power= / spell_power= / spell_stats= / regen= / crit= / hit= /
+#   # haste= / combat_modifiers= / combat_ratings= / defense= / resistances= /
+#   # weapon_damage= / pet_*=                                 (GetCharacterStats)
+#
+# Additionally, Forever exports always write bare ``spec=unknown`` and never
+# the ``# loot_spec=`` comment (EXPORTS.spec is retail-only; core.lua ~1201),
+# and the Forever client's interface TOC is 16001 while retail Midnight TOCs
+# are 1201xx (Simulationcraft.toc: "Interface: 120100, 120105, 16001").
+#
+# Hard rejection uses only the explicit Forever-only comment markers above
+# (with value grammars required for the generically-named keys so a stray
+# retail comment can never trip them).  The spec/TOC signals are soft: they
+# only produce warnings, never a 400.
+# ---------------------------------------------------------------------------
+
+FOREVER_EXPORT_MESSAGE = (
+    "This looks like a WoW: Forever export. This tool only simulates "
+    "Midnight (retail) characters."
+)
+
+_FOREVER_HARD_RES = [
+    # Forever-only "# skills=" block; grammar from forever/stats.lua GetSkillLevels.
+    re.compile(r"^#\s*skills=\d+:\d+:\d+:\d+(?:/\d+:\d+:\d+:\d+)*\s*$"),
+    # Forever-only "# buffs=" block; grammar from forever/stats.lua GetActiveBuffs.
+    re.compile(r"^#\s*buffs=\d+:\d+(?:/\d+:\d+)*\s*$"),
+    # Forever-only character stats block (forever/stats.lua AddPrimaryStats/AddGearStats).
+    re.compile(r"^#\s*character_stats(?:_base|_bonus|_gear)?="),
+    # Forever-only pet mirror of the same block (forever/stats.lua AddPet*).
+    re.compile(r"^#\s*pet_(?:info|stats|stats_base|stats_bonus|attack_power|modifiers|defense|resistances|weapon_damage)="),
+    # Remaining forever/stats.lua keys; the generic names require the addon's
+    # "name:value" value shape so free-text retail comments never match.
+    re.compile(
+        r"^#\s*(?:attack_power|spell_power|spell_stats|regen|crit|hit|haste"
+        r"|combat_modifiers|combat_ratings|defense|resistances|weapon_damage)"
+        r"=[a-z_][a-z0-9_]*:"
+    ),
+]
+
+# Forever client TOC is 16001 (Simulationcraft.toc compat list); retail
+# Midnight TOCs are 1201xx (six digits).  Anything below this in the header
+# is not a modern retail client.
+_FOREVER_TOC_MAX = 100_000
+_TOC_COMMENT_RE = re.compile(r"^#\s*WoW\s+\S+,\s*TOC\s+(\d+)\s*$")
+_LOOT_SPEC_COMMENT_RE = re.compile(r"^#\s*loot_spec=")
+_SPEC_OPTION_RE = re.compile(r"^spec=([A-Za-z_]+)\s*$")
+
+
+def is_forever_export(lines: List[str]) -> bool:
+    """True when the export carries explicit WoW: Forever markers.
+
+    Only the Forever-only comment sections emitted by the official addon
+    (gated behind EXPORTS.character_stats/skills/buffs, Forever client only)
+    trigger this; see the rationale block above.  Normal retail exports never
+    contain these lines.
+    """
+    for line in lines:
+        line_strip = line.strip()
+        if any(pattern.match(line_strip) for pattern in _FOREVER_HARD_RES):
+            return True
+    return False
+
+
+def forever_export_warnings(lines: List[str]) -> List[str]:
+    """Soft WoW: Forever signals; warnings only, never a hard reject.
+
+    A retail export can legitimately look weak on any single one of these
+    (e.g. a character without a spec yet), so they only annotate an otherwise
+    successful parse.
+    """
+    warnings: List[str] = []
+    has_loot_spec_comment = False
+    spec_unknown = False
+    for line in lines:
+        line_strip = line.strip()
+        toc_match = _TOC_COMMENT_RE.match(line_strip)
+        if toc_match:
+            toc = int(toc_match.group(1))
+            if toc <= _FOREVER_TOC_MAX:
+                warnings.append(
+                    f"Export header shows client TOC {toc}, which is not a "
+                    "Midnight (retail) build — if this is a WoW: Forever "
+                    "character, this tool cannot simulate it."
+                )
+            continue
+        if _LOOT_SPEC_COMMENT_RE.match(line_strip):
+            has_loot_spec_comment = True
+            continue
+        spec_match = _SPEC_OPTION_RE.match(line_strip)
+        if spec_match and spec_match.group(1).lower() == "unknown":
+            spec_unknown = True
+    if spec_unknown and not has_loot_spec_comment:
+        warnings.append(
+            "Export has spec=unknown and no '# loot_spec=' comment, which "
+            "matches a WoW: Forever export; retail exports always include a "
+            "spec comment."
+        )
+    return warnings
+
 
 def parse_upgrade_levels(value: str) -> Optional[Dict[str, Any]]:
     """Parse the value of an addon ``upgrade_levels=`` comment.

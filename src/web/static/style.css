@@ -919,6 +919,17 @@ button.btn-ghost:hover {
   line-height: 1.5;
 }
 
+.warning-panel {
+  margin-top: 14px;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  background: rgba(251, 191, 36, 0.08);
+  color: #fde68a;
+  border-radius: var(--radius-control);
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 /* --- Sticky run bar --- */
 .run-bar {
   grid-column: 1 / -1;

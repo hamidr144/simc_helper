@@ -240,6 +240,19 @@ function showParseError(message) {
 function clearParseError() {
   const panel = document.getElementById('parse-error');
   if (panel) { panel.hidden = true; panel.textContent = ''; }
+  clearParseWarning();
+}
+
+function showParseWarning(messages) {
+  const panel = document.getElementById('parse-warning');
+  if (!panel) return;
+  panel.hidden = false;
+  panel.textContent = messages.join(' ');
+}
+
+function clearParseWarning() {
+  const panel = document.getElementById('parse-warning');
+  if (panel) { panel.hidden = true; panel.textContent = ''; }
 }
 
 function collapsePastePanel() {
@@ -1190,6 +1203,11 @@ btnParseAddon.addEventListener('click', async () => {
       throw new Error(detail.detail || 'The addon export could not be parsed. Make sure you copied the full text from the /simc export window.');
     }
     parsedData = await parseResponse.json();
+    if (Array.isArray(parsedData.warnings) && parsedData.warnings.length) {
+      showParseWarning(parsedData.warnings);
+    } else {
+      clearParseWarning();
+    }
     appConfig = configResponse.ok ? await configResponse.json() : appConfig;
     if (!upgradeData) await loadUpgradeData();
     detectSeasonFromExport(parsedData);

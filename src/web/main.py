@@ -64,7 +64,12 @@ from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from src.core.addon_parser import parse_addon_lines
+from src.core.addon_parser import (
+    FOREVER_EXPORT_MESSAGE,
+    forever_export_warnings,
+    is_forever_export,
+    parse_addon_lines,
+)
 from src.core.circuit_breaker import CircuitBreaker
 from src.core.db import (
     init_db,
@@ -116,6 +121,7 @@ class ParseAddonResponse(BaseModel):
     char_name: str
     char_class: str
     item_upgrades: Dict[str, Dict[str, Any]] = {}
+    warnings: List[str] = []
 
 
 class WowheadUpgradesRequest(BaseModel):
@@ -1348,8 +1354,14 @@ async def parse_addon_text(payload: ParseAddonRequest):
     character name / class.  ``item_upgrades`` carries per-item data parsed
     from the addon's ``# upgrade_levels=`` debug comment (keyed by the same
     item strings as ``item_names``); it is empty for exports without it.
+    ``warnings`` carries soft WoW: Forever signals that do not block parsing.
+    Exports with explicit WoW: Forever markers are rejected with HTTP 400.
     """
-    base_profile, equipped_gear, items_by_slot, item_names, char_name, char_class, item_upgrades = parse_addon_lines(payload.addon_text.split('\n'))
+    lines = payload.addon_text.split('\n')
+    if is_forever_export(lines):
+        raise HTTPException(status_code=400, detail=FOREVER_EXPORT_MESSAGE)
+    warnings = forever_export_warnings(lines)
+    base_profile, equipped_gear, items_by_slot, item_names, char_name, char_class, item_upgrades = parse_addon_lines(lines)
     return {
         "base_profile": base_profile.rstrip("\n"),
         "equipped_gear": equipped_gear,
@@ -1358,6 +1370,7 @@ async def parse_addon_text(payload: ParseAddonRequest):
         "char_name": char_name,
         "char_class": char_class,
         "item_upgrades": item_upgrades,
+        "warnings": warnings,
     }
 
 @app.post("/api/generate-simc", response_model=GenerateSimcResponse, tags=["Profiles"])
