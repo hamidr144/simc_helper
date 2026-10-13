@@ -96,6 +96,21 @@ def test_apply_gear_upgrade_uses_midnight_track_rank_instead_of_manual_item_leve
     assert apply_gear_upgrade("id=123,ilevel=334", {"track": "myth", "rank": 6}, slot="head", voidforged=True) == ",id=123,ilevel=334"
 
 
+def test_apply_gear_upgrade_prefers_export_provided_item_level():
+    """Absolute ilvls from the export's upgrade_levels comment beat static ladders."""
+    # 331 is not on any static myth ladder; the export data still drives generation.
+    assert apply_gear_upgrade("id=123,ilevel=327", {"source": "export", "rank": 1, "item_level": 331}) == ",id=123,ilevel=331"
+    # Rank 0 = "Current": applies the current absolute ilvl (no-op override).
+    assert apply_gear_upgrade("id=123,ilevel=327", {"source": "export", "rank": 0, "item_level": 327}) == ",id=123,ilevel=327"
+    # A garbage item_level falls back to the track/rank ladder.
+    assert apply_gear_upgrade("id=123,ilevel=327", {"source": "export", "track": "myth", "rank": 6, "item_level": "nope"}) == ",id=123,ilevel=334"
+    # Ascension (Venomforged) still overrides export ranks when a track is known.
+    assert apply_gear_upgrade("id=123,ilevel=327", {"source": "export", "track": "myth", "rank": 1, "item_level": 331}, slot="trinket", voidforged=True) == ",id=123,ilevel=340"
+    # Non-export entries (e.g. Wowhead hydration) keep using track/rank even
+    # though they carry item_level (which there is the item's *current* level).
+    assert apply_gear_upgrade("id=123,ilevel=327", {"track": "myth", "rank": 6, "item_level": 327}) == ",id=123,ilevel=334"
+
+
 def test_apply_item_level_does_not_voidforge_non_eligible_slots_or_double_apply():
     assert apply_item_level("id=123,ilevel=276", "276", slot="head", voidforged=True) == ",id=123,ilevel=276"
     assert apply_item_level("id=123,ilevel=298", "298", slot="trinket", voidforged=True) == ",id=123,ilevel=298"
@@ -197,7 +212,7 @@ finger1=id=111
     addon_file = tmp_path / "addon.txt"
     addon_file.write_text(addon_content)
     
-    base_profile, equipped, items_by_slot, item_names, char_name, char_class = parse_addon_file(str(addon_file))
+    base_profile, equipped, items_by_slot, item_names, char_name, char_class, _item_upgrades = parse_addon_file(str(addon_file))
     
     assert char_name == "Hamidriel"
     assert char_class == "paladin"
@@ -245,7 +260,7 @@ def test_main_success_flow(tmp_path):
     with patch("cli.generate_input.os.path.exists", return_value=True), \
          patch("cli.generate_input.load_config", return_value={}), \
          patch("cli.generate_input.load_globals", return_value=""), \
-         patch("cli.generate_input.parse_addon_file", return_value=("", {}, {"head":["id=1"]}, {"id=1":"H"}, "Char", "paladin")), \
+         patch("cli.generate_input.parse_addon_file", return_value=("", {}, {"head":["id=1"]}, {"id=1":"H"}, "Char", "paladin", {})), \
          patch("cli.generate_input.select_items_interactive", return_value={"head":["id=1"]}), \
          patch("builtins.open", MagicMock()):
         

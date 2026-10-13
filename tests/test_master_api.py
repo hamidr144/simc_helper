@@ -84,6 +84,31 @@ def test_parse_addon():
     assert data["base_profile"].splitlines() == ["paladin=Test"]
 
 
+def test_parse_addon_returns_upgrade_levels():
+    addon_text = (
+        "paladin=Test\n"
+        "# Sword (337)\n"
+        "# upgrade_levels=2:4:c#3047#40#0:/3:8:c#3047#80#0:\n"
+        "head=id=123"
+    )
+    response = client.post("/api/parse-addon", json={"addon_text": addon_text})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["item_upgrades"]["id=123"]["levels"][0] == {
+        "upgrade_level": 2,
+        "ilvl_increment": 4,
+        "currency_costs": [{"id": 3047, "count": 40, "discounted": False}],
+        "item_costs": [],
+    }
+    assert data["item_upgrades"]["id=123"]["levels"][1]["upgrade_level"] == 3
+
+
+def test_parse_addon_without_upgrade_levels_returns_empty_dict():
+    response = client.post("/api/parse-addon", json={"addon_text": "paladin=Test\nhead=id=123"})
+    assert response.status_code == 200
+    assert response.json()["item_upgrades"] == {}
+
+
 def test_parse_addon_preserves_base_profile_line_breaks_from_api_payload():
     addon_text = "paladin=Test\nlevel=90\nrace=blood_elf\nhead=id=123"
     response = client.post("/api/parse-addon", json={"addon_text": addon_text})

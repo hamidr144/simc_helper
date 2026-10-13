@@ -115,6 +115,7 @@ class ParseAddonResponse(BaseModel):
     item_names: Dict[str, str]
     char_name: str
     char_class: str
+    item_upgrades: Dict[str, Dict[str, Any]] = {}
 
 
 class WowheadUpgradesRequest(BaseModel):
@@ -1344,9 +1345,11 @@ async def parse_addon_text(payload: ParseAddonRequest):
 
     Returns the base profile (everything before ``### Gear from Bags``),
     equipped gear, available items per slot, item name comments, and
-    character name / class.
+    character name / class.  ``item_upgrades`` carries per-item data parsed
+    from the addon's ``# upgrade_levels=`` debug comment (keyed by the same
+    item strings as ``item_names``); it is empty for exports without it.
     """
-    base_profile, equipped_gear, items_by_slot, item_names, char_name, char_class = parse_addon_lines(payload.addon_text.split('\n'))
+    base_profile, equipped_gear, items_by_slot, item_names, char_name, char_class, item_upgrades = parse_addon_lines(payload.addon_text.split('\n'))
     return {
         "base_profile": base_profile.rstrip("\n"),
         "equipped_gear": equipped_gear,
@@ -1354,6 +1357,7 @@ async def parse_addon_text(payload: ParseAddonRequest):
         "item_names": item_names,
         "char_name": char_name,
         "char_class": char_class,
+        "item_upgrades": item_upgrades,
     }
 
 @app.post("/api/generate-simc", response_model=GenerateSimcResponse, tags=["Profiles"])

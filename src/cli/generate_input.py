@@ -136,12 +136,31 @@ def apply_gear_upgrade(gear_str, upgrade, slot=None, voidforged=False, season=No
     season = season or get_season()
     if not isinstance(upgrade, dict):
         return apply_item_level(gear_str, None, slot=slot, voidforged=voidforged, season=season)
-    level = midnight_track_level(upgrade.get("track"), upgrade.get("rank"), season=season)
+    # An explicit absolute item_level from the addon export's own
+    # upgrade_levels comment (marked source='export') wins over the static
+    # season ladder.  Wowhead-hydrated entries also carry item_level (the
+    # item's *current* level), so they must keep using track/rank.
+    level = None
+    if upgrade.get("source") == "export":
+        level = _coerce_item_level(upgrade.get("item_level"))
+    if level is None:
+        level = midnight_track_level(upgrade.get("track"), upgrade.get("rank"), season=season)
     if voidforged and level is not None and is_ascension_eligible_slot(season, slot):
         ascended = ascension_result(season, upgrade.get("track"))
         if ascended is not None:
             level = ascended
     return apply_item_level(gear_str, level, slot=slot, voidforged=False, season=season)
+
+
+def _coerce_item_level(value):
+    """Absolute item level from an upgrade payload, or None if unusable."""
+    if value in (None, ""):
+        return None
+    try:
+        level = int(value)
+    except (TypeError, ValueError):
+        return None
+    return level if level > 0 else None
 
 def generate_variations(item_list, slot_name, config, extra_sockets=None):
     """Generates all combinations of an item with its possible enchants and valid gems from config."""
@@ -254,7 +273,7 @@ def main():
 
     config = load_config(config_file)
     globals_data = load_globals(globals_file)
-    base_profile, equipped, items_by_slot, item_names, char_name, char_class = parse_addon_file(addon_file)
+    base_profile, equipped, items_by_slot, item_names, char_name, char_class, _item_upgrades = parse_addon_file(addon_file)
     
     print(f"Loaded character: {char_name} ({char_class})")
     selected_items_by_slot = select_items_interactive(items_by_slot, item_names, equipped)

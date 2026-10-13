@@ -255,7 +255,7 @@ def test_gear_selection_hydrates_exact_grades_from_wowhead():
 
     assert "hydrateWowheadUpgrades(parsedData.items_by_slot);" in js
     assert "fetch('/api/wowhead-upgrades'" in js
-    assert "...itemUpgrades" in js
+    assert "(gearUpgrades[slot] ||= {})[item] = upgrade;" in js
     assert "renderGear();" in js
 
 

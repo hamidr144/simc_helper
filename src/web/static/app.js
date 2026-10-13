@@ -416,6 +416,28 @@ function inferMidnightUpgrade(slot, item, label) {
   return null;
 }
 
+/* Upgrade ranks straight from the export's own `# upgrade_levels=` comment
+   (authoritative for this character), preferred over the static season
+   ladders whenever present.  The addon lists only levels other than the
+   item's current one, with ilvl increments relative to the current ilvl,
+   so rank 0 is "Current" and ranks 1..N are the export-provided upgrades. */
+function exportRanksFor(slot, item) {
+  const info = parsedData?.item_upgrades?.[item];
+  const levels = Array.isArray(info?.levels) ? info.levels : null;
+  if (!levels || !levels.length) return null;
+  const current = Number(parseItemParams(item).ilevel) ||
+    itemLevelFromLabel(parsedData?.item_names?.[item]);
+  if (!current) return null;
+  return [
+    { rank: 0, level: current, label: 'Current' },
+    ...levels.map((lvl, index) => ({
+      rank: index + 1,
+      level: current + (Number(lvl.ilvl_increment) || 0),
+      label: `Upgrade ${lvl.upgrade_level}`
+    })),
+  ];
+}
+
 function isAlreadyVoidforgedItem(slot, item, label = '') {
   const ascendedName = String(seasonAscension().name || '').toLowerCase().replace('ascendant ', '');
   return isVoidforgeEligibleSlot(slot) && (
@@ -447,6 +469,17 @@ function initializeSelections() {
     for (const item of items) {
       const inferred = inferMidnightUpgrade(slot, item, parsedData.item_names[item]);
       if (inferred) gearUpgrades[slot][item] = inferred;
+      const exportRanks = exportRanksFor(slot, item);
+      if (exportRanks) {
+        // Export-provided upgrade data wins: default to the item's current
+        // rank with an absolute ilvl, bypassing the static ladder entirely.
+        gearUpgrades[slot][item] = {
+          ...(gearUpgrades[slot][item] || {}),
+          source: 'export',
+          rank: 0,
+          item_level: exportRanks[0].level,
+        };
+      }
       voidforgedItems[slot][item] = isAlreadyVoidforgedItem(
         slot, item, parsedData.item_names[item]
       );
@@ -525,16 +558,19 @@ function renderTrackControls(slot, item) {
   const upgrade = gearUpgrades[slot]?.[item] || {};
   const currentLevel = Number(parseItemParams(item).ilevel) ||
     itemLevelFromLabel(parsedData?.item_names?.[item]);
-  if (isElevatedLevel(currentLevel)) {
+  const exportRanks = exportRanksFor(slot, item);
+  if (!exportRanks && isElevatedLevel(currentLevel)) {
     return '<div class="gear-controls-container"><span class="crafted-badge">Elevated · not upgradeable</span></div>';
   }
   const trackOptions = ['none', ...Object.keys(seasonTracks())]
     .map(track => `<option value="${track}" ${upgrade.track === track ? 'selected' : ''}>${track === 'none' ? 'No grade' : track[0].toUpperCase() + track.slice(1)}</option>`)
     .join('');
-  const levels = seasonTracks()[upgrade.track] || [];
-  const rankOptions = levels.map((level, index) =>
-    `<option value="${index + 1}" ${upgrade.rank === index + 1 ? 'selected' : ''}>Rank ${index + 1} · ${level}</option>`
-  ).join('');
+  const levels = exportRanks || seasonTracks()[upgrade.track] || [];
+  const rankOptions = exportRanks
+    ? exportRanks.map(rank => `<option value="${rank.rank}" ${upgrade.rank === rank.rank ? 'selected' : ''}>${escapeHtml(rank.label)} · ilvl ${rank.level}</option>`).join('')
+    : levels.map((level, index) =>
+        `<option value="${index + 1}" ${upgrade.rank === index + 1 ? 'selected' : ''}>Rank ${index + 1} · ${level}</option>`
+      ).join('');
   return `<select class="gear-track-select" aria-label="Track">${trackOptions}</select><select class="gear-rank-select" aria-label="Rank" ${levels.length ? '' : 'disabled'}>${levels.length ? rankOptions : '<option value="">Rank</option>'}</select>`;
 }
 
@@ -546,14 +582,18 @@ const UPGRADE_PREVIEW_DEBOUNCE_MS = 400;
 
 function targetUpgradeLevel(slot, item) {
   const upgrade = gearUpgrades[slot]?.[item];
-  if (!upgrade?.track) return null;
-  const levels = seasonTracks()[upgrade.track] || [];
-  let level = levels[upgrade.rank - 1] ?? null;
+  if (!upgrade) return null;
   const ascension = seasonAscension();
   if (voidforgedItems[slot]?.[item] && ascension.results?.[upgrade.track] != null) {
-    level = Number(ascension.results[upgrade.track]);
+    return Number(ascension.results[upgrade.track]);
   }
-  return level;
+  // Export-provided entries carry their own absolute ilvl.
+  if (upgrade.source === 'export' && upgrade.item_level != null) {
+    return Number(upgrade.item_level);
+  }
+  if (!upgrade.track) return null;
+  const levels = seasonTracks()[upgrade.track] || [];
+  return levels[upgrade.rank - 1] ?? null;
 }
 
 function scheduleUpgradePreview(slot, item, card) {
@@ -863,7 +903,15 @@ function renderGear() {
       if (trackSelect) {
         trackSelect.addEventListener('change', () => {
           const track = trackSelect.value;
-          if (track === 'none') {
+          if (exportRanksFor(slot, item)) {
+            // Export-provided ranks stay; track only labels ascension context.
+            const entry = gearUpgrades[slot][item] ||
+              { source: 'export', rank: 0, item_level: exportRanksFor(slot, item)[0].level };
+            if (track === 'none') delete entry.track;
+            else entry.track = track;
+            gearUpgrades[slot][item] = entry;
+            rankSelect.disabled = false;
+          } else if (track === 'none') {
             delete gearUpgrades[slot][item];
             rankSelect.innerHTML = '';
             rankSelect.disabled = true;
@@ -878,7 +926,18 @@ function renderGear() {
           selectionChanged();
         });
         rankSelect.addEventListener('change', () => {
-          if (gearUpgrades[slot][item]) gearUpgrades[slot][item].rank = Number(rankSelect.value);
+          const entry = gearUpgrades[slot][item];
+          if (entry) {
+            entry.rank = Number(rankSelect.value);
+            const exportRanks = exportRanksFor(slot, item);
+            if (exportRanks) {
+              const picked = exportRanks.find(rank => rank.rank === entry.rank);
+              if (picked) entry.item_level = picked.level;
+            } else {
+              const levels = seasonTracks()[entry.track] || [];
+              entry.item_level = levels[entry.rank - 1] ?? null;
+            }
+          }
           scheduleUpgradePreview(slot, item, card);
           selectionChanged();
         });
@@ -989,14 +1048,24 @@ function renderWorkflow() {
 
 async function hydrateWowheadUpgrades(itemsBySlot) {
   try {
+    // Items whose upgrade path the export itself already provided never need
+    // (and must not be overwritten by) the Wowhead lookup.
+    const lookupItems = {};
+    for (const [slot, items] of Object.entries(itemsBySlot || {})) {
+      const rest = (items || []).filter(item => !parsedData?.item_upgrades?.[item]);
+      if (rest.length) lookupItems[slot] = rest;
+    }
     const response = await fetch('/api/wowhead-upgrades', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items_by_slot: itemsBySlot })
+      body: JSON.stringify({ items_by_slot: lookupItems })
     });
     if (!response.ok) return;
     const data = await response.json();
     for (const [slot, itemUpgrades] of Object.entries(data.gear_upgrades || {})) {
-      gearUpgrades[slot] = { ...(gearUpgrades[slot] || {}), ...itemUpgrades };
+      for (const [item, upgrade] of Object.entries(itemUpgrades)) {
+        if (parsedData?.item_upgrades?.[item]) continue;
+        (gearUpgrades[slot] ||= {})[item] = upgrade;
+      }
     }
     renderGear();
     updateSummary();

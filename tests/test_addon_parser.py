@@ -14,6 +14,7 @@ from src.core.addon_parser import (
     CLASSES,
     SLOTS,
     parse_addon_lines,
+    parse_upgrade_levels,
 )
 
 
@@ -23,7 +24,7 @@ class TestBasicParsing:
     def test_parse_minimal(self):
         """Minimal addon text with just character info."""
         lines = ["paladin=TestChar"]
-        base_profile, equipped, items_by_slot, item_names, char_name, char_class = parse_addon_lines(lines)
+        base_profile, equipped, items_by_slot, item_names, char_name, char_class, item_upgrades = parse_addon_lines(lines)
         assert char_name == "TestChar"
         assert char_class == "paladin"
         assert "paladin=TestChar" in base_profile
@@ -40,7 +41,7 @@ class TestBasicParsing:
             "head=id=123",
             "chest=id=456",
         ]
-        base_profile, equipped, items_by_slot, item_names, char_name, char_class = parse_addon_lines(lines)
+        base_profile, equipped, items_by_slot, item_names, char_name, char_class, item_upgrades = parse_addon_lines(lines)
         assert char_name == "TestChar"
         assert char_class == "paladin"
         assert equipped["head"] == "id=123"
@@ -56,7 +57,7 @@ class TestBasicParsing:
         lines = ["rogue=TestChar"]
         for slot in SLOTS:
             lines.append(f"{slot}=id={hash(slot) % 10000}")
-        _, equipped, items_by_slot, _, _, _ = parse_addon_lines(lines)
+        _, equipped, items_by_slot, _, _, _, _ = parse_addon_lines(lines)
         # All 16 slots should be in equipped
         for slot in SLOTS:
             assert slot in equipped, f"Missing equipped slot: {slot}"
@@ -64,7 +65,7 @@ class TestBasicParsing:
     def test_parse_finger_slots_normalized_in_items(self):
         """Finger1 and finger2 should be normalized to 'finger' key in items_by_slot."""
         lines = ["warrior=TestChar", "finger1=id=111", "finger2=id=222"]
-        _, equipped, items_by_slot, _, _, _ = parse_addon_lines(lines)
+        _, equipped, items_by_slot, _, _, _, _ = parse_addon_lines(lines)
         assert equipped["finger1"] == "id=111"
         assert equipped["finger2"] == "id=222"
         assert "finger" in items_by_slot
@@ -74,7 +75,7 @@ class TestBasicParsing:
     def test_parse_trinket_slots_normalized_in_items(self):
         """Trinket1 and trinket2 should be normalized to 'trinket' key in items_by_slot."""
         lines = ["mage=TestChar", "trinket1=id=111", "trinket2=id=222"]
-        _, equipped, items_by_slot, _, _, _ = parse_addon_lines(lines)
+        _, equipped, items_by_slot, _, _, _, _ = parse_addon_lines(lines)
         assert equipped["trinket1"] == "id=111"
         assert equipped["trinket2"] == "id=222"
         assert "trinket" in items_by_slot
@@ -88,7 +89,7 @@ class TestBaseProfile:
     def test_non_gear_lines_in_base_profile(self):
         """Lines that don't match a slot should be in base profile."""
         lines = ["deathknight=Test", "level=90", "race=goblin", "spec=blood"]
-        base_profile, _, _, _, _, _ = parse_addon_lines(lines)
+        base_profile, _, _, _, _, _, _ = parse_addon_lines(lines)
         assert "deathknight=Test" in base_profile
         assert "level=90" in base_profile
         assert "race=goblin" in base_profile
@@ -97,20 +98,20 @@ class TestBaseProfile:
     def test_base_profile_preserves_line_breaks(self):
         """Base profile should preserve newlines between lines."""
         lines = ["druid=Test", "level=90", "race=tauren"]
-        base_profile, _, _, _, _, _ = parse_addon_lines(lines)
+        base_profile, _, _, _, _, _, _ = parse_addon_lines(lines)
         assert "druid=Test\nlevel=90\nrace=tauren" in base_profile
 
     def test_gear_lines_excluded_from_base_profile(self):
         """Equipped gear lines should NOT appear in base profile."""
         lines = ["hunter=Test", "head=id=999"]
-        base_profile, equipped, _, _, _, _ = parse_addon_lines(lines)
+        base_profile, equipped, _, _, _, _, _ = parse_addon_lines(lines)
         assert "head=id=999" not in base_profile
         assert equipped["head"] == "id=999"
 
     def test_empty_lines_skipped(self):
         """Empty lines should be skipped."""
         lines = ["priest=Test", "", "  ", "\t", "level=90"]
-        base_profile, _, _, _, _, _ = parse_addon_lines(lines)
+        base_profile, _, _, _, _, _, _ = parse_addon_lines(lines)
         assert "priest=Test" in base_profile
         assert "level=90" in base_profile
 
@@ -128,7 +129,7 @@ class TestBagGear:
             "# chest=id=300",
             "### Additional Character Info",
         ]
-        _, equipped, items_by_slot, item_names, char_name, char_class = parse_addon_lines(lines)
+        _, equipped, items_by_slot, item_names, char_name, char_class, item_upgrades = parse_addon_lines(lines)
         assert char_name == "TestChar"
         assert char_class == "shaman"
         # Equipped gear (before Bags)
@@ -146,7 +147,7 @@ class TestBagGear:
             "# trinket1=id=222",
             "### Additional Character Info",
         ]
-        _, _, items_by_slot, _, _, _ = parse_addon_lines(lines)
+        _, _, items_by_slot, _, _, _, _ = parse_addon_lines(lines)
         assert "finger" in items_by_slot
         assert "id=111" in items_by_slot["finger"]
         assert "trinket" in items_by_slot
@@ -162,7 +163,7 @@ class TestBagGear:
             "# neck=id=300",
             "### Additional Character Info",
         ]
-        _, _, items_by_slot, _, _, _ = parse_addon_lines(lines)
+        _, _, items_by_slot, _, _, _, _ = parse_addon_lines(lines)
         # All three are valid slots
         assert "head" in items_by_slot
         assert "feet" in items_by_slot
@@ -175,7 +176,7 @@ class TestBagGear:
             "head=id=100",
             "chest=id=200",
         ]
-        _, equipped, items_by_slot, _, _, _ = parse_addon_lines(lines)
+        _, equipped, items_by_slot, _, _, _, _ = parse_addon_lines(lines)
         assert equipped["head"] == "id=100"
         assert "id=100" in items_by_slot["head"]
 
@@ -192,7 +193,7 @@ class TestNameComments:
             "# head=id=100",
             "### Additional Character Info",
         ]
-        _, _, _, item_names, _, _ = parse_addon_lines(lines)
+        _, _, _, item_names, _, _, _ = parse_addon_lines(lines)
         # current_name_comment should be "This is a comment for the next item"
         assert "id=100" in item_names
         assert item_names["id=100"] == "This is a comment for the next item"
@@ -205,7 +206,7 @@ class TestNameComments:
             "# head=id=100",
             "### Additional Character Info",
         ]
-        _, _, _, item_names, _, _ = parse_addon_lines(lines)
+        _, _, _, item_names, _, _, _ = parse_addon_lines(lines)
         assert item_names.get("id=100") == ""
 
 
@@ -215,21 +216,21 @@ class TestEdgeCases:
     def test_empty_lines(self):
         """Empty input should return sensible defaults."""
         lines = []
-        _, _, _, _, char_name, char_class = parse_addon_lines(lines)
+        _, _, _, _, char_name, char_class, item_upgrades = parse_addon_lines(lines)
         assert char_name == "Unknown"
         assert char_class == "Unknown"
 
     def test_only_whitespace_lines(self):
         """Whitespace-only lines should be handled."""
         lines = ["   ", "\n", "\t"]
-        _, _, _, _, char_name, char_class = parse_addon_lines(lines)
+        _, _, _, _, char_name, char_class, item_upgrades = parse_addon_lines(lines)
         assert char_name == "Unknown"
         assert char_class == "Unknown"
 
     def test_unknown_class_not_in_classes_dict(self):
         """Unknown class names (not in CLASSES dict) should not match."""
         lines = ["customclass=TestChar"]
-        _, _, _, _, char_name, char_class = parse_addon_lines(lines)
+        _, _, _, _, char_name, char_class, item_upgrades = parse_addon_lines(lines)
         # Only known classes trigger char_class assignment
         assert char_class == "Unknown"
         assert char_name == "Unknown"
@@ -237,14 +238,14 @@ class TestEdgeCases:
     def test_simple_name_with_alphanumeric(self):
         """Simple alphanumeric character name should parse."""
         lines = ["warrior=TestChar123"]
-        _, _, _, _, char_name, char_class = parse_addon_lines(lines)
+        _, _, _, _, char_name, char_class, item_upgrades = parse_addon_lines(lines)
         assert char_class == "warrior"
         assert char_name == "TestChar123"
 
     def test_duplicate_gear_items_not_duplicated(self):
         """Duplicate gear entries should not be added twice."""
         lines = ["paladin=Test", "head=id=123", "head=id=123"]
-        _, _, items_by_slot, _, _, _ = parse_addon_lines(lines)
+        _, _, items_by_slot, _, _, _, _ = parse_addon_lines(lines)
         assert items_by_slot["head"].count("id=123") == 1
 
     def test_additional_info_section_stops_parsing(self):
@@ -255,14 +256,14 @@ class TestEdgeCases:
             "### Additional Character Info",
             "head=id=999",  # This should be ignored
         ]
-        _, equipped, _, _, _, _ = parse_addon_lines(lines)
+        _, equipped, _, _, _, _, _ = parse_addon_lines(lines)
         assert equipped["head"] == "id=100"
         assert "id=999" not in equipped
 
     def test_last_class_overwrites_earlier(self):
         """If multiple class lines appear, the last one wins."""
         lines = ["paladin=First", "mage=Second", "head=id=100"]
-        _, _, _, _, char_name, char_class = parse_addon_lines(lines)
+        _, _, _, _, char_name, char_class, item_upgrades = parse_addon_lines(lines)
         # The second class (mage) overwrites the first
         assert char_class == "mage"
         assert char_name == "Second"
@@ -292,3 +293,155 @@ class TestSlotConstants:
 
     def test_classes_count(self):
         assert len(CLASSES) == 13
+
+
+class TestParseUpgradeLevels:
+    """Grammar verified against simc-addon core.lua getUpgradeComment/formatCosts:
+    levels joined by '/', each 'upgradeLevel:ilvlIncrement:currencyCosts:itemCosts',
+    costs comma-joined 'c#<id>#<count>#<discount01>' / 'i#<id>#<count>#<discount01>'.
+    """
+
+    def test_full_grammar(self):
+        # Real addon output always emits 4 colon-separated sections per level
+        # (string.format('%d:%d:%s:%s')), empty cost sections included.
+        value = ("2:4:c#3047#40#0:/3:8:c#3047#80#0:/"
+                 "4:12:c#3047#160#0,c#3048#5#1:i#202691#1#0")
+        parsed = parse_upgrade_levels(value)
+        assert parsed == {"levels": [
+            {"upgrade_level": 2, "ilvl_increment": 4,
+             "currency_costs": [{"id": 3047, "count": 40, "discounted": False}],
+             "item_costs": []},
+            {"upgrade_level": 3, "ilvl_increment": 8,
+             "currency_costs": [{"id": 3047, "count": 80, "discounted": False}],
+             "item_costs": []},
+            {"upgrade_level": 4, "ilvl_increment": 12,
+             "currency_costs": [{"id": 3047, "count": 160, "discounted": False},
+                                {"id": 3048, "count": 5, "discounted": True}],
+             "item_costs": [{"id": 202691, "count": 1, "discounted": False}]},
+        ]}
+
+    def test_empty_cost_sections(self):
+        parsed = parse_upgrade_levels("1:4::")
+        assert parsed == {"levels": [
+            {"upgrade_level": 1, "ilvl_increment": 4,
+             "currency_costs": [], "item_costs": []},
+        ]}
+
+    def test_negative_increment(self):
+        parsed = parse_upgrade_levels("0:-8:c#3047#20#0:")
+        assert parsed["levels"][0]["ilvl_increment"] == -8
+
+    def test_garbage_returns_none(self):
+        assert parse_upgrade_levels("total garbage") is None
+        assert parse_upgrade_levels("") is None
+        assert parse_upgrade_levels(None) is None
+
+    def test_wrong_cost_kind_rejected(self):
+        # 'i#' costs belong in the 4th section, not the currency section.
+        assert parse_upgrade_levels("2:4:i#1#1#0:") is None
+
+
+class TestUpgradeLevelsComment:
+    """End-to-end parsing of the '# upgrade_levels=' comment in exports."""
+
+    COMMENT = "# upgrade_levels=2:4:c#3047#40#0:/3:8:c#3047#80#0:"
+
+    def test_equipped_item_upgrade_comment_parsed(self):
+        lines = [
+            "warrior=Test",
+            "# Stormblessed Blade (337)",
+            self.COMMENT,
+            "main_hand=,id=274766,ilvl=337",
+        ]
+        _, _, _, item_names, _, _, item_upgrades = parse_addon_lines(lines)
+        assert item_names[",id=274766,ilvl=337"] == "Stormblessed Blade (337)"
+        assert item_upgrades[",id=274766,ilvl=337"]["levels"] == [
+            {"upgrade_level": 2, "ilvl_increment": 4,
+             "currency_costs": [{"id": 3047, "count": 40, "discounted": False}],
+             "item_costs": []},
+            {"upgrade_level": 3, "ilvl_increment": 8,
+             "currency_costs": [{"id": 3047, "count": 80, "discounted": False}],
+             "item_costs": []},
+        ]
+
+    def test_bag_item_upgrade_comment_parsed(self):
+        lines = [
+            "warrior=Test",
+            "### Gear from Bags",
+            "#",
+            "# Stormblessed Blade (340)",
+            "# upgrade_levels=1:4:c#3047#40#0:",
+            "# main_hand=,id=274766,ilvl=340",
+            "### Additional Character Info",
+        ]
+        *_, item_upgrades = parse_addon_lines(lines)
+        assert item_upgrades[",id=274766,ilvl=340"]["levels"][0]["upgrade_level"] == 1
+
+    def test_export_without_upgrade_comment(self):
+        """Old addon versions: no comment, empty item_upgrades, gear still parses."""
+        lines = ["paladin=Test", "# Sword (337)", "head=id=123"]
+        _, equipped, items_by_slot, item_names, _, _, item_upgrades = parse_addon_lines(lines)
+        assert equipped["head"] == "id=123"
+        assert item_upgrades == {}
+
+    def test_malformed_comment_does_not_break_parsing(self):
+        lines = [
+            "paladin=Test",
+            "# upgrade_levels=this is not valid upgrade data",
+            "head=id=123",
+            "chest=id=456",
+        ]
+        _, equipped, items_by_slot, _, _, _, item_upgrades = parse_addon_lines(lines)
+        assert equipped["head"] == "id=123"
+        assert "id=456" in items_by_slot["chest"]
+        assert item_upgrades == {}
+
+    def test_partially_malformed_keeps_valid_levels(self):
+        lines = [
+            "paladin=Test",
+            "# upgrade_levels=2:4:c#3047#40#0:/broken segment/3:8:c#3047#80#0:",
+            "head=id=123",
+        ]
+        *_, item_upgrades = parse_addon_lines(lines)
+        levels = item_upgrades["id=123"]["levels"]
+        assert [level["upgrade_level"] for level in levels] == [2, 3]
+
+    def test_upgrade_comment_never_becomes_item_name(self):
+        lines = [
+            "paladin=Test",
+            "### Gear from Bags",
+            "# Sword (337)",
+            self.COMMENT,
+            "# head=id=100",
+            "### Additional Character Info",
+        ]
+        *_, item_names, _, _, item_upgrades = parse_addon_lines(lines)
+        assert item_names["id=100"] == "Sword (337)"
+        assert "id=100" in item_upgrades
+
+    def test_upgrade_comment_excluded_from_base_profile(self):
+        lines = ["paladin=Test", self.COMMENT, "head=id=123"]
+        base_profile, *rest = parse_addon_lines(lines)
+        assert "upgrade_levels" not in base_profile
+
+    def test_upgrade_does_not_leak_to_next_item(self):
+        """The comment belongs to the item line right after it, only."""
+        lines = [
+            "paladin=Test",
+            "# Sword (337)",
+            self.COMMENT,
+            "head=id=123",
+            "chest=id=456",
+        ]
+        *_, item_upgrades = parse_addon_lines(lines)
+        assert set(item_upgrades) == {"id=123"}
+
+    def test_comment_before_item_line_attaches_to_follower(self):
+        lines = [
+            "paladin=Test",
+            "head=id=123",
+            self.COMMENT,
+            "chest=id=456",
+        ]
+        *_, item_upgrades = parse_addon_lines(lines)
+        assert set(item_upgrades) == {"id=456"}
