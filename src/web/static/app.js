@@ -991,7 +991,7 @@ function renderGear() {
     if ((appConfig.gems?.standard || []).length) {
       const socketControl = document.createElement('label');
       socketControl.className = 'extra-socket-control';
-      socketControl.innerHTML = `<input type="checkbox"> Add/test an extra socket on ${escapeHtml(slot)}`;
+      socketControl.innerHTML = `<input type="checkbox"> Add/test an extra socket on ${escapeHtml(slot.replace('_', ' '))}`;
       socketControl.querySelector('input').addEventListener('change', event => {
         extraSockets[slot] = event.target.checked;
         selectionChanged();

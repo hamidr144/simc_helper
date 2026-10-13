@@ -754,10 +754,15 @@ button.slot-add-confirm:disabled {
 
 /* --- Dedicated results page --- */
 .results-page { max-width: 1120px; }
-.back-link { grid-column: 1 / -1; color: #b8b7ff; text-decoration: none; margin-top: 8px; }
+/* Inline anchors ignore vertical margins, which left this flush against the
+   page top; inline-block + a 35px left inset (1px panel border + 34px hero
+   padding) aligns it with the content column text below. */
+.back-link { display: inline-block; grid-column: 1 / -1; color: #b8b7ff; text-decoration: none; margin: 24px 0 14px 35px; }
 .back-link:hover { text-decoration: underline; }
 .results-hero { padding: 34px; }
 .results-hero h1 { font-family: var(--font-display); font-size: clamp(30px, 5vw, 46px); margin: 6px 0; }
+/* Sentence case, body size — the global uppercase p rule made this shout too (D10 pattern). */
+#results-subtitle { font-size: 13px; line-height: 1.5; letter-spacing: normal; text-transform: none; }
 .eyebrow, .result-rank { color: #b8b7ff; font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
 .baseline-result { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; }
 .baseline-result span, .baseline-result small { color: var(--text-secondary); }
