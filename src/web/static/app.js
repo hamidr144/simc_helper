@@ -129,7 +129,7 @@ function renderRail() {
   if (!nav || nav.childElementCount) return;
   nav.innerHTML = RAIL_STEPS.map(step =>
     `<button type="button" class="rail-step" data-step="${step.id}">` +
-    `<span class="rail-step-num">${step.num}</span><span class="rail-step-label">${step.label}</span></button>`
+    `<span class="rail-step-num num-badge">${step.num}</span><span class="rail-step-label">${step.label}</span></button>`
   ).join('');
   nav.querySelectorAll('.rail-step').forEach(button =>
     button.addEventListener('click', () => {
@@ -572,14 +572,12 @@ function selectionChanged() {
 }
 
 function renderTrackControls(slot, item) {
-  if (isCraftedItem(item)) return '<span class="crafted-badge">Crafted · no grade</span>';
+  if (isCraftedItem(item)) return '';
   const upgrade = gearUpgrades[slot]?.[item] || {};
   const currentLevel = Number(parseItemParams(item).ilevel) ||
     itemLevelFromLabel(parsedData?.item_names?.[item]);
   const exportRanks = exportRanksFor(slot, item);
-  if (!exportRanks && isElevatedLevel(currentLevel)) {
-    return '<div class="gear-controls-container"><span class="crafted-badge">Elevated · not upgradeable</span></div>';
-  }
+  if (!exportRanks && isElevatedLevel(currentLevel)) return '';
   const trackOptions = ['none', ...Object.keys(seasonTracks())]
     .map(track => `<option value="${track}" ${upgrade.track === track ? 'selected' : ''}>${track === 'none' ? 'No grade' : track[0].toUpperCase() + track.slice(1)}</option>`)
     .join('');
@@ -590,6 +588,22 @@ function renderTrackControls(slot, item) {
         `<option value="${index + 1}" ${upgrade.rank === index + 1 ? 'selected' : ''}>Rank ${index + 1} · ${level}</option>`
       ).join('');
   return `<select class="gear-track-select" aria-label="Track">${trackOptions}</select><select class="gear-rank-select" aria-label="Rank" ${levels.length ? '' : 'disabled'}>${levels.length ? rankOptions : '<option value="">Rank</option>'}</select>`;
+}
+
+/* Grade-state badges get one slot on every card (.gear-card-badges) so
+   their placement never varies between cards. */
+function cardBadges(slot, item) {
+  const badges = [];
+  if (isCraftedItem(item)) {
+    badges.push('<span class="crafted-badge">Crafted · no grade</span>');
+  } else {
+    const currentLevel = Number(parseItemParams(item).ilevel) ||
+      itemLevelFromLabel(parsedData?.item_names?.[item]);
+    if (!exportRanksFor(slot, item) && isElevatedLevel(currentLevel)) {
+      badges.push('<span class="crafted-badge">Elevated · not upgradeable</span>');
+    }
+  }
+  return `<div class="gear-card-badges">${badges.join('')}</div>`;
 }
 
 /* ---------- Live upgrade preview (Wowhead tooltip proxy) ---------- */
@@ -895,9 +909,10 @@ function renderGear() {
         <label class="item-select-row">
           <input type="checkbox" class="item-select-input" ${selectedItems[slot].has(item) ? 'checked' : ''}>
           ${createWowheadIconLink(params.id, params.bonus_id)}
-          <span class="gear-card-info"><a href="https://www.wowhead.com/item=${encodeURIComponent(params.id || '0')}${params.bonus_id ? `?bonus=${encodeURIComponent(params.bonus_id.replace(/\//g, ':'))}` : ''}" class="item-option-name gear-card-name wowhead-item-link" data-wowhead="${params.bonus_id ? `bonus=${escapeHtml(params.bonus_id.replace(/\//g, ':'))}` : ''}" target="_blank">${escapeHtml(label.replace(/\s*\(\d+\)/, ''))}</a>${addedItems.has(item) ? '<span class="added-badge">Added</span>' : ''}<span class="gear-card-slot">${level ? `Item level ${level}` : 'Item level unknown'}</span></span>
+          <span class="gear-card-info"><a href="https://www.wowhead.com/item=${encodeURIComponent(params.id || '0')}${params.bonus_id ? `?bonus=${encodeURIComponent(params.bonus_id.replace(/\//g, ':'))}` : ''}" class="item-option-name gear-card-name wowhead-item-link" data-wowhead="${params.bonus_id ? `bonus=${escapeHtml(params.bonus_id.replace(/\//g, ':'))}` : ''}" target="_blank">${escapeHtml(label.replace(/\s*\(\d+\)/, ''))}</a>${addedItems.has(item) ? '<span class="added-badge">Added</span>' : ''}<span class="gear-card-slot"><span>Item level</span><span class="gear-card-slot-ilvl">${level ? level : '—'}</span></span></span>
         </label>
         <div class="gear-card-controls">${renderTrackControls(slot, item)}</div>
+        ${cardBadges(slot, item)}
         ${isVoidforgeEligibleSlot(slot) ? `<label class="voidforge-field-container"><input type="checkbox" class="voidforge-input" ${voidforgedItems[slot][item] ? 'checked' : ''}> ${seasonAscension().name || 'Ascendant'} ×${seasonAscension().cost ?? ''}</label>` : ''}
         <div class="upgrade-preview" hidden></div>
         ${addedItems.has(item) ? `<button type="button" class="slot-remove-added" title="Remove this added item from the candidates"><span class="sr-only">Remove ${escapeHtml(label.replace(/\s*\(\d+\)/, ''))} from candidates</span>×</button>` : ''}
@@ -1049,9 +1064,9 @@ function renderEnhancements() {
 
 function renderWorkflow() {
   workflowContainer.innerHTML = `
-    <section class="panel-card workflow-panel full-width baseline-gear-panel" id="baseline-gear-panel"><div class="step-heading"><span>2</span><div><h2>Baseline Gear · select candidates for ${escapeHtml(parsedData.char_name)}</h2><small>Grades are inferred from the export and refined with Wowhead. Toggle whole slots with Select all/none.</small></div></div><div id="gear-grid"></div></section>
-    <section class="panel-card workflow-panel full-width" id="step-enhance"><div class="step-heading"><span>3</span><div><h2>Select gems and enchantments</h2><small>Checked enhancements are included in generated variations; the ones you already wear are pre-checked as the baseline.</small></div></div><div id="enhancement-options" class="enhancement-options"></div></section>
-    <section class="panel-card workflow-panel run-panel full-width" id="step-run"><div class="step-heading"><span>4</span><div><h2>Run comparison</h2><small>Combinations update automatically as you change gear. Start the run from the bar at the bottom.</small></div></div><div id="run-progress" hidden><div class="progress-card"><span class="progress-dot" aria-hidden="true"></span><span class="progress-elapsed" id="run-elapsed">00:00</span><span class="progress-meta" id="run-progress-meta">Starting…</span><button type="button" id="btn-stop" class="btn-danger">Stop run</button></div></div><div class="log-toolbar" id="log-toolbar" hidden><label class="log-follow"><input type="checkbox" id="log-follow" checked> Follow log</label><span class="char-count" id="log-lines">0 lines</span></div><pre id="simulation-log" class="simulation-log" hidden></pre></section>
+    <section class="panel-card workflow-panel full-width baseline-gear-panel" id="baseline-gear-panel"><div class="step-heading"><span class="num-badge num-badge-lg">2</span><div><h2>Baseline Gear · select candidates for ${escapeHtml(parsedData.char_name)}</h2><small>Grades are inferred from the export and refined with Wowhead. Toggle whole slots with Select all/none.</small></div></div><div id="gear-grid"></div></section>
+    <section class="panel-card workflow-panel full-width" id="step-enhance"><div class="step-heading"><span class="num-badge num-badge-lg">3</span><div><h2>Select gems and enchantments</h2><small>Checked enhancements are included in generated variations; the ones you already wear are pre-checked as the baseline.</small></div></div><div id="enhancement-options" class="enhancement-options"></div></section>
+    <section class="panel-card workflow-panel run-panel full-width" id="step-run"><div class="step-heading"><span class="num-badge num-badge-lg">4</span><div><h2>Run comparison</h2><small>Combinations update automatically as you change gear. Start the run from the bar at the bottom.</small></div></div><div id="run-progress" hidden><div class="progress-card"><span class="progress-dot" aria-hidden="true"></span><span class="progress-elapsed" id="run-elapsed">00:00</span><span class="progress-meta" id="run-progress-meta">Starting…</span><button type="button" id="btn-stop" class="btn-danger">Stop run</button></div></div><div class="log-toolbar" id="log-toolbar" hidden><label class="log-follow"><input type="checkbox" id="log-follow" checked> Follow log</label><span class="char-count" id="log-lines">0 lines</span></div><pre id="simulation-log" class="simulation-log" hidden></pre></section>
   `;
   renderGear();
   renderEnhancements();

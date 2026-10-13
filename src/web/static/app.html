@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SimulationCraft Helper GUI</title>
-  <link rel="stylesheet" href="/static/style.css?v=20261013-armory-load">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23191a1b'/%3E%3Cpath d='M16 6.5l8 4.6v9.8l-8 4.6-8-4.6v-9.8z' fill='none' stroke='%237170ff' stroke-width='2' stroke-linejoin='round'/%3E%3Ccircle cx='16' cy='16' r='3.2' fill='%237170ff'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/style.css?v=20261013-ui-polish">
 </head>
 <body class="app-shell">
   <script>const whTooltips = {colorLinks: true, iconizeLinks: true, renameLinks: true};</script>
@@ -25,13 +26,13 @@
       <span id="season-chip" class="season-chip" title="Gear upgrade data season"></span>
       <div id="char-chip" class="char-chip" hidden></div>
     </header>
-    <p>1. Setup &amp; Addon · Paste your SimulationCraft character export</p>
+    <p class="section-heading">1. Setup &amp; Addon · Paste your SimulationCraft character export</p>
 
     <div class="panel-card" id="addon-input-card">
       <div class="paste-guide" id="paste-guide">
-        <span class="paste-step"><b>1</b> In WoW chat, type <code>/simc</code></span>
-        <span class="paste-step"><b>2</b> In the export window press <b>Copy as text</b></span>
-        <span class="paste-step"><b>3</b> Paste below, then parse</span>
+        <span class="paste-step"><b class="num-badge num-badge-sm">1</b> In WoW chat, type <code>/simc</code></span>
+        <span class="paste-step"><b class="num-badge num-badge-sm">2</b> Press <strong>Copy as text</strong></span>
+        <span class="paste-step"><b class="num-badge num-badge-sm">3</b> Paste below, then parse</span>
       </div>
       <textarea id="addon-input" placeholder="Paste your /simc export here…" aria-label="SimulationCraft addon export"></textarea>
       <div class="paste-footer">
@@ -45,20 +46,22 @@
       <div class="armory-import" id="armory-import">
         <div class="armory-divider" role="separator"><span>Or load from Armory</span></div>
         <div class="armory-controls">
-          <label class="sr-only" for="armory-input">Character name and realm, or a full Armory link</label>
-          <input id="armory-input" class="armory-input" type="text" autocomplete="off" spellcheck="false"
-            placeholder="Name-Realm, Name, Realm — or paste an Armory link">
-          <label class="sr-only" for="armory-region">Armory region</label>
-          <select id="armory-region" class="armory-region-select" title="Armory region">
-            <option value="eu" selected>EU</option>
-            <option value="us">US</option>
-            <option value="kr">KR</option>
-            <option value="tw">TW</option>
-          </select>
+          <div class="armory-field">
+            <label class="sr-only" for="armory-input">Character name and realm, or a full Armory link</label>
+            <input id="armory-input" class="armory-input" type="text" autocomplete="off" spellcheck="false"
+              placeholder="Name-Realm, Name, Realm — or paste an Armory link">
+            <label class="sr-only" for="armory-region">Armory region</label>
+            <select id="armory-region" class="armory-region-select" title="Armory region">
+              <option value="eu" selected>EU</option>
+              <option value="us">US</option>
+              <option value="kr">KR</option>
+              <option value="tw">TW</option>
+            </select>
+          </div>
           <button id="btn-armory-load" class="btn-ghost" disabled>Load from Armory</button>
         </div>
         <p class="armory-hint">Pulls your equipped gear straight from the Armory — no addon needed.
-          The addon export above stays available and carries more detail.</p>
+          The addon export carries more detail and stays available.</p>
       </div>
 
       <div id="parse-error" class="error-panel" role="alert" hidden></div>
@@ -77,6 +80,6 @@
     </div>
   </main>
 
-  <script src="/static/app.js?v=20261013-armory-load"></script>
+  <script src="/static/app.js?v=20261013-ui-polish"></script>
 </body>
 </html>

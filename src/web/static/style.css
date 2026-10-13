@@ -19,6 +19,13 @@
   
   --font-display: 'Outfit', sans-serif;
   --font-sans: 'Plus Jakarta Sans', sans-serif;
+
+  /* Spacing scale (4/8-style rhythm; 6px half-step for dense controls) */
+  --space-1: 6px;
+  --space-2: 12px;
+  --space-3: 18px;
+  --space-4: 24px;
+  --space-5: 32px;
 }
 
 /* --- Document Defaults & Resets --- */
@@ -59,8 +66,8 @@ body {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  padding: 26px 12px;
-  gap: 18px;
+  padding: var(--space-4) var(--space-2);
+  gap: var(--space-3);
   backdrop-filter: blur(20px);
   position: sticky;
   top: 0;
@@ -90,6 +97,33 @@ body {
   align-content: start;
 }
 
+/* Setup card spans the full content width so it shares both edges with
+   the run bar; on wide screens the Armory block fills the right half
+   instead of leaving dead space. The paste flow stays first in DOM and
+   in the left (primary) column. */
+#addon-input-card { grid-column: 1 / -1; }
+
+@media (min-width: 1201px) {
+  #addon-input-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.85fr);
+    column-gap: var(--space-5);
+    align-items: start;
+  }
+  #addon-input-card > .paste-guide,
+  #addon-input-card > #addon-input,
+  #addon-input-card > .paste-footer { grid-column: 1; }
+  #addon-input-card > .armory-import {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+    margin-top: 0;
+    padding-left: var(--space-5);
+    border-left: 1px solid var(--panel-border);
+  }
+  #addon-input-card > .error-panel,
+  #addon-input-card > .warning-panel { grid-column: 1 / -1; }
+}
+
 h1 {
   grid-column: 1 / -1;
   font-family: var(--font-display);
@@ -112,6 +146,16 @@ p {
   text-transform: uppercase;
   letter-spacing: 1.5px;
   margin-bottom: 20px;
+}
+
+/* Numbered section heading above the setup card — one step up in
+   contrast/weight from body copy so it outranks card content. */
+p.section-heading {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: 1.2px;
+  margin-bottom: 16px;
 }
 
 /* --- Interactive Elements & Controls --- */
@@ -154,13 +198,13 @@ button {
   gap: 8px;
 }
 
-button:hover {
+button:not(:disabled):hover {
   background: var(--accent-hover);
   transform: translateY(-1px);
   box-shadow: 0 6px 20px rgba(113, 112, 255, 0.4);
 }
 
-button:active {
+button:not(:disabled):active {
   transform: translateY(0);
 }
 
@@ -265,6 +309,12 @@ button:active {
   border: 0;
 }
 
+/* The hidden attribute must always win over component display rules
+   (.run-bar, .char-chip, .paste-guide, button… all set display). */
+[hidden] {
+  display: none !important;
+}
+
 /* --- Responsive Adjustments --- */
 @media (max-width: 900px) {
   .app-shell {
@@ -311,6 +361,9 @@ button:active {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
+  /* One alignment per column: the .item-option tile centering must not
+     leak into card rows (controls, preview, voidforge). */
+  text-align: left;
 }
 
 .gear-card:hover {
@@ -327,6 +380,7 @@ button:active {
 
 .gear-card-info {
   flex: 1;
+  min-width: 0; /* let the ellipsized name shrink instead of widening the card */
   display: flex;
   flex-direction: column;
 }
@@ -338,6 +392,18 @@ button:active {
   color: var(--text-muted);
   letter-spacing: 1px;
   font-weight: 600;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Item-level number: right-aligned tabular figure (design rule 2). */
+.gear-card-slot-ilvl {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  text-align: right;
 }
 
 .gear-card-name {
@@ -431,6 +497,22 @@ button:active {
   margin-top: 4px;
 }
 
+.gear-card-badges:empty {
+  display: none;
+}
+
+/* Grade-state badges (crafted / elevated) live in the badges slot. */
+.gear-card-badges .crafted-badge {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-control);
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
 .item-enchant-badge, .item-gem-badge {
   display: inline-flex;
   align-items: center;
@@ -479,19 +561,6 @@ button:active {
   align-items: center;
   gap: 14px;
   margin-bottom: 18px;
-}
-
-.step-heading > span {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: rgba(113, 112, 255, 0.18);
-  border: 1px solid rgba(113, 112, 255, 0.42);
-  color: #b8b7ff;
-  font-family: var(--font-display);
-  font-weight: 700;
 }
 
 .step-heading h2 {
@@ -586,7 +655,8 @@ button:active {
 
 .enhancement-group legend {
   padding: 0 6px;
-  margin: 0;
+  /* Pull the legend text back onto the same left edge as its chips. */
+  margin: 0 -6px;
 }
 
 .choice-chip {
@@ -632,11 +702,21 @@ button:active {
   flex-wrap: wrap;
 }
 
-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  transform: none;
+/* One disabled treatment everywhere: faint fill, secondary text (AA on
+   the dark surface), no opacity games, no hover lift. */
+button:disabled,
+button.btn-ghost:disabled,
+button.btn-danger:disabled,
+button.slot-toggle-all:disabled,
+button.slot-add-button:disabled,
+button.slot-add-confirm:disabled {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--panel-border);
+  color: var(--text-secondary);
   box-shadow: none;
+  transform: none;
+  cursor: not-allowed;
 }
 
 .workflow-status {
@@ -697,17 +777,40 @@ button:disabled {
    Redesign 2026-10: rail stepper, run bar, progress, polish
    ============================================================ */
 
+/* --- Number badge (one component for every step/metric number) ---
+   Sizes are context modifiers; shape, color, and numerals are shared. */
+.num-badge {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid rgba(113, 112, 255, 0.42);
+  background: rgba(113, 112, 255, 0.15);
+  color: #b8b7ff;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.num-badge-sm { width: 20px; height: 20px; font-size: 11px; }
+.num-badge-lg { width: 34px; height: 34px; font-size: 15px; }
+
 /* --- Rail stepper --- */
 .rail-steps {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1);
   width: 100%;
 }
 
 .rail-step {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 10px;
   width: 100%;
   min-height: 44px;
@@ -726,28 +829,11 @@ button:disabled {
   transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
 }
 
-.rail-step:hover {
+.rail-step:not(:disabled):hover {
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.04);
   transform: none;
   box-shadow: none;
-}
-
-.rail-step:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.rail-step .rail-step-num {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  border: 1px solid var(--panel-border);
-  font-size: 12px;
-  font-weight: 700;
 }
 
 .rail-step.is-active {
@@ -773,7 +859,9 @@ button:disabled {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-1);
+  border-top: 1px solid var(--panel-border);
+  padding: var(--space-3) 0 var(--space-1);
 }
 
 /* --- Status chips (worker cluster) --- */
@@ -855,18 +943,12 @@ button:disabled {
   gap: 8px;
   font-size: 12px;
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 
-.paste-step b {
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: rgba(113, 112, 255, 0.15);
-  border: 1px solid rgba(113, 112, 255, 0.4);
-  color: #b8b7ff;
-  font-size: 11px;
+.paste-step strong {
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .paste-step code {
@@ -891,6 +973,27 @@ button:disabled {
 
 .char-count { font-size: 12px; color: var(--text-muted); }
 
+/* --- Paste-area affordance (D15) ---
+   Readable placeholder, a subtle clipboard glyph while empty, and a
+   stronger focus ring. The glyph is an inline SVG, not an emoji. */
+textarea::placeholder {
+  color: var(--text-secondary);
+  opacity: 1;
+}
+
+#addon-input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a8aebc' stroke-opacity='0.35' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='5' width='14' height='16' rx='2'/%3E%3Crect x='9' y='2.5' width='6' height='4' rx='1'/%3E%3Cpath d='M9 12h6M9 16h4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px bottom 14px;
+  background-size: 26px 26px;
+}
+
+#addon-input:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+  background-image: none;
+}
+
 button.btn-ghost {
   background: transparent;
   border: 1px solid var(--panel-border);
@@ -900,7 +1003,7 @@ button.btn-ghost {
   box-shadow: none;
 }
 
-button.btn-ghost:hover {
+button.btn-ghost:not(:disabled):hover {
   background: rgba(113, 112, 255, 0.08);
   border-color: rgba(113, 112, 255, 0.4);
   color: var(--text-primary);
@@ -939,48 +1042,77 @@ button.btn-ghost:hover {
   flex-wrap: wrap;
 }
 
-.armory-input {
-  flex: 1;
+.armory-controls > button { margin-top: 0; }
+
+/* Input + region select act as one joined control: single border box,
+   one shared right edge, roomy select so the chevron isn't cramped. */
+.armory-field {
+  display: flex;
+  align-items: stretch;
+  flex: 1 1 320px;
   min-width: 240px;
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-control);
+  overflow: hidden;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.armory-field:focus-within {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px rgba(113, 112, 255, 0.2);
+}
+
+.armory-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
   color: var(--text-primary);
   padding: 12px 14px;
   font-family: var(--font-sans);
   font-size: 14px;
   outline: none;
-  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  box-shadow: none;
 }
 
 .armory-input::placeholder { color: var(--text-muted); }
 
 .armory-input:focus {
-  border-color: var(--accent-color);
-  box-shadow: 0 0 0 3px rgba(113, 112, 255, 0.2);
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .armory-region-select {
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--panel-border);
+  flex: 0 0 auto;
+  min-width: 96px;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--panel-border);
+  border-radius: 0;
   color: var(--text-primary);
-  padding: 12px 12px;
-  border-radius: var(--radius-control);
-  outline: none;
+  padding: 12px 10px 12px 14px;
   font-family: var(--font-sans);
   font-size: 14px;
   cursor: pointer;
-  transition: border-color 0.3s ease;
+  outline: none;
+  box-shadow: none;
 }
 
 .armory-region-select:focus {
-  border-color: var(--accent-color);
-  box-shadow: 0 0 0 2px rgba(113, 112, 255, 0.15);
+  border-color: var(--panel-border);
+  box-shadow: none;
+  background: rgba(113, 112, 255, 0.08);
 }
 
+/* Sentence case, body size — the global uppercase p rule made this shout. */
 .armory-hint {
   margin: 10px 0 0;
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: normal;
+  text-transform: none;
   color: var(--text-muted);
 }
 
@@ -1016,7 +1148,9 @@ button.btn-ghost:hover {
   align-items: center;
   gap: 18px;
   margin-top: 26px;
-  padding: 14px 20px;
+  /* 24px horizontal padding matches .panel-card, so the Run button's
+     right edge shares the action column of the slot controls above. */
+  padding: 14px 24px;
   background: rgba(25, 26, 27, 0.92);
   backdrop-filter: blur(14px);
   border: 1px solid rgba(113, 112, 255, 0.28);
@@ -1028,8 +1162,10 @@ button.btn-ghost:hover {
 
 .run-bar-summary strong {
   font-family: var(--font-display);
-  font-size: 26px;
+  font-size: 22px;
+  line-height: 1;
   color: #b8b7ff;
+  font-variant-numeric: tabular-nums;
 }
 
 .run-bar-summary span { color: var(--text-secondary); font-size: 13px; }
@@ -1069,7 +1205,7 @@ button.slot-toggle-all {
   font-weight: 600;
 }
 
-button.slot-toggle-all:hover {
+button.slot-toggle-all:not(:disabled):hover {
   color: var(--text-primary);
   border-color: rgba(113, 112, 255, 0.4);
   transform: none;
@@ -1128,7 +1264,7 @@ button.btn-danger {
   font-size: 13px;
 }
 
-button.btn-danger:hover {
+button.btn-danger:not(:disabled):hover {
   background: rgba(251, 113, 133, 0.1);
   border-color: #fb7185;
   color: #fecdd3;
@@ -1200,7 +1336,14 @@ button.btn-danger:hover {
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-control);
 }
-.gear-rank-select:disabled { opacity: 0.45; }
+.gear-rank-select:disabled,
+.gear-track-select:disabled {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--panel-border);
+  color: var(--text-secondary);
+  cursor: not-allowed;
+}
 
 /* --- Theme-consistent checkboxes + focus rings --- */
 input[type="checkbox"] { accent-color: var(--accent-color); width: 16px; height: 16px; }
@@ -1212,7 +1355,7 @@ input[type="checkbox"] { accent-color: var(--accent-color); width: 16px; height:
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-muted);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--panel-border);
   border-radius: 999px;
   padding: 3px 10px;
   white-space: nowrap;
@@ -1288,8 +1431,8 @@ button.slot-add-confirm {
   cursor: pointer;
 }
 
-button.slot-add-button:hover,
-button.slot-add-confirm:hover {
+button.slot-add-button:not(:disabled):hover,
+button.slot-add-confirm:not(:disabled):hover {
   color: var(--text-primary);
   border-color: rgba(113, 112, 255, 0.4);
   transform: none;
