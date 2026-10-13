@@ -1,0 +1,133 @@
+{
+ "categories": [
+  {
+   "count": 254,
+   "name": "Quests",
+   "points": 2470,
+   "slug": "quests",
+   "total": 526,
+   "totalPoints": 4970,
+   "url": "quests"
+  },
+  {
+   "count": 124,
+   "name": "Reputation",
+   "points": 1155,
+   "slug": "reputation",
+   "total": 229,
+   "totalPoints": 2270,
+   "url": "reputation"
+  },
+  {
+   "count": 129,
+   "name": "Player vs. Player",
+   "points": 1325,
+   "slug": "player-vs-player",
+   "total": 426,
+   "totalPoints": 4575,
+   "url": "player-vs-player"
+  },
+  {
+   "count": 278,
+   "name": "Exploration",
+   "points": 2780,
+   "slug": "exploration",
+   "total": 760,
+   "totalPoints": 7410,
+   "url": "exploration"
+  },
+  {
+   "count": 35,
+   "name": "Characters",
+   "points": 435,
+   "slug": "characters",
+   "total": 40,
+   "totalPoints": 495,
+   "url": "characters"
+  },
+  {
+   "count": 35,
+   "name": "Pet Battles",
+   "points": 235,
+   "slug": "pet-battles",
+   "total": 305,
+   "totalPoints": 1955,
+   "url": "pet-battles"
+  },
+  {
+   "count": 120,
+   "name": "World Events",
+   "points": 1180,
+   "slug": "world-events",
+   "total": 298,
+   "totalPoints": 2930,
+   "url": "world-events"
+  },
+  {
+   "count": 986,
+   "name": "Dungeons & Raids",
+   "points": 10350,
+   "slug": "dungeons-raids",
+   "total": 1587,
+   "totalPoints": 16845,
+   "url": "dungeons-raids"
+  },
+  {
+   "count": 137,
+   "name": "Professions",
+   "points": 1385,
+   "slug": "professions",
+   "total": 482,
+   "totalPoints": 5025,
+   "url": "professions"
+  },
+  {
+   "count": 69,
+   "name": "Collections",
+   "points": 610,
+   "slug": "collections",
+   "total": 182,
+   "totalPoints": 1595,
+   "url": "collections"
+  },
+  {
+   "count": 286,
+   "name": "Expansion Features",
+   "points": 2340,
+   "slug": "expansion-features",
+   "total": 968,
+   "totalPoints": 9335,
+   "url": "expansion-features"
+  },
+  {
+   "count": 61,
+   "name": "Delves",
+   "points": 540,
+   "slug": "delves",
+   "total": 146,
+   "totalPoints": 1565,
+   "url": "delves"
+  },
+  {
+   "count": 11,
+   "name": "Housing",
+   "points": 105,
+   "slug": "housing",
+   "total": 34,
+   "totalPoints": 275,
+   "url": "housing"
+  },
+  {
+   "count": 246,
+   "name": "Feats of Strength",
+   "slug": "feats-of-strength",
+   "url": "feats-of-strength"
+  },
+  {
+   "count": 336,
+   "name": "Legacy",
+   "slug": "legacy",
+   "url": "legacy"
+  }
+ ]
+}
