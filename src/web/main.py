@@ -70,6 +70,17 @@ from src.core.addon_parser import (
     is_forever_export,
     parse_addon_lines,
 )
+from src.core import armory as armory_source
+from src.core.armory import (
+    ArmoryError,
+    ArmoryInputError,
+    ArmoryNotFoundError,
+    ArmoryParseError,
+    ArmoryRateLimitedError,
+    ArmoryUnavailableError,
+    parse_armory_input,
+    parse_armory_model,
+)
 from src.core.circuit_breaker import CircuitBreaker
 from src.core.db import (
     init_db,
@@ -120,6 +131,35 @@ class ParseAddonResponse(BaseModel):
     item_names: Dict[str, str]
     char_name: str
     char_class: str
+    item_upgrades: Dict[str, Dict[str, Any]] = {}
+    warnings: List[str] = []
+
+
+class ArmoryLoadRequest(BaseModel):
+    """Payload for ``/api/armory-load`` – load a character from the Armory.
+
+    Either a full Armory profile ``url`` (worldsoul or legacy battle.net
+    form) or a ``name`` + ``realm`` pair (``name`` may also carry the
+    combined ``Name-Realm`` / ``Name, Realm`` free-text form).  ``region``
+    defaults to ``eu`` and is ignored when the URL carries one.
+    """
+    url: Optional[str] = None
+    name: Optional[str] = None
+    realm: Optional[str] = None
+    region: Optional[str] = None
+
+
+class ArmoryLoadResponse(BaseModel):
+    """Response from ``/api/armory-load`` – same shape as ``/api/parse-addon``
+    plus ``char_spec`` / ``char_ilvl`` so the UI chip can show spec and ilvl."""
+    base_profile: str
+    equipped_gear: Dict[str, str]
+    items_by_slot: Dict[str, List[str]]
+    item_names: Dict[str, str]
+    char_name: str
+    char_class: str
+    char_spec: str = ""
+    char_ilvl: Optional[float] = None
     item_upgrades: Dict[str, Dict[str, Any]] = {}
     warnings: List[str] = []
 
@@ -1372,6 +1412,64 @@ async def parse_addon_text(payload: ParseAddonRequest):
         "item_upgrades": item_upgrades,
         "warnings": warnings,
     }
+
+@app.post("/api/armory-load", response_model=ArmoryLoadResponse, tags=["Addons"])
+async def armory_load_character(payload: ArmoryLoadRequest):
+    """Load a character + equipped gear from the WoW Armory (no addon export).
+
+    **Tags:** Addons
+    **Request Model:** ``ArmoryLoadRequest``
+    **Response Model:** ``ArmoryLoadResponse``
+
+    Accepts either a full Armory profile ``url`` (worldsoul or legacy
+    battle.net form) or ``name`` + ``realm`` (``name`` may carry the
+    combined ``Name-Realm`` / ``Name, Realm`` form), with ``region``
+    defaulting to ``eu``.  The ``model.json`` document is fetched
+    **server-side** (never from the browser), cached for 10 minutes per
+    region/realm/name, and parsed into exactly the shape
+    ``/api/parse-addon`` returns so the frontend can treat both sources
+    identically.  Cosmetic shirt/tabard slots are dropped; item, bonus and
+    enchant ids go straight into SimC item strings.
+
+    Unknown characters, wrong regions and unreachable upstreams map to
+    clean 404/502/429 responses with a human-readable ``detail``.
+    """
+    try:
+        region, realm_slug, name = parse_armory_input(
+            url=payload.url,
+            name=payload.name,
+            realm=payload.realm,
+            region=payload.region,
+        )
+    except ArmoryInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    try:
+        model = await armory_source.fetch_armory_model(region, realm_slug, name)
+    except ArmoryNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ArmoryRateLimitedError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except ArmoryUnavailableError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except ArmoryError as exc:
+        logger.warning("Armory load failed for %s/%s: %s", region, realm_slug, exc)
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    try:
+        parsed = parse_armory_model(model)
+    except ArmoryInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ArmoryError as exc:
+        logger.warning("Armory payload unusable for %s/%s: %s", region, realm_slug, exc)
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    logger.info(
+        "Loaded %s from Armory %s/%s (%d slots)",
+        parsed["char_name"], region, realm_slug, len(parsed["equipped_gear"]),
+    )
+    return parsed
+
 
 @app.post("/api/generate-simc", response_model=GenerateSimcResponse, tags=["Profiles"])
 async def generate_simc(request: Request, payload: GenerateSimcRequest):

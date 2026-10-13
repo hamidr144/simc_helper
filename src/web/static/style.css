@@ -908,6 +908,82 @@ button.btn-ghost:hover {
   box-shadow: none;
 }
 
+/* --- Armory load (step 1 alternative to the addon paste) --- */
+.armory-import { margin-top: 20px; }
+
+.armory-divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+
+.armory-divider::before,
+.armory-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--panel-border);
+}
+
+.armory-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.armory-input {
+  flex: 1;
+  min-width: 240px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-control);
+  color: var(--text-primary);
+  padding: 12px 14px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.armory-input::placeholder { color: var(--text-muted); }
+
+.armory-input:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px rgba(113, 112, 255, 0.2);
+}
+
+.armory-region-select {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--panel-border);
+  color: var(--text-primary);
+  padding: 12px 12px;
+  border-radius: var(--radius-control);
+  outline: none;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 0.3s ease;
+}
+
+.armory-region-select:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(113, 112, 255, 0.15);
+}
+
+.armory-hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .error-panel {
   margin-top: 14px;
   border: 1px solid rgba(251, 113, 133, 0.4);

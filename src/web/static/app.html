@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SimulationCraft Helper GUI</title>
-  <link rel="stylesheet" href="/static/style.css?v=20261013-upgrade-levels">
+  <link rel="stylesheet" href="/static/style.css?v=20261013-armory-load">
 </head>
 <body class="app-shell">
   <script>const whTooltips = {colorLinks: true, iconizeLinks: true, renameLinks: true};</script>
@@ -41,6 +41,26 @@
           <button id="btn-parse-addon" disabled>Parse character</button>
         </div>
       </div>
+
+      <div class="armory-import" id="armory-import">
+        <div class="armory-divider" role="separator"><span>Or load from Armory</span></div>
+        <div class="armory-controls">
+          <label class="sr-only" for="armory-input">Character name and realm, or a full Armory link</label>
+          <input id="armory-input" class="armory-input" type="text" autocomplete="off" spellcheck="false"
+            placeholder="Name-Realm, Name, Realm — or paste an Armory link">
+          <label class="sr-only" for="armory-region">Armory region</label>
+          <select id="armory-region" class="armory-region-select" title="Armory region">
+            <option value="eu" selected>EU</option>
+            <option value="us">US</option>
+            <option value="kr">KR</option>
+            <option value="tw">TW</option>
+          </select>
+          <button id="btn-armory-load" class="btn-ghost" disabled>Load from Armory</button>
+        </div>
+        <p class="armory-hint">Pulls your equipped gear straight from the Armory — no addon needed.
+          The addon export above stays available and carries more detail.</p>
+      </div>
+
       <div id="parse-error" class="error-panel" role="alert" hidden></div>
       <div id="parse-warning" class="warning-panel" role="status" hidden></div>
     </div>
@@ -57,6 +77,6 @@
     </div>
   </main>
 
-  <script src="/static/app.js?v=20261013-upgrade-levels"></script>
+  <script src="/static/app.js?v=20261013-armory-load"></script>
 </body>
 </html>

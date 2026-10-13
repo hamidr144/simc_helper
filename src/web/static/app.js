@@ -259,9 +259,11 @@ function collapsePastePanel() {
   document.getElementById('paste-guide').hidden = true;
   addonInput.hidden = true;
   btnParseAddon.hidden = true;
+  const armoryCard = document.getElementById('armory-import');
+  if (armoryCard) armoryCard.hidden = true;
   document.getElementById('btn-new-export').hidden = false;
   const counter = document.getElementById('addon-char-count');
-  if (counter) counter.textContent = 'Export parsed and ready below.';
+  if (counter) counter.textContent = 'Character ready below.';
 }
 
 function resetPastePanel() {
@@ -270,9 +272,12 @@ function resetPastePanel() {
   addonInput.value = '';
   addonInput.focus();
   btnParseAddon.hidden = false;
+  const armoryCard = document.getElementById('armory-import');
+  if (armoryCard) armoryCard.hidden = false;
   document.getElementById('btn-new-export').hidden = true;
   clearParseError();
   updateCharCount();
+  updateArmoryState();
 }
 
 /* ---------- Run progress ---------- */
@@ -1187,6 +1192,26 @@ async function runSimulation() {
   }
 }
 
+async function applyParsedCharacter(data) {
+  parsedData = data;
+  if (Array.isArray(parsedData.warnings) && parsedData.warnings.length) {
+    showParseWarning(parsedData.warnings);
+  } else {
+    clearParseWarning();
+  }
+  if (!upgradeData) await loadUpgradeData();
+  detectSeasonFromExport(parsedData);
+  renderSeasonChip();
+  simulationDone = false;
+  initializeSelections();
+  renderRail();
+  renderWorkflow();
+  collapsePastePanel();
+  hydrateWowheadUpgrades(parsedData.items_by_slot);
+  document.getElementById('baseline-gear-panel')
+    ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 btnParseAddon.addEventListener('click', async () => {
   const text = addonInput.value.trim();
   if (!text) return;
@@ -1202,29 +1227,65 @@ btnParseAddon.addEventListener('click', async () => {
       const detail = await parseResponse.json().catch(() => ({}));
       throw new Error(detail.detail || 'The addon export could not be parsed. Make sure you copied the full text from the /simc export window.');
     }
-    parsedData = await parseResponse.json();
-    if (Array.isArray(parsedData.warnings) && parsedData.warnings.length) {
-      showParseWarning(parsedData.warnings);
-    } else {
-      clearParseWarning();
-    }
     appConfig = configResponse.ok ? await configResponse.json() : appConfig;
-    if (!upgradeData) await loadUpgradeData();
-    detectSeasonFromExport(parsedData);
-    renderSeasonChip();
-    simulationDone = false;
-    initializeSelections();
-    renderRail();
-    renderWorkflow();
-    collapsePastePanel();
-    hydrateWowheadUpgrades(parsedData.items_by_slot);
-    document.getElementById('baseline-gear-panel')
-      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    await applyParsedCharacter(await parseResponse.json());
   } catch (error) {
     showParseError(`Could not parse the export: ${error.message}`);
   } finally {
     btnParseAddon.disabled = false;
     btnParseAddon.textContent = 'Parse character';
+  }
+});
+
+/* ---------- Armory load (Step 7: no addon needed) ---------- */
+
+const armoryInput = document.getElementById('armory-input');
+const armoryRegion = document.getElementById('armory-region');
+const btnArmoryLoad = document.getElementById('btn-armory-load');
+
+function updateArmoryState() {
+  if (!armoryInput || !btnArmoryLoad) return;
+  btnArmoryLoad.disabled = !armoryInput.value.trim();
+}
+
+btnArmoryLoad?.addEventListener('click', async () => {
+  const value = armoryInput.value.trim();
+  if (!value) return;
+  btnArmoryLoad.disabled = true;
+  btnArmoryLoad.textContent = 'Loading…';
+  clearParseError();
+  try {
+    // A pasted Armory link wins over the region selector (the link carries
+    // its own region); plain Name-Realm / Name, Realm text uses the selector.
+    const payload = /^https?:\/\//i.test(value)
+      ? { url: value }
+      : { name: value, region: armoryRegion?.value || 'eu' };
+    const [armoryResponse, configResponse] = await Promise.all([
+      fetch('/api/armory-load', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }),
+      fetch('/api/config')
+    ]);
+    if (!armoryResponse.ok) {
+      const detail = await armoryResponse.json().catch(() => ({}));
+      throw new Error(detail.detail || 'The Armory could not load this character.');
+    }
+    appConfig = configResponse.ok ? await configResponse.json() : appConfig;
+    await applyParsedCharacter(await armoryResponse.json());
+  } catch (error) {
+    showParseError(`Could not load from the Armory: ${error.message}`);
+  } finally {
+    btnArmoryLoad.textContent = 'Load from Armory';
+    updateArmoryState();
+  }
+});
+
+armoryInput?.addEventListener('input', updateArmoryState);
+armoryInput?.addEventListener('keydown', event => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    btnArmoryLoad?.click();
   }
 });
 
