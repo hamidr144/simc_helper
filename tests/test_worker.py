@@ -360,3 +360,44 @@ async def test_download_input_file_error():
     mock_session.get.side_effect = Exception("Download error")
     success = await download_input_file(mock_session, "/inputs/err.simc", "dest2.simc")
     assert success is False
+
+
+def _reload_worker_with_env(monkeypatch, base_dir, **extra_env):
+    """Re-import src.worker with a controlled environment (module reads env at import)."""
+    import importlib
+    import src.worker as worker_mod
+
+    for key in ("BASE_DIR", "SIMC_ENGINE_MODE", "SIMC_NIGHTLY_DIR"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("BASE_DIR", str(base_dir))
+    for key, value in extra_env.items():
+        monkeypatch.setenv(key, value)
+    importlib.reload(worker_mod)
+    return worker_mod
+
+
+def _restore_default_worker(monkeypatch):
+    import importlib
+    import src.worker as worker_mod
+
+    for key in ("BASE_DIR", "SIMC_ENGINE_MODE", "SIMC_NIGHTLY_DIR"):
+        monkeypatch.delenv(key, raising=False)
+    importlib.reload(worker_mod)
+
+
+def test_worker_nightly_mode_engine_path_and_update_skip(monkeypatch, tmp_path):
+    worker_mod = _reload_worker_with_env(monkeypatch, tmp_path, SIMC_ENGINE_MODE="nightly")
+    try:
+        assert worker_mod.engine_path() == str(tmp_path / "thirdparties" / "simc-nightly" / "simc")
+        assert not worker_mod.should_update_simc(None, 10_000, 86400)
+    finally:
+        _restore_default_worker(monkeypatch)
+
+
+def test_worker_source_mode_engine_path_unchanged(monkeypatch, tmp_path):
+    worker_mod = _reload_worker_with_env(monkeypatch, tmp_path, SIMC_ENGINE_MODE="source")
+    try:
+        assert worker_mod.engine_path() == str(tmp_path / "thirdparties" / "simc" / "engine" / "simc")
+        assert worker_mod.should_update_simc(None, 10_000, 86400)
+    finally:
+        _restore_default_worker(monkeypatch)

@@ -9,6 +9,27 @@ from datetime import datetime, timezone
 DEFAULT_SIMC_BUILD_JOBS = 4
 
 
+def engine_mode() -> str:
+    """Return the configured SimC engine workflow: 'nightly' or 'source'.
+
+    'nightly' (compose default): the engine binary is extracted from the
+    pinned official SimC Docker nightly image by the 'engine-update' one-shot
+    service into the simc-engine volume — no clone, no compile.
+    'source' (fallback / local default): clone + compile from the GitHub
+    checkout under BASE_DIR/thirdparties/simc (legacy behaviour).
+    """
+    mode = os.environ.get("SIMC_ENGINE_MODE", "source").strip().lower()
+    return mode if mode in ("nightly", "source") else "source"
+
+
+def nightly_engine_dir() -> str:
+    """Directory holding the nightly engine extracted into the volume."""
+    base_dir = os.environ.get("BASE_DIR")
+    if base_dir:
+        return os.path.join(base_dir, "thirdparties", "simc-nightly")
+    return os.path.expanduser("~/.simc-nightly")
+
+
 def get_build_jobs() -> int:
     """Return a bounded parallelism level suitable for local and Docker builds."""
     configured_jobs = os.environ.get("SIMC_BUILD_JOBS")
@@ -50,6 +71,24 @@ def get_clean_env():
     return env
 
 def main():
+    if engine_mode() == "nightly":
+        engine = os.path.join(nightly_engine_dir(), "simc")
+        print(
+            "SIMC_ENGINE_MODE=nightly: engine comes from the official SimC "
+            "Docker nightly image (extracted by the 'engine-update' compose "
+            f"service into the simc-engine volume). Skipping clone/build. "
+            f"Engine: {engine}"
+        )
+        if not os.path.isfile(engine):
+            print(
+                "ERROR: nightly engine wrapper not found. Start the "
+                "'engine-update' compose service first "
+                "(docker compose up -d --build engine-update), or set "
+                "SIMC_ENGINE_MODE=source to fall back to the source build."
+            )
+            return 1
+        return 0
+
     base_dir = os.environ.get("BASE_DIR")
     if base_dir:
         simc_dir = os.path.join(base_dir, "thirdparties", "simc")

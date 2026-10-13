@@ -22,6 +22,15 @@
 #   CLUSTER_SECRET    Master↔Worker secret      (required for production)
 #   SIMC_PATH         Path to SimC binary       (optional)
 #   SIMC_HELPER_DEV_MODE  Enable dev mode       (default: 0)
+#   SIMC_NIGHTLY_TAG  Pinned SimC nightly tag   (default: 1210-2026-10-13-eaf8c46)
+#   SIMC_ENGINE_MODE  nightly | source          (default: nightly; source =
+#                     legacy in-container clone + compile fallback)
+#
+# Engine workflow: the 'engine-update' one-shot extracts the engine binary
+# from the pinned simulationcraftorg/simc nightly image into the simc-engine
+# volume; workers run it directly (no clone, no compile). The nightly image
+# is amd64-only, so the worker runs as an amd64 container:
+#   docker build --platform linux/amd64 -t simc-helper:latest-amd64 .
 #
 # =============================================================================
 
@@ -41,6 +50,25 @@ x-common: &common
     start_period: 15s
 
 services:
+  # -----------------------------------------------------------------------
+  # Engine update — one-shot: extracts the SimC engine binary + musl runtime
+  # from the pinned official nightly image into the simc-engine volume.
+  # The worker never clones or compiles; bump the engine by changing
+  # SIMC_NIGHTLY_TAG (single source of truth, override via .env) and running:
+  #   docker compose up -d engine-update && docker compose up -d --force-recreate simc-worker
+  # List current tags: curl -s 'https://hub.docker.com/v2/repositories/simulationcraftorg/simc/tags?page_size=10&ordering=last_updated'
+  # -----------------------------------------------------------------------
+  engine-update:
+    image: simulationcraftorg/simc:${SIMC_NIGHTLY_TAG:-1210-2026-10-13-eaf8c46}
+    platform: linux/amd64
+    restart: "no"
+    entrypoint: ["/bin/sh", "/engine-update.sh"]
+    environment:
+      - NIGHTLY_TAG=${SIMC_NIGHTLY_TAG:-1210-2026-10-13-eaf8c46}
+    volumes:
+      - simc-engine:/volume
+      - ./scripts/engine-update.sh:/engine-update.sh:ro
+
   # -----------------------------------------------------------------------
   # Master — FastAPI web server + task dispatcher
   # -----------------------------------------------------------------------
@@ -68,7 +96,15 @@ services:
   # -----------------------------------------------------------------------
   simc-worker:
     <<: *common
+    # The official SimC nightly image is linux/amd64-only, so the nightly
+    # engine binary can only execute in an amd64 worker (emulated on arm64
+    # hosts). Build the worker image for amd64 alongside the default one:
+    #   docker build --platform linux/amd64 -t simc-helper:latest-amd64 .
+    image: simc-helper:latest-amd64
+    platform: linux/amd64
     depends_on:
+      engine-update:
+        condition: service_completed_successfully
       simc-master:
         condition: service_healthy
     # The shared healthcheck probes an HTTP server; a worker runs none —
@@ -85,14 +121,20 @@ services:
       # Without BASE_DIR the worker falls back to ~/.simc, which is lost on
       # every recreate and triggers a fresh 7.5 GB clone + full compile.
       - BASE_DIR=/app
+      # 'nightly': run the prebuilt engine extracted into the volume by the
+      # engine-update service (no clone/compile). Set 'source' to fall back
+      # to the legacy GitHub clone + make build under thirdparties/simc.
+      - SIMC_ENGINE_MODE=${SIMC_ENGINE_MODE:-nightly}
+      - SIMC_NIGHTLY_TAG=${SIMC_NIGHTLY_TAG:-1210-2026-10-13-eaf8c46}
       - CLUSTER_SECRET=${CLUSTER_SECRET:-change-me-in-production}
       - SIMC_HELPER_DEV_MODE=1
       - WORKER_NAME=${WORKER_NAME:-worker}
       - SIMC_BUILD_JOBS=${SIMC_BUILD_JOBS:-2}
-      - SIMC_UPDATE_INTERVAL_SECONDS=86400
+      - SIMC_UPDATE_INTERVAL_SECONDS=${SIMC_UPDATE_INTERVAL_SECONDS:-86400}
     volumes:
-      # Persist the cloned SimC source + compiled engine across recreates;
-      # otherwise every `up -d` re-clones ~7.5 GB and recompiles.
+      # Persist the nightly engine (and, in source mode, the cloned SimC
+      # source + compiled engine) across recreates; otherwise every `up -d`
+      # re-clones ~7.5 GB and recompiles.
       - simc-engine:/app/thirdparties
     # Use the standalone binary for production:
     # entrypoint: ["/app/simc-worker"]

@@ -47,3 +47,44 @@ def test_get_build_jobs_respects_valid_override(monkeypatch):
 def test_get_build_jobs_rejects_invalid_override(monkeypatch):
     monkeypatch.setenv("SIMC_BUILD_JOBS", "0")
     assert manage_simc.get_build_jobs() == manage_simc.DEFAULT_SIMC_BUILD_JOBS
+
+
+def test_engine_mode_defaults_to_source(monkeypatch):
+    monkeypatch.delenv("SIMC_ENGINE_MODE", raising=False)
+    assert manage_simc.engine_mode() == "source"
+
+
+def test_engine_mode_reads_env_and_normalizes(monkeypatch):
+    monkeypatch.setenv("SIMC_ENGINE_MODE", " Nightly ")
+    assert manage_simc.engine_mode() == "nightly"
+    monkeypatch.setenv("SIMC_ENGINE_MODE", "garbage")
+    assert manage_simc.engine_mode() == "source"
+
+
+def test_nightly_engine_dir_uses_base_dir(monkeypatch, tmp_path):
+    monkeypatch.setenv("BASE_DIR", str(tmp_path))
+    assert manage_simc.nightly_engine_dir() == str(
+        tmp_path / "thirdparties" / "simc-nightly"
+    )
+
+
+def test_nightly_mode_skips_clone_and_build(monkeypatch, tmp_path):
+    monkeypatch.setenv("SIMC_ENGINE_MODE", "nightly")
+    monkeypatch.setenv("BASE_DIR", str(tmp_path))
+    engine = tmp_path / "thirdparties" / "simc-nightly" / "simc"
+    engine.parent.mkdir(parents=True)
+    engine.write_text("#!/bin/sh\n")
+
+    def no_run(*args, **kwargs):  # pragma: no cover - must never fire
+        raise AssertionError("nightly mode must not run git/make")
+
+    monkeypatch.setattr(manage_simc.subprocess, "run", no_run)
+    assert manage_simc.main() == 0
+    # No git checkout was created next to the nightly engine.
+    assert not (tmp_path / "thirdparties" / "simc").exists()
+
+
+def test_nightly_mode_fails_fast_without_extracted_engine(monkeypatch, tmp_path):
+    monkeypatch.setenv("SIMC_ENGINE_MODE", "nightly")
+    monkeypatch.setenv("BASE_DIR", str(tmp_path))
+    assert manage_simc.main() == 1

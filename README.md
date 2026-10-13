@@ -31,6 +31,8 @@ Docker Compose is the supported local workflow. It starts the FastAPI master and
 ```bash
 cp .env.docker.example .env
 docker build -t simc-helper:latest .
+# The SimC nightly engine is amd64-only, so the worker runs an amd64 image:
+docker build --platform linux/amd64 -t simc-helper:latest-amd64 .
 docker compose up -d
 ```
 
@@ -41,6 +43,46 @@ docker compose down
 ```
 
 Put your `/simc` addon export directly into the web UI. The source-based Python commands below are for maintainers and troubleshooting, not the normal user workflow.
+
+### SimC engine: official Docker nightly (default)
+
+The compose stack no longer clones and compiles SimulationCraft on the worker
+(~7.5 GB clone + full C++ build). Instead:
+
+1. The one-shot **`engine-update`** service runs the pinned official nightly
+   image `simulationcraftorg/simc:${SIMC_NIGHTLY_TAG}` and extracts the
+   prebuilt engine binary, the `profiles/` tree, and the complete musl runtime
+   (loader + shared libs the binary links against) into the `simc-engine`
+   volume at `simc-nightly/`.
+2. The **worker** (`SIMC_ENGINE_MODE=nightly`) executes
+   `/app/thirdparties/simc-nightly/simc` — a wrapper that invokes the copied
+   musl loader with the copied library path. No clone, no compile, no
+   docker-in-docker.
+
+The nightly image is musl-linked and published for **linux/amd64 only**, so
+the worker container runs as amd64 (emulated on Apple Silicon; the engine
+itself runs under Rosetta/qemu). The master stays native.
+
+**Bumping the engine version** — the pinned tag lives in exactly one place
+(`SIMC_NIGHTLY_TAG`, default in `docker-compose.yml`, override in `.env`):
+
+```bash
+# Find the current 1210 nightly tag:
+curl -s 'https://hub.docker.com/v2/repositories/simulationcraftorg/simc/tags?page_size=10&ordering=last_updated' \
+  | python3 -c 'import json,sys; [print(t["name"]) for t in json.load(sys.stdin)["results"]]'
+
+# Set SIMC_NIGHTLY_TAG=<new-tag> in .env, then:
+docker compose up -d engine-update && docker compose up -d --force-recreate simc-worker
+```
+
+The extraction is idempotent: `engine-update` skips the copy when the volume
+already holds the pinned tag (`.nightly_tag` marker).
+
+**Fallback — source build.** Set `SIMC_ENGINE_MODE=source` in `.env` to
+restore the legacy workflow (worker clones GitHub `simulationcraft/simc` and
+runs `make optimized` under `thirdparties/simc`, refreshed every
+`SIMC_UPDATE_INTERVAL_SECONDS`). The nightly path is documented in
+`scripts/engine-update.sh`; the source path in `utils/manage_simc.py`.
 
 ### Local Docker operations
 
@@ -72,14 +114,17 @@ Useful environment variables are fully documented in `.env.example` (copy it to 
 | `SIMC_HELPER_DEV_MODE` | — | Set to `1` for local dev (uses a deterministic cluster secret). |
 | `MASTER_URL` | `http://localhost:8000` | Master server URL (worker only). |
 | `WORKER_NAME` | `LocalWorker` | Worker node name for identification (worker only). |
-| `SIMC_UPDATE_INTERVAL_SECONDS` | `86400` | Worker auto-update interval for the SimC engine, in seconds. Set `0` to disable. |
+| `SIMC_UPDATE_INTERVAL_SECONDS` | `86400` | Worker auto-update interval for the SimC engine, in seconds. Set `0` to disable. Ignored in `nightly` mode. |
+| `SIMC_ENGINE_MODE` | `nightly` (compose) / `source` (bare) | `nightly`: run the prebuilt engine extracted from the official SimC Docker nightly image into the volume. `source`: legacy clone + compile fallback. |
+| `SIMC_NIGHTLY_TAG` | `1210-2026-10-13-eaf8c46` | Pinned `simulationcraftorg/simc` nightly tag (compose stack; override in `.env`). |
 | `SIMC_HELPER_INSECURE_TLS` | — | Set to `1` to skip TLS certificate verification on worker connections (dev only). |
 | `INPUTS_DIR` | — | Directory for generated `.simc` inputs (`data/master/inputs/` by default). |
 | `REPORTS_DIR` | — | Directory for simulation reports (`/tmp/simc_reports` by default). |
 
 ### Use the web UI
 
-1. Build or update the SimC engine.
+1. The nightly engine is extracted automatically on `docker compose up -d`
+   (see [SimC engine: official Docker nightly](#simc-engine-official-docker-nightly-default)).
 2. Paste your `/simc` addon export.
 3. Select candidate gear, enchants, and gems.
 4. Adjust Midnight upgrade tracks/ranks when needed:
@@ -180,8 +225,11 @@ The `Dockerfile.linux` includes a `HEALTHCHECK` directive that polls `GET /healt
 
 The health check verifies:
 - Worker connectivity (connected/idle/busy counts)
-- SimulationCraft binary presence (`thirdparties/simc/engine/simc`)
 - Free disk space (flags `"degraded"` below 5%)
+
+The SimC engine itself lives on the worker: nightly mode uses
+`thirdparties/simc-nightly/simc` (extracted from the Docker nightly image),
+source mode uses `thirdparties/simc/engine/simc`.
 
 Check container health with:
 

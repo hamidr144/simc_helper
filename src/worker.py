@@ -24,6 +24,20 @@ SIMC_DIR = (
     if CONFIGURED_BASE_DIR
     else os.path.expanduser("~/.simc")
 )
+# Engine workflow: 'nightly' = prebuilt binary extracted from the official
+# SimC Docker nightly image into the simc-engine volume (compose default);
+# 'source' = legacy clone + compile under SIMC_DIR. See utils/manage_simc.py.
+SIMC_ENGINE_MODE = (os.environ.get("SIMC_ENGINE_MODE", "source").strip().lower() or "source")
+if SIMC_ENGINE_MODE not in ("nightly", "source"):
+    SIMC_ENGINE_MODE = "source"
+SIMC_NIGHTLY_DIR = (
+    os.environ.get("SIMC_NIGHTLY_DIR")
+    or (
+        os.path.join(CONFIGURED_BASE_DIR, "thirdparties", "simc-nightly")
+        if CONFIGURED_BASE_DIR
+        else os.path.expanduser("~/.simc-nightly")
+    )
+)
 os.makedirs(LOG_DIR, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -145,7 +159,18 @@ async def download_input_file(session, url_path, dest_path):
         logger.info(f"Error downloading input file: {e}")
         return False
 
+def engine_path() -> str:
+    """Absolute path to the SimC engine this worker should execute."""
+    if SIMC_ENGINE_MODE == "nightly":
+        return os.path.join(SIMC_NIGHTLY_DIR, "simc")
+    return os.path.join(SIMC_DIR, "engine", "simc")
+
+
 def should_update_simc(last_update_time, now, interval_seconds=SIMC_UPDATE_INTERVAL_SECONDS):
+    if SIMC_ENGINE_MODE == "nightly":
+        # Nightly engine is refreshed by the 'engine-update' compose service,
+        # never by an in-container clone/compile.
+        return False
     if interval_seconds <= 0:
         return False
     return last_update_time is None or now - last_update_time >= interval_seconds
@@ -300,7 +325,7 @@ async def _push_task_status(websocket, task_id: str, status: TaskStatus):
 
 async def _execute_task(session, task_id: str, input_file: str, websocket) -> tuple:
     """Execute a single task attempt. Returns (exit_code, report_file, error)."""
-    simc_engine = os.path.join(SIMC_DIR, "engine", "simc")
+    simc_engine = engine_path()
     cmd = worker_subcommand("sim_helper") + [
         f"simc_path={simc_engine}",
         f"input_file={input_file}",
@@ -571,6 +596,14 @@ async def run_worker():
 
                                         elif data["type"] == "update":
                                             task_id = data["task_id"]
+                                            if SIMC_ENGINE_MODE == "nightly":
+                                                logger.info(
+                                                    f"[{task_id}] UPDATE ignored: engine comes from the pinned "
+                                                    "Docker nightly image (bump SIMC_NIGHTLY_TAG and restart the "
+                                                    "'engine-update' service to change it)."
+                                                )
+                                                await websocket.send(json.dumps({"type": "done", "task_id": task_id, "code": 0}))
+                                                continue
                                             logger.info(f"\n[{task_id}] Received UPDATE command.")
                                             await run_manage_simc_update(websocket, task_id)
                                             last_simc_update_time = time.time()
