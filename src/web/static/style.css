@@ -377,6 +377,53 @@ button:active {
   font-size: 12px;
 }
 
+/* --- Live upgrade preview (gear cards, Wowhead tooltip proxy) --- */
+.upgrade-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  margin-top: 8px;
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.upgrade-preview[hidden] {
+  display: none;
+}
+
+.upgrade-preview.is-loading,
+.upgrade-preview.is-unavailable {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.upgrade-preview-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  align-self: center;
+}
+
+.upgrade-preview-delta.positive,
+.upgrade-preview-stat.positive {
+  color: #5cdb9b;
+}
+
+.upgrade-preview-delta.negative,
+.upgrade-preview-stat.negative {
+  color: #fb7185;
+}
+
+.upgrade-preview-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  width: 100%;
+}
+
 .gear-card-badges {
   display: flex;
   flex-wrap: wrap;

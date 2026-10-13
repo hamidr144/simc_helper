@@ -1,6 +1,7 @@
 import asyncio
 import glob
 import hashlib
+import html
 import json
 import logging
 import os
@@ -300,6 +301,19 @@ generated_inputs_by_user["latest"] = None
 wowhead_upgrade_cache = {}
 wowhead_icon_cache: Dict[str, tuple[bytes, str]] = {}
 wowhead_tooltip_script_cache: Optional[bytes] = None
+
+# GET /api/wowhead/tooltip – TTL cache of raw nether.wowhead.com tooltip JSON.
+WOWHEAD_TOOLTIP_TIMEOUT_SECONDS = 8.0
+WOWHEAD_TOOLTIP_MAX_BYTES = 256 * 1024
+WOWHEAD_TOOLTIP_CACHE_TTL_SECONDS = 3600
+WOWHEAD_TOOLTIP_CACHE_MAX_ENTRIES = 512
+wowhead_tooltip_json_cache: Dict[str, tuple[float, Dict[str, Any]]] = {}
+
+# Wowhead item quality colours (q0..q8) – used only to tint the preview name.
+WOWHEAD_QUALITY_COLORS = {
+    0: "#ffffff", 1: "#9d9d9d", 2: "#1eff00", 3: "#40c0ff", 4: "#a335ee",
+    5: "#ff8000", 6: "#e6cc80", 7: "#e6cc80", 8: "#00ccff",
+}
 
 MIDNIGHT_WOWHEAD_TRACKS = {
     "Adventurer": "adventurer",
@@ -831,6 +845,201 @@ async def proxy_wowhead_tooltip_data(path: str, request: Request):
         media_type=media_type,
         headers={"Cache-Control": "public, max-age=3600"},
     )
+
+
+# ---------------------------------------------------------------------------
+# GET /api/wowhead/tooltip – server-side tooltip preview proxy
+# ---------------------------------------------------------------------------
+def wowhead_tooltip_id_list(value: Optional[str], field: str) -> Optional[str]:
+    """Normalise a '1/2', '1:2' or '1,2' id list into the colon form Wowhead wants."""
+    if value is None or not str(value).strip():
+        return None
+    parts = [part for part in re.split(r"[/,:;\s]+", str(value).strip()) if part]
+    if not all(part.isdigit() for part in parts):
+        raise HTTPException(status_code=400, detail=f"{field} must be a list of numeric ids")
+    if len(parts) > 10:
+        raise HTTPException(status_code=400, detail=f"{field} has too many ids")
+    return ":".join(parts)
+
+
+async def fetch_wowhead_tooltip_json(upstream_url: str) -> Dict[str, Any]:
+    """Fetch one nether.wowhead.com tooltip JSON payload (TTL cache + size cap).
+
+    Kept as a module-level coroutine so tests can mock the upstream without a
+    network. Failures raise ``httpx.HTTPError``/``ValueError``; the endpoint
+    turns those into a graceful 502.
+    """
+    cached = wowhead_tooltip_json_cache.get(upstream_url)
+    now = time.time()
+    if cached and now - cached[0] < WOWHEAD_TOOLTIP_CACHE_TTL_SECONDS:
+        return cached[1]
+    async with httpx.AsyncClient(
+        timeout=WOWHEAD_TOOLTIP_TIMEOUT_SECONDS,
+        follow_redirects=True,
+        headers={"User-Agent": "simc-helper/1.0"},
+    ) as client:
+        response = await client.get(upstream_url)
+    response.raise_for_status()
+    if len(response.content) > WOWHEAD_TOOLTIP_MAX_BYTES:
+        raise ValueError("Wowhead tooltip response too large")
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise ValueError("Unexpected Wowhead tooltip payload")
+    if len(wowhead_tooltip_json_cache) >= WOWHEAD_TOOLTIP_CACHE_MAX_ENTRIES:
+        oldest = min(wowhead_tooltip_json_cache, key=lambda key: wowhead_tooltip_json_cache[key][0])
+        del wowhead_tooltip_json_cache[oldest]
+    wowhead_tooltip_json_cache[upstream_url] = (now, payload)
+    return payload
+
+
+WOWHEAD_TOOLTIP_NON_STAT_PREFIXES = (
+    "Item Level", "Upgrade Level", "Requires Level", "Required Level",
+    "Durability", "Sell Price", "Binds", "Item Set", "Equip:", "Use:",
+    "Chance on hit", "Soulbound", "Unique",
+)
+
+
+def wowhead_tooltip_lines(tooltip_html: str) -> List[str]:
+    """Split a Wowhead tooltip HTML blob into plain text lines (markers stripped)."""
+    text = re.sub(r"<!--.*?-->", "", tooltip_html, flags=re.S)
+    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.I)
+    text = re.sub(r"</(?:td|tr|table|div|p)>", "\n", text, flags=re.I)
+    text = re.sub(r"<[^>]+>", " ", text)
+    lines = []
+    for raw in text.split("\n"):
+        line = re.sub(r"\s+", " ", html.unescape(raw)).strip()
+        if line:
+            lines.append(line)
+    return lines
+
+
+def parse_wowhead_tooltip(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Compact preview (ilvl, quality, top stats) from a nether tooltip JSON payload."""
+    tooltip_html = payload.get("tooltip")
+    if not isinstance(tooltip_html, str):
+        return None
+    ilvl: Optional[int] = None
+    upgrade_level: Optional[str] = None
+    stats: List[Dict[str, Any]] = []
+    for line in wowhead_tooltip_lines(tooltip_html):
+        level_match = re.match(r"Item Level (\d+)", line)
+        if level_match:
+            ilvl = int(level_match.group(1))
+            continue
+        upgrade_match = re.match(r"Upgrade Level:\s*([A-Za-z]+)\s*(\d+)/(\d+)", line)
+        if upgrade_match:
+            upgrade_level = f"{upgrade_match.group(1)} {upgrade_match.group(2)}/{upgrade_match.group(3)}"
+            continue
+        if line.startswith(WOWHEAD_TOOLTIP_NON_STAT_PREFIXES) or re.fullmatch(r"\d+ \d+ \d+", line):
+            continue
+        stat_match = re.match(r"^\+?([\d,]+)\s+(.+)$", line)
+        if stat_match:
+            stats.append({
+                "label": stat_match.group(2).strip().strip("[]"),
+                "value": int(stat_match.group(1).replace(",", "")),
+            })
+    raw_quality = payload.get("quality")
+    quality = int(raw_quality) if isinstance(raw_quality, (int, float)) else None
+    return {
+        "name": payload.get("name"),
+        "quality": quality,
+        "quality_color": WOWHEAD_QUALITY_COLORS.get(quality) if quality is not None else None,
+        "ilvl": ilvl,
+        "upgrade_level": upgrade_level,
+        "stats": stats,
+        "top_stats": " · ".join(f"{stat['value']:,} {stat['label']}" for stat in stats[:4]),
+    }
+
+
+def wowhead_tooltip_delta(
+    current: Optional[Dict[str, Any]], preview: Optional[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    """Per-stat and ilvl delta between the item's current and previewed tooltip."""
+    if not current or not preview:
+        return None
+    current_by_label = {stat["label"]: stat["value"] for stat in current.get("stats", [])}
+    preview_by_label = {stat["label"]: stat["value"] for stat in preview.get("stats", [])}
+    stats = []
+    for label in dict.fromkeys(list(current_by_label) + list(preview_by_label)):
+        before = current_by_label.get(label, 0)
+        after = preview_by_label.get(label, 0)
+        if after != before:
+            stats.append({"label": label, "before": before, "after": after, "delta": after - before})
+    ilvl_delta = None
+    if current.get("ilvl") is not None and preview.get("ilvl") is not None:
+        ilvl_delta = preview["ilvl"] - current["ilvl"]
+    return {"ilvl": ilvl_delta, "stats": stats}
+
+
+@app.get("/api/wowhead/tooltip", tags=["Gear"])
+async def get_wowhead_tooltip_preview(
+    item: int = Query(..., ge=1, le=10_000_000, description="Wowhead item id"),
+    bonus: Optional[str] = Query(None, description="Bonus ids ('/', ':' or ',' separated)"),
+    upgd: Optional[int] = Query(None, ge=0, le=10, description="Wowhead upgrade index"),
+    gems: Optional[str] = Query(None, description="Gem item ids"),
+    ench: Optional[str] = Query(None, description="Enchant id"),
+    ilvl: Optional[int] = Query(None, ge=1, le=999, description="Resulting item level override"),
+    lvl: Optional[int] = Query(None, ge=1, le=100, description="Character level context"),
+    env: str = Query("live", pattern="^(live|ptr)$", description="Wowhead data environment"),
+):
+    """Server-side Wowhead tooltip preview for gear-card upgrade deltas.
+
+    **Tags:** Gear
+    **Upstream:** ``https://nether.wowhead.com[/ptr]/tooltip/item/<id>`` – proxied
+    with an in-memory 1 h TTL cache, 8 s timeout and 256 KB size cap; the browser
+    must never call Wowhead directly (CORS + bot walls).
+
+    Returns the parsed resulting state (ilvl, quality colour, top stats) plus the
+    delta vs the item's current tooltip whenever an override (ilvl/upgd/gems/ench)
+    is present. Upstream failures degrade to a graceful 502.
+    """
+    bonus_ids = wowhead_tooltip_id_list(bonus, "bonus")
+    gems_ids = wowhead_tooltip_id_list(gems, "gems")
+    ench_ids = wowhead_tooltip_id_list(ench, "ench")
+
+    base = f"https://nether.wowhead.com{'/ptr' if env == 'ptr' else ''}/tooltip/item/{item}"
+
+    def tooltip_url(overrides: Dict[str, Any]) -> str:
+        query = {"dataEnv": "2" if env == "ptr" else "1", "locale": "en"}
+        query.update({key: str(value) for key, value in overrides.items() if value is not None})
+        return f"{base}?{urlencode(query)}"
+
+    overrides = {"bonus": bonus_ids, "upgd": upgd, "gems": gems_ids, "ench": ench_ids,
+                 "ilvl": ilvl, "lvl": lvl}
+    has_overrides = any(value is not None for value in overrides.values())
+
+    try:
+        preview_payload = await fetch_wowhead_tooltip_json(tooltip_url(overrides))
+        if preview_payload.get("error"):
+            raise HTTPException(status_code=404, detail=str(preview_payload["error"]))
+        preview = parse_wowhead_tooltip(preview_payload)
+        if preview is None:
+            raise HTTPException(status_code=502, detail="Unparseable Wowhead tooltip")
+        current = None
+        if has_overrides:
+            # Current state = the item with its own bonus ids only, no upgrade overrides.
+            current_payload = await fetch_wowhead_tooltip_json(tooltip_url({"bonus": bonus_ids}))
+            if not current_payload.get("error"):
+                current = parse_wowhead_tooltip(current_payload)
+    except HTTPException:
+        raise
+    except httpx.HTTPStatusError as exc:
+        if exc.response is not None and exc.response.status_code == 404:
+            raise HTTPException(status_code=404, detail="Item not found on Wowhead") from exc
+        logger.warning("Unable to load Wowhead tooltip preview for %s: %s", item, exc)
+        raise HTTPException(status_code=502, detail="Wowhead tooltip unavailable") from exc
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("Unable to load Wowhead tooltip preview for %s: %s", item, exc)
+        raise HTTPException(status_code=502, detail="Wowhead tooltip unavailable") from exc
+
+    return {
+        "status": "success",
+        "item": item,
+        "env": env,
+        "preview": preview,
+        "current": current,
+        "delta": wowhead_tooltip_delta(current, preview),
+    }
 
 
 async def fetch_wowhead_upgrade(item: str) -> Optional[Dict[str, Any]]:

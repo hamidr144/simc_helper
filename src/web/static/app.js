@@ -528,6 +528,97 @@ function renderTrackControls(slot, item) {
   return `<select class="gear-track-select" aria-label="Track">${trackOptions}</select><select class="gear-rank-select" aria-label="Rank" ${levels.length ? '' : 'disabled'}>${levels.length ? rankOptions : '<option value="">Rank</option>'}</select>`;
 }
 
+/* ---------- Live upgrade preview (Wowhead tooltip proxy) ---------- */
+
+const upgradePreviewCache = new Map();
+const upgradePreviewTimers = new Map();
+const UPGRADE_PREVIEW_DEBOUNCE_MS = 400;
+
+function targetUpgradeLevel(slot, item) {
+  const upgrade = gearUpgrades[slot]?.[item];
+  if (!upgrade?.track) return null;
+  const levels = seasonTracks()[upgrade.track] || [];
+  let level = levels[upgrade.rank - 1] ?? null;
+  const ascension = seasonAscension();
+  if (voidforgedItems[slot]?.[item] && ascension.results?.[upgrade.track] != null) {
+    level = Number(ascension.results[upgrade.track]);
+  }
+  return level;
+}
+
+function scheduleUpgradePreview(slot, item, card) {
+  const key = `${slot}|${item}`;
+  clearTimeout(upgradePreviewTimers.get(key));
+  upgradePreviewTimers.set(key, setTimeout(() => {
+    upgradePreviewTimers.delete(key);
+    void fetchUpgradePreview(slot, item, card);
+  }, UPGRADE_PREVIEW_DEBOUNCE_MS));
+}
+
+function renderUpgradePreview(host, data, target, current) {
+  const preview = data.preview || {};
+  const delta = data.delta || {};
+  const resulting = preview.ilvl ?? target;
+  const ilvlDelta = delta.ilvl ??
+    (resulting != null && current != null ? resulting - current : null);
+  const dot = preview.quality_color
+    ? `<span class="upgrade-preview-dot" style="background:${escapeHtml(preview.quality_color)}"></span>`
+    : '';
+  let html = `${dot}<span class="upgrade-preview-ilvl">ilvl ${current ?? '?'} → <b>${resulting ?? '?'}</b>`;
+  if (ilvlDelta) {
+    html += ` <b class="upgrade-preview-delta ${ilvlDelta > 0 ? 'positive' : 'negative'}">` +
+      `${ilvlDelta > 0 ? '+' : '−'}${Math.abs(ilvlDelta)}</b>`;
+  }
+  html += '</span>';
+  const stats = (delta.stats || []).slice(0, 4);
+  if (stats.length) {
+    html += '<span class="upgrade-preview-stats">' + stats.map(stat =>
+      `<span class="upgrade-preview-stat ${stat.delta > 0 ? 'positive' : 'negative'}">` +
+      `${escapeHtml(stat.label)} ${stat.delta > 0 ? '+' : '−'}${Math.abs(stat.delta).toLocaleString()}</span>`
+    ).join('') + '</span>';
+  }
+  host.className = 'upgrade-preview';
+  host.innerHTML = html;
+}
+
+async function fetchUpgradePreview(slot, item, card) {
+  const host = card.querySelector('.upgrade-preview');
+  if (!host) return;
+  const params = parseItemParams(item);
+  const target = targetUpgradeLevel(slot, item);
+  const current = Number(params.ilevel) ||
+    itemLevelFromLabel(parsedData?.item_names?.[item]) || null;
+  if (!params.id || !target || !current || target === current) {
+    host.hidden = true;
+    host.textContent = '';
+    return;
+  }
+  const query = new URLSearchParams({ item: params.id, ilvl: String(target) });
+  const bonusIds = String(params.bonus_id || '').split('/')
+    .filter(value => /^\d+$/.test(value)).join(':');
+  if (bonusIds) query.set('bonus', bonusIds);
+  const url = `/api/wowhead/tooltip?${query}`;
+  host.hidden = false;
+  host.className = 'upgrade-preview is-loading';
+  host.textContent = 'Previewing upgrade…';
+  try {
+    let data = upgradePreviewCache.get(url);
+    if (!data) {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`status ${response.status}`);
+      data = await response.json();
+      upgradePreviewCache.set(url, data);
+    }
+    if (!card.isConnected) return;
+    renderUpgradePreview(host, data, target, current);
+  } catch (error) {
+    if (!card.isConnected) return;
+    host.className = 'upgrade-preview is-unavailable';
+    host.textContent = 'preview unavailable';
+    host.title = `Wowhead preview unavailable (${error.message})`;
+  }
+}
+
 function renderGear() {
   const grid = document.getElementById('gear-grid');
   if (!grid) return;
@@ -571,6 +662,7 @@ function renderGear() {
         </label>
         <div class="gear-card-controls">${renderTrackControls(slot, item)}</div>
         ${isVoidforgeEligibleSlot(slot) ? `<label class="voidforge-field-container"><input type="checkbox" class="voidforge-input" ${voidforgedItems[slot][item] ? 'checked' : ''}> ${seasonAscension().name || 'Ascendant'} ×${seasonAscension().cost ?? ''}</label>` : ''}
+        <div class="upgrade-preview" hidden></div>
       `;
 
       card.querySelector('.item-select-input').addEventListener('change', event => {
@@ -597,10 +689,12 @@ function renderGear() {
             ).join('');
             rankSelect.disabled = false;
           }
+          scheduleUpgradePreview(slot, item, card);
           selectionChanged();
         });
         rankSelect.addEventListener('change', () => {
           if (gearUpgrades[slot][item]) gearUpgrades[slot][item].rank = Number(rankSelect.value);
+          scheduleUpgradePreview(slot, item, card);
           selectionChanged();
         });
       }
@@ -610,6 +704,7 @@ function renderGear() {
         voidforgeInput.addEventListener('change', event => {
           voidforgedItems[slot][item] = event.target.checked;
           event.currentTarget.closest('.voidforge-field-container')?.classList.toggle('is-active', event.target.checked);
+          scheduleUpgradePreview(slot, item, card);
           selectionChanged();
         });
       }
