@@ -52,6 +52,11 @@ _UPGRADE_COST_RE = re.compile(r"^([ci])#(\d+)#(\d+)#([01])$")
 #   # haste= / combat_modifiers= / combat_ratings= / defense= / resistances= /
 #   # weapon_damage= / pet_*=                                 (GetCharacterStats)
 #
+# The IS_FOREVER branch additionally emits per-spec-group talent blocks under
+# "# Primary Talents" / "# Secondary Talents" comment headers (core.lua
+# 1207-1230, groupLabels at 1221-1229); no retail code path ever writes those
+# headers.
+#
 # Additionally, Forever exports always write bare ``spec=unknown`` and never
 # the ``# loot_spec=`` comment (EXPORTS.spec is retail-only; core.lua ~1201),
 # and the Forever client's interface TOC is 16001 while retail Midnight TOCs
@@ -60,7 +65,11 @@ _UPGRADE_COST_RE = re.compile(r"^([ci])#(\d+)#(\d+)#([01])$")
 # Hard rejection uses only the explicit Forever-only comment markers above
 # (with value grammars required for the generically-named keys so a stray
 # retail comment can never trip them).  The spec/TOC signals are soft: they
-# only produce warnings, never a 400.
+# only produce warnings, never a 400.  As a belt for hand-edited or mixed
+# exports, any retail-only marker (``# loot_spec=``, ``omnium_talents=``,
+# ``# bonus_roll_items=``/``# bonus_roll_currencies=`` — all gated behind
+# MODERN_EXPORTS, core.lua 83-101) overrides detection: such an export is
+# treated as retail no matter which Forever keys it also carries.
 # ---------------------------------------------------------------------------
 
 FOREVER_EXPORT_MESSAGE = (
@@ -77,6 +86,11 @@ _FOREVER_HARD_RES = [
     re.compile(r"^#\s*character_stats(?:_base|_bonus|_gear)?="),
     # Forever-only pet mirror of the same block (forever/stats.lua AddPet*).
     re.compile(r"^#\s*pet_(?:info|stats|stats_base|stats_bonus|attack_power|modifiers|defense|resistances|weapon_damage)="),
+    # Forever-only per-spec-group talent headers, emitted only in the
+    # IS_FOREVER branch (core.lua 1207-1230; groupLabels = { 'Primary',
+    # 'Secondary' } at 1221, header written at 1227).  Retail code paths
+    # never write "# <label> Talents" comment lines.
+    re.compile(r"^#\s*(?:Primary|Secondary) Talents\s*$"),
     # Remaining forever/stats.lua keys; the generic names require the addon's
     # "name:value" value shape so free-text retail comments never match.
     re.compile(
@@ -84,6 +98,19 @@ _FOREVER_HARD_RES = [
         r"|combat_modifiers|combat_ratings|defense|resistances|weapon_damage)"
         r"=[a-z_][a-z0-9_]*:"
     ),
+]
+
+# Retail-only markers (MODERN_EXPORTS-gated, core.lua 83-101: 'spec' writes
+# the "# loot_spec=" comment at ~1203, 'trait_systems' writes omnium_talents,
+# 'bonus_roll_items'/'bonus_roll_currencies' write the matching comments at
+# 1462-1472).  The Forever client never emits any of them, so their presence
+# means the export came from a retail client; if one shows up alongside
+# Forever keys (hand-edited or mixed export) we treat it as retail and never
+# hard-reject.
+_RETAIL_OVERRIDE_RES = [
+    re.compile(r"^#\s*loot_spec="),
+    re.compile(r"^omnium_talents="),
+    re.compile(r"^#\s*bonus_roll_(?:items|currencies)="),
 ]
 
 # Forever client TOC is 16001 (Simulationcraft.toc compat list); retail
@@ -99,15 +126,25 @@ def is_forever_export(lines: List[str]) -> bool:
     """True when the export carries explicit WoW: Forever markers.
 
     Only the Forever-only comment sections emitted by the official addon
-    (gated behind EXPORTS.character_stats/skills/buffs, Forever client only)
-    trigger this; see the rationale block above.  Normal retail exports never
-    contain these lines.
+    (gated behind EXPORTS.character_stats/skills/buffs and the IS_FOREVER
+    talent block, Forever client only) trigger this; see the rationale block
+    above.  Normal retail exports never contain these lines.
+
+    Any retail-only marker (``# loot_spec=``, ``omnium_talents=``,
+    ``# bonus_roll_*=``) overrides the Forever keys: mixed or hand-edited
+    exports that still carry a retail marker are treated as retail and never
+    hard-rejected.
     """
-    for line in lines:
-        line_strip = line.strip()
-        if any(pattern.match(line_strip) for pattern in _FOREVER_HARD_RES):
-            return True
-    return False
+    lines_strip = [line.strip() for line in lines]
+    # Full-scan override: a retail marker anywhere in the export wins, even
+    # if Forever keys appear earlier in a hand-edited/mixed file.
+    if any(
+        pattern.match(line) for line in lines_strip for pattern in _RETAIL_OVERRIDE_RES
+    ):
+        return False
+    return any(
+        pattern.match(line) for line in lines_strip for pattern in _FOREVER_HARD_RES
+    )
 
 
 def forever_export_warnings(lines: List[str]) -> List[str]:
