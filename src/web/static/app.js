@@ -96,6 +96,13 @@ let equippedGems = new Set();
 let gearUpgrades = {};
 let voidforgedItems = {};
 let extraSockets = {};
+/* Per-slot sort mode ('ilvl' default | 'name' | 'priority'), heuristic
+   stat-priority scores keyed by item string, and items the user added by
+   Wowhead id (item string -> slot) for badge + removal. */
+let slotSorts = {};
+let statScores = {};
+let addedItems = new Map();
+const STAT_SORT_BATCH = 40;
 let generatedInput = null;
 let generationTimer = null;
 let railObserver = null;
@@ -426,6 +433,9 @@ function initializeSelections() {
   gearUpgrades = {};
   voidforgedItems = {};
   extraSockets = {};
+  slotSorts = {};
+  statScores = {};
+  addedItems = new Map();
   generatedInput = null;
 
   for (const [slot, items] of Object.entries(parsedData.items_by_slot)) {
@@ -619,6 +629,153 @@ async function fetchUpgradePreview(slot, item, card) {
   }
 }
 
+/* ---------- Per-slot sorting (ilvl / name / heuristic stat priority) ---------- */
+
+function sortItemsForSlot(slot, items) {
+  const mode = slotSorts[slot] || 'ilvl';
+  const levelOf = item => itemLevelFromLabel(parsedData?.item_names?.[item]) ||
+    Number(parseItemParams(item).ilevel) || 0;
+  const nameOf = item => String(parsedData?.item_names?.[item] || '')
+    .replace(/\s*\(\d+\)$/, '').toLowerCase();
+  const sorted = [...items];
+  if (mode === 'name') {
+    sorted.sort((a, b) => nameOf(a).localeCompare(nameOf(b)) || levelOf(b) - levelOf(a));
+  } else if (mode === 'priority') {
+    // Failed lookups score -1 and sink to the bottom; ties fall back to ilvl.
+    sorted.sort((a, b) => ((statScores[b] ?? -1) - (statScores[a] ?? -1)) ||
+      levelOf(b) - levelOf(a));
+  } else {
+    sorted.sort((a, b) => levelOf(b) - levelOf(a));
+  }
+  return sorted;
+}
+
+async function ensureStatScores(slot, items, selectEl) {
+  const pending = items.filter(item => !(item in statScores) && parseItemParams(item).id);
+  if (!pending.length) return;
+  if (selectEl) { selectEl.disabled = true; selectEl.classList.add('is-scoring'); }
+  const status = document.getElementById('workflow-status');
+  try {
+    for (let start = 0; start < pending.length; start += STAT_SORT_BATCH) {
+      const chunk = pending.slice(start, start + STAT_SORT_BATCH);
+      const response = await fetch('/api/wowhead/tooltips/batch', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          char_class: parsedData.char_class,
+          items: chunk.map(item => {
+            const params = parseItemParams(item);
+            return { item: Number(params.id), bonus: params.bonus_id || null };
+          })
+        })
+      });
+      if (!response.ok) throw new Error(`status ${response.status}`);
+      const data = await response.json();
+      (data.results || []).forEach((result, position) => {
+        const key = chunk[result.index ?? position];
+        if (key) statScores[key] = result.ok ? (result.score ?? 0) : -1;
+      });
+    }
+  } catch (error) {
+    if (status) {
+      status.textContent =
+        `Stat-priority sort unavailable (${error.message}) — sorted by ilvl instead.`;
+    }
+    if (slotSorts[slot] === 'priority') slotSorts[slot] = 'ilvl';
+  } finally {
+    if (selectEl) { selectEl.disabled = false; selectEl.classList.remove('is-scoring'); }
+  }
+}
+
+/* ---------- Add-an-item by Wowhead id (items owned but not exported) ---------- */
+
+function showSlotAddMessage(host, kind, message) {
+  host.hidden = false;
+  host.className = `slot-add-preview is-${kind}`;
+  host.textContent = message;
+}
+
+function commitAddedItem(slot, itemId, preview) {
+  const key = `id=${itemId}`;
+  const items = parsedData.items_by_slot[slot] || (parsedData.items_by_slot[slot] = []);
+  if (!items.includes(key)) {
+    items.push(key);
+    parsedData.item_names[key] = `${preview.name || `Item ${itemId}`} (${preview.ilvl || 0})`;
+    gearUpgrades[slot] = gearUpgrades[slot] || {};
+    voidforgedItems[slot] = voidforgedItems[slot] || {};
+    const inferred = inferMidnightUpgrade(slot, key, parsedData.item_names[key]);
+    if (inferred) gearUpgrades[slot][key] = inferred;
+    voidforgedItems[slot][key] = false;
+    addedItems.set(key, slot);
+  }
+  selectedItems[slot] = selectedItems[slot] || new Set();
+  selectedItems[slot].add(key);
+  renderGear();
+  renderCharChip();
+  updateSummary();
+  selectionChanged();
+}
+
+function removeAddedItem(slot, item) {
+  const items = parsedData.items_by_slot[slot];
+  if (items) {
+    const index = items.indexOf(item);
+    if (index >= 0) items.splice(index, 1);
+  }
+  delete parsedData.item_names[item];
+  selectedItems[slot]?.delete(item);
+  delete gearUpgrades[slot]?.[item];
+  delete voidforgedItems[slot]?.[item];
+  delete statScores[item];
+  addedItems.delete(item);
+  renderGear();
+  renderCharChip();
+  selectionChanged();
+}
+
+function renderSlotAddPreview(slot, itemId, preview, host, addInput) {
+  host.className = 'slot-add-preview';
+  host.innerHTML =
+    `<img src="/api/item-icon/${itemId}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` +
+    `<span class="slot-add-name"${preview.quality_color ? ` style="color:${escapeHtml(preview.quality_color)}"` : ''}>` +
+      `${escapeHtml(preview.name || `Item ${itemId}`)}</span>` +
+    `<span class="slot-add-meta">${preview.ilvl ? `ilvl ${preview.ilvl}` : 'ilvl unknown'}` +
+      `${preview.upgrade_level ? ` · ${escapeHtml(preview.upgrade_level)}` : ''}</span>` +
+    `<button type="button" class="slot-add-confirm">Add to ${escapeHtml(slot.replace('_', ' '))}</button>`;
+  host.querySelector('.slot-add-confirm').addEventListener('click', () => {
+    commitAddedItem(slot, itemId, preview);
+    addInput.value = '';
+    addInput.focus();
+  });
+}
+
+function wireSlotAddForm(group, slot) {
+  const addInput = group.querySelector('.slot-add-input');
+  const addButton = group.querySelector('.slot-add-button');
+  const addPreview = group.querySelector('.slot-add-preview');
+  const previewAdd = async () => {
+    const raw = addInput.value.trim();
+    if (!/^\d{1,9}$/.test(raw)) {
+      showSlotAddMessage(addPreview, 'error', 'Enter a numeric Wowhead item ID (see the item link, e.g. wowhead.com/item=276000).');
+      return;
+    }
+    const itemId = Number(raw);
+    showSlotAddMessage(addPreview, 'loading', `Resolving item ${itemId} on Wowhead…`);
+    try {
+      const response = await fetch(`/api/wowhead/tooltip?item=${itemId}`);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.detail || `status ${response.status}`);
+      renderSlotAddPreview(slot, itemId, data.preview || {}, addPreview, addInput);
+    } catch (error) {
+      showSlotAddMessage(addPreview, 'error',
+        `Could not resolve item ${itemId} on Wowhead (${error.message}).`);
+    }
+  };
+  addButton.addEventListener('click', previewAdd);
+  addInput.addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); previewAdd(); }
+  });
+}
+
 function renderGear() {
   const grid = document.getElementById('gear-grid');
   if (!grid) return;
@@ -628,10 +785,32 @@ function renderGear() {
     group.className = 'slot-group';
     group.innerHTML = `<div class="slot-group-header"><h3>${escapeHtml(slot.replace('_', ' '))}</h3>` +
       `<span class="slot-count"></span>` +
-      `<button type="button" class="slot-toggle-all">Select none</button></div><div class="slot-items"></div>`;
+      `<select class="slot-sort-select" aria-label="Sort ${escapeHtml(slot)} candidates" ` +
+      `title="Sort candidates. 'Stat priority' is a heuristic class weight order, not a sim result.">` +
+      `<option value="ilvl">ilvl ↓</option><option value="name">Name</option>` +
+      `<option value="priority">Stat priority*</option></select>` +
+      `<button type="button" class="slot-toggle-all">Select none</button></div>` +
+      `<div class="slot-add-form">` +
+      `<input type="text" class="slot-add-input" inputmode="numeric" autocomplete="off" ` +
+      `placeholder="Own it but not in the export? Add by Wowhead item id…" ` +
+      `aria-label="Wowhead item id to add to ${escapeHtml(slot)}">` +
+      `<button type="button" class="slot-add-button">Preview</button></div>` +
+      `<div class="slot-add-preview" hidden></div>` +
+      `<div class="slot-items"></div>`;
     const itemGrid = group.querySelector('.slot-items');
     const slotCountEl = group.querySelector('.slot-count');
     const slotToggleAll = group.querySelector('.slot-toggle-all');
+    const sortSelect = group.querySelector('.slot-sort-select');
+    sortSelect.value = slotSorts[slot] || 'ilvl';
+    sortSelect.addEventListener('change', () => {
+      slotSorts[slot] = sortSelect.value;
+      if (sortSelect.value === 'priority') {
+        void ensureStatScores(slot, items, sortSelect).then(renderGear);
+      } else {
+        renderGear();
+      }
+    });
+    wireSlotAddForm(group, slot);
     const syncSlotHeader = () => {
       slotCountEl.textContent = `${selectedItems[slot].size}/${items.length} selected`;
       slotToggleAll.textContent = items.length && selectedItems[slot].size === items.length
@@ -648,7 +827,7 @@ function renderGear() {
       syncSlotHeader();
       selectionChanged();
     });
-    for (const item of items) {
+    for (const item of sortItemsForSlot(slot, items)) {
       const params = parseItemParams(item);
       const label = parsedData.item_names[item] || `${slot} ${params.id || ''}`;
       const level = itemLevelFromLabel(label) || Number(params.ilevel) || null;
@@ -658,12 +837,18 @@ function renderGear() {
         <label class="item-select-row">
           <input type="checkbox" class="item-select-input" ${selectedItems[slot].has(item) ? 'checked' : ''}>
           ${createWowheadIconLink(params.id, params.bonus_id)}
-          <span class="gear-card-info"><a href="https://www.wowhead.com/item=${encodeURIComponent(params.id || '0')}${params.bonus_id ? `?bonus=${encodeURIComponent(params.bonus_id.replace(/\//g, ':'))}` : ''}" class="item-option-name gear-card-name wowhead-item-link" data-wowhead="${params.bonus_id ? `bonus=${escapeHtml(params.bonus_id.replace(/\//g, ':'))}` : ''}" target="_blank">${escapeHtml(label.replace(/\s*\(\d+\)/, ''))}</a><span class="gear-card-slot">${level ? `Item level ${level}` : 'Item level unknown'}</span></span>
+          <span class="gear-card-info"><a href="https://www.wowhead.com/item=${encodeURIComponent(params.id || '0')}${params.bonus_id ? `?bonus=${encodeURIComponent(params.bonus_id.replace(/\//g, ':'))}` : ''}" class="item-option-name gear-card-name wowhead-item-link" data-wowhead="${params.bonus_id ? `bonus=${escapeHtml(params.bonus_id.replace(/\//g, ':'))}` : ''}" target="_blank">${escapeHtml(label.replace(/\s*\(\d+\)/, ''))}</a>${addedItems.has(item) ? '<span class="added-badge">Added</span>' : ''}<span class="gear-card-slot">${level ? `Item level ${level}` : 'Item level unknown'}</span></span>
         </label>
         <div class="gear-card-controls">${renderTrackControls(slot, item)}</div>
         ${isVoidforgeEligibleSlot(slot) ? `<label class="voidforge-field-container"><input type="checkbox" class="voidforge-input" ${voidforgedItems[slot][item] ? 'checked' : ''}> ${seasonAscension().name || 'Ascendant'} ×${seasonAscension().cost ?? ''}</label>` : ''}
         <div class="upgrade-preview" hidden></div>
+        ${addedItems.has(item) ? `<button type="button" class="slot-remove-added" title="Remove this added item from the candidates"><span class="sr-only">Remove ${escapeHtml(label.replace(/\s*\(\d+\)/, ''))} from candidates</span>×</button>` : ''}
       `;
+
+      const removeAddedButton = card.querySelector('.slot-remove-added');
+      if (removeAddedButton) {
+        removeAddedButton.addEventListener('click', () => removeAddedItem(slot, item));
+      }
 
       card.querySelector('.item-select-input').addEventListener('change', event => {
         if (event.target.checked) selectedItems[slot].add(item);

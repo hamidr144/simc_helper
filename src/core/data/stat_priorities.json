@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "heuristic": true,
+  "note": "Coarse per-class stat weight ORDER used only to sort the gear candidate list ('Stat priority' sort). This is a heuristic, not a sim result: weights are generic Midnight-era DPS-leaning orders. Tank and healer specs deviate (Stamina/Armor matter far more); when in doubt trust the sim, not this sort. Edit freely — one entry per class, weights keyed by Wowhead tooltip stat labels. Labels like 'Strength or Intellect' fall back to the max of the two parts.",
+  "spec_note": "Spec-level overrides intentionally omitted: per-spec weights change with every tier and would rot faster than they help. Class-level order is the honest granularity here.",
+  "default_weights": {
+    "Strength": 1.0,
+    "Agility": 1.0,
+    "Intellect": 1.0,
+    "Stamina": 0.15,
+    "Mastery": 0.6,
+    "Critical Strike": 0.6,
+    "Haste": 0.6,
+    "Versatility": 0.5,
+    "Armor": 0.02,
+    "Attack Power": 0.1
+  },
+  "classes": {
+    "deathknight": {
+      "name": "Death Knight",
+      "weights": { "Critical Strike": 0.75, "Haste": 0.7, "Mastery": 0.6, "Versatility": 0.45 }
+    },
+    "demonhunter": {
+      "name": "Demon Hunter",
+      "weights": { "Mastery": 0.75, "Critical Strike": 0.65, "Haste": 0.6, "Versatility": 0.45 }
+    },
+    "druid": {
+      "name": "Druid",
+      "weights": { "Mastery": 0.7, "Haste": 0.65, "Critical Strike": 0.6, "Versatility": 0.5 }
+    },
+    "evoker": {
+      "name": "Evoker",
+      "weights": { "Haste": 0.75, "Critical Strike": 0.65, "Mastery": 0.6, "Versatility": 0.45 }
+    },
+    "hunter": {
+      "name": "Hunter",
+      "weights": { "Critical Strike": 0.75, "Haste": 0.7, "Mastery": 0.55, "Versatility": 0.45 }
+    },
+    "mage": {
+      "name": "Mage",
+      "weights": { "Haste": 0.75, "Critical Strike": 0.7, "Mastery": 0.6, "Versatility": 0.45 }
+    },
+    "monk": {
+      "name": "Monk",
+      "weights": { "Haste": 0.75, "Critical Strike": 0.65, "Mastery": 0.6, "Versatility": 0.45 }
+    },
+    "paladin": {
+      "name": "Paladin",
+      "weights": { "Mastery": 0.75, "Haste": 0.65, "Critical Strike": 0.6, "Versatility": 0.45 }
+    },
+    "priest": {
+      "name": "Priest",
+      "weights": { "Haste": 0.75, "Mastery": 0.65, "Critical Strike": 0.6, "Versatility": 0.45 }
+    },
+    "rogue": {
+      "name": "Rogue",
+      "weights": { "Haste": 0.75, "Critical Strike": 0.7, "Mastery": 0.55, "Versatility": 0.45 }
+    },
+    "shaman": {
+      "name": "Shaman",
+      "weights": { "Haste": 0.75, "Mastery": 0.65, "Critical Strike": 0.6, "Versatility": 0.45 }
+    },
+    "warlock": {
+      "name": "Warlock",
+      "weights": { "Haste": 0.75, "Critical Strike": 0.7, "Mastery": 0.6, "Versatility": 0.45 }
+    },
+    "warrior": {
+      "name": "Warrior",
+      "weights": { "Critical Strike": 0.75, "Mastery": 0.65, "Haste": 0.6, "Versatility": 0.45 }
+    }
+  }
+}

@@ -62,7 +62,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.core.addon_parser import parse_addon_lines
 from src.core.circuit_breaker import CircuitBreaker
@@ -120,6 +120,18 @@ class ParseAddonResponse(BaseModel):
 class WowheadUpgradesRequest(BaseModel):
     """Payload for ``/api/wowhead-upgrades`` – look up gear upgrade paths."""
     items_by_slot: Dict[str, List[str]]
+
+
+class WowheadTooltipBatchEntry(BaseModel):
+    """One item to resolve in ``/api/wowhead/tooltips/batch``."""
+    item: int = Field(..., ge=1, le=10_000_000)
+    bonus: Optional[str] = None
+
+
+class WowheadTooltipBatchRequest(BaseModel):
+    """Payload for ``/api/wowhead/tooltips/batch`` – resolve + score a slot's items."""
+    char_class: Optional[str] = None
+    items: List[WowheadTooltipBatchEntry]
 
 
 class SimulationRequest(BaseModel):
@@ -862,6 +874,14 @@ def wowhead_tooltip_id_list(value: Optional[str], field: str) -> Optional[str]:
     return ":".join(parts)
 
 
+def wowhead_tooltip_url(item: int, env: str = "live", **overrides: Any) -> str:
+    """Build a nether.wowhead.com tooltip URL with dataEnv/locale + optional overrides."""
+    base = f"https://nether.wowhead.com{'/ptr' if env == 'ptr' else ''}/tooltip/item/{item}"
+    query = {"dataEnv": "2" if env == "ptr" else "1", "locale": "en"}
+    query.update({key: str(value) for key, value in overrides.items() if value is not None})
+    return f"{base}?{urlencode(query)}"
+
+
 async def fetch_wowhead_tooltip_json(upstream_url: str) -> Dict[str, Any]:
     """Fetch one nether.wowhead.com tooltip JSON payload (TTL cache + size cap).
 
@@ -997,19 +1017,13 @@ async def get_wowhead_tooltip_preview(
     gems_ids = wowhead_tooltip_id_list(gems, "gems")
     ench_ids = wowhead_tooltip_id_list(ench, "ench")
 
-    base = f"https://nether.wowhead.com{'/ptr' if env == 'ptr' else ''}/tooltip/item/{item}"
-
-    def tooltip_url(overrides: Dict[str, Any]) -> str:
-        query = {"dataEnv": "2" if env == "ptr" else "1", "locale": "en"}
-        query.update({key: str(value) for key, value in overrides.items() if value is not None})
-        return f"{base}?{urlencode(query)}"
-
     overrides = {"bonus": bonus_ids, "upgd": upgd, "gems": gems_ids, "ench": ench_ids,
                  "ilvl": ilvl, "lvl": lvl}
     has_overrides = any(value is not None for value in overrides.values())
 
     try:
-        preview_payload = await fetch_wowhead_tooltip_json(tooltip_url(overrides))
+        preview_payload = await fetch_wowhead_tooltip_json(
+            wowhead_tooltip_url(item, env, **overrides))
         if preview_payload.get("error"):
             raise HTTPException(status_code=404, detail=str(preview_payload["error"]))
         preview = parse_wowhead_tooltip(preview_payload)
@@ -1018,7 +1032,8 @@ async def get_wowhead_tooltip_preview(
         current = None
         if has_overrides:
             # Current state = the item with its own bonus ids only, no upgrade overrides.
-            current_payload = await fetch_wowhead_tooltip_json(tooltip_url({"bonus": bonus_ids}))
+            current_payload = await fetch_wowhead_tooltip_json(
+                wowhead_tooltip_url(item, env, bonus=bonus_ids))
             if not current_payload.get("error"):
                 current = parse_wowhead_tooltip(current_payload)
     except HTTPException:
@@ -1040,6 +1055,92 @@ async def get_wowhead_tooltip_preview(
         "current": current,
         "delta": wowhead_tooltip_delta(current, preview),
     }
+
+
+# ---------------------------------------------------------------------------
+# POST /api/wowhead/tooltips/batch – resolve + heuristic-score a slot's items
+# ---------------------------------------------------------------------------
+WOWHEAD_TOOLTIP_BATCH_MAX_ITEMS = 40
+
+
+@app.post("/api/wowhead/tooltips/batch", tags=["Gear"])
+async def post_wowhead_tooltips_batch(payload: WowheadTooltipBatchRequest):
+    """Resolve several items in one request and score them with class stat weights.
+
+    **Tags:** Gear
+    **Upstream:** same TTL-cached nether.wowhead.com tooltip proxy as
+    ``GET /api/wowhead/tooltip``; per-item failures come back as
+    ``{"ok": false}`` entries instead of failing the whole batch.
+
+    Powers the per-slot "Stat priority" sort: the client sends every item id
+    (with its bonus ids) of one slot plus the character class, and sorts by
+    the returned ``score``. Scores are a **heuristic** weighted sum (see
+    ``src/core/data/stat_priorities.json``), never a sim result.
+    """
+    from src.core.stat_priorities import score_stats, weights_for_class
+
+    if len(payload.items) > WOWHEAD_TOOLTIP_BATCH_MAX_ITEMS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many items for one batch (max {WOWHEAD_TOOLTIP_BATCH_MAX_ITEMS})",
+        )
+    # Validate every bonus string up front so a bad entry is a clean 400.
+    normalized_bonuses = []
+    for entry in payload.items:
+        try:
+            normalized_bonuses.append(wowhead_tooltip_id_list(entry.bonus, "bonus"))
+        except HTTPException as exc:
+            raise HTTPException(status_code=400, detail=str(exc.detail)) from exc
+
+    weights = weights_for_class(payload.char_class)
+
+    async def resolve(index: int, entry: WowheadTooltipBatchEntry, bonus_ids: Optional[str]):
+        try:
+            tooltip_payload = await fetch_wowhead_tooltip_json(
+                wowhead_tooltip_url(entry.item, bonus=bonus_ids))
+            if tooltip_payload.get("error"):
+                return index, {"index": index, "item": entry.item, "ok": False,
+                               "error": str(tooltip_payload["error"])}
+            preview = parse_wowhead_tooltip(tooltip_payload)
+            if preview is None:
+                return index, {"index": index, "item": entry.item, "ok": False,
+                               "error": "Unparseable Wowhead tooltip"}
+            return index, {
+                "index": index,
+                "item": entry.item,
+                "ok": True,
+                "name": preview["name"],
+                "ilvl": preview["ilvl"],
+                "quality": preview["quality"],
+                "quality_color": preview["quality_color"],
+                "score": score_stats(preview["stats"], weights),
+            }
+        except Exception as exc:  # per-item degradation, batch stays 200
+            logger.warning("Batch tooltip failed for item %s: %s", entry.item, exc)
+            return index, {"index": index, "item": entry.item, "ok": False,
+                           "error": "Tooltip unavailable"}
+
+    resolved = await asyncio.gather(
+        *(resolve(i, entry, bonus)
+          for i, (entry, bonus) in enumerate(zip(payload.items, normalized_bonuses))))
+    return {
+        "status": "success",
+        "char_class": payload.char_class,
+        "heuristic": True,
+        "results": [result for _, result in sorted(resolved, key=lambda pair: pair[0])],
+    }
+
+
+@app.get("/api/stat-priorities", tags=["Gear"])
+async def get_stat_priorities():
+    """Heuristic per-class stat weights used by the gear-list stat-priority sort.
+
+    **Tags:** Gear
+    **Note:** Editable data file (``src/core/data/stat_priorities.json``); the
+    payload carries ``heuristic: true`` so the UI can label the sort honestly.
+    """
+    from src.core.stat_priorities import load_stat_priorities
+    return load_stat_priorities()
 
 
 async def fetch_wowhead_upgrade(item: str) -> Optional[Dict[str, Any]]:

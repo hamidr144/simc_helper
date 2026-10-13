@@ -1130,3 +1130,165 @@ input[type="checkbox"] { accent-color: var(--accent-color); width: 16px; height:
   padding: 3px 10px;
   white-space: nowrap;
 }
+
+/* --- Step 4: per-slot sort control --- */
+.slot-sort-select {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--panel-border);
+  color: var(--text-secondary);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  padding: 4px 8px;
+  min-height: 26px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.slot-sort-select:hover,
+.slot-sort-select:focus {
+  color: var(--text-primary);
+  border-color: rgba(113, 112, 255, 0.4);
+  outline: none;
+}
+
+.slot-sort-select.is-scoring { opacity: 0.55; cursor: progress; }
+
+/* --- Step 4: add-an-item by Wowhead id --- */
+.slot-add-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.slot-add-input {
+  flex: 1;
+  max-width: 320px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-control);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  padding: 6px 10px;
+  min-height: 30px;
+}
+
+.slot-add-input::placeholder { color: var(--text-muted); }
+
+.slot-add-input:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(113, 112, 255, 0.15);
+  outline: none;
+}
+
+button.slot-add-button,
+button.slot-add-confirm {
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  color: var(--text-secondary);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 12px;
+  min-height: 30px;
+  border-radius: 20px;
+  box-shadow: none;
+  margin: 0;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+button.slot-add-button:hover,
+button.slot-add-confirm:hover {
+  color: var(--text-primary);
+  border-color: rgba(113, 112, 255, 0.4);
+  transform: none;
+  box-shadow: none;
+}
+
+button.slot-add-confirm {
+  margin-left: auto;
+  border-color: rgba(113, 112, 255, 0.45);
+  color: #b8b7ff;
+}
+
+.slot-add-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px dashed var(--panel-border);
+  border-radius: var(--radius-control);
+  background: rgba(0, 0, 0, 0.25);
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.slot-add-preview img {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--panel-border);
+}
+
+.slot-add-preview .slot-add-name { font-weight: 600; }
+
+.slot-add-preview .slot-add-meta {
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.slot-add-preview.is-loading { color: var(--text-muted); }
+.slot-add-preview.is-error {
+  color: #fb7185;
+  border-color: rgba(251, 113, 133, 0.35);
+}
+
+/* --- Step 4: added-item badge + removal --- */
+.added-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 20px;
+  border: 1px solid rgba(113, 112, 255, 0.45);
+  background: rgba(113, 112, 255, 0.12);
+  color: #b8b7ff;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+
+button.slot-remove-added {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  padding: 0;
+  box-shadow: none;
+  margin: 0;
+  cursor: pointer;
+}
+
+button.slot-remove-added:hover {
+  color: #fb7185;
+  border-color: rgba(251, 113, 133, 0.4);
+  transform: none;
+  box-shadow: none;
+}
+
+.gear-card { position: relative; }
