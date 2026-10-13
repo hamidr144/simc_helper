@@ -215,6 +215,7 @@ def test_api_generate_simc_applies_midnight_track_rank_upgrades():
         "selected_items": {"head": ["id=1,bonus_id=100"], "trinket": ["id=20,ilevel=276"]},
         "selected_enchants": {},
         "selected_gems": [],
+        "upgrade_season": "midnight-s1",
         "gear_upgrades": {
             "head": {"id=1,bonus_id=100": {"track": "myth", "rank": 6}},
             "trinket": {
@@ -259,6 +260,7 @@ def test_api_generate_simc_applies_voidforge_only_to_selected_weapons_and_trinke
         },
         "selected_enchants": {},
         "selected_gems": [],
+        "upgrade_season": "midnight-s1",
         "voidforged_items": {
             "trinket": {"id=10,ilevel=276": True, "id=1,ilevel=276": True},
             "main_hand": {"id=20,ilevel=289": True, "id=2,ilevel=289": True},

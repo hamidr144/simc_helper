@@ -69,21 +69,18 @@ def apply_mod(gear_str, mod_type, mod_id):
     return res
 
 
-VOIDFORGE_BONUS_ILVL = 9
-VOIDFORGE_FINAL_ILVLS = {285, 298}
-VOIDFORGE_ELIGIBLE_SLOTS = {"main_hand", "off_hand", "trinket", "trinket1", "trinket2"}
-
-MIDNIGHT_UPGRADE_TRACKS = {
-    "adventurer": [220, 224, 227, 230, 233, 237],
-    "veteran": [233, 237, 240, 243, 246, 250],
-    "champion": [246, 250, 253, 256, 259, 263],
-    "hero": [259, 263, 266, 269, 272, 276],
-    "myth": [272, 276, 279, 282, 285, 289],
-}
+from src.core.upgrade_data import (
+    ascension_for,
+    ascension_result,
+    get_season,
+    is_ascension_eligible_slot,
+    track_level as _season_track_level,
+)
 
 
-def is_voidforge_eligible_slot(slot):
-    return slot in VOIDFORGE_ELIGIBLE_SLOTS
+def is_voidforge_eligible_slot(slot, season=None):
+    """Ascension (Voidforged/Venomforged) eligibility for a gear slot."""
+    return is_ascension_eligible_slot(season or get_season(), slot)
 
 
 def parse_item_level(gear_str):
@@ -91,24 +88,22 @@ def parse_item_level(gear_str):
     return int(match.group(1)) if match else None
 
 
-def midnight_track_level(track, rank):
+def midnight_track_level(track, rank, season=None):
     """Return the Midnight item level for a gear track and 1-based rank."""
     if not track or rank in (None, ""):
         return None
-    levels = MIDNIGHT_UPGRADE_TRACKS.get(str(track).lower())
-    if not levels:
-        return None
-    try:
-        rank_int = int(rank)
-    except (TypeError, ValueError):
-        return None
-    if rank_int < 1 or rank_int > len(levels):
-        return None
-    return levels[rank_int - 1]
+    return _season_track_level(season or get_season(), track, rank)
 
 
-def apply_item_level(gear_str, item_level, slot=None, voidforged=False):
-    """Replaces or adds an ilevel= component to a SimC item string."""
+def apply_item_level(gear_str, item_level, slot=None, voidforged=False, season=None):
+    """Replaces or adds an ilevel= component to a SimC item string.
+
+    ``voidforged`` on the manual item-level path only applies the legacy
+    flat ascension bonus when the season defines one (Season 1 Voidforged
+    +9); Season 2's Venomforged is track-dependent and handled by
+    :func:`apply_gear_upgrade`.
+    """
+    season = season or get_season()
     if item_level in (None, ""):
         level = parse_item_level(gear_str) if voidforged else None
     else:
@@ -120,18 +115,33 @@ def apply_item_level(gear_str, item_level, slot=None, voidforged=False):
     if level is None or level <= 0:
         return gear_str
 
-    if voidforged and is_voidforge_eligible_slot(slot) and level not in VOIDFORGE_FINAL_ILVLS:
-        level += VOIDFORGE_BONUS_ILVL
+    if voidforged and is_ascension_eligible_slot(season, slot):
+        ascension = ascension_for(season)
+        legacy_delta = ascension.get("legacy_bonus_ilvl")
+        legacy_finals = set(ascension.get("legacy_final_ilvls") or [])
+        if legacy_delta and level not in legacy_finals:
+            level += legacy_delta
 
     return apply_mod(gear_str, "ilevel", level)
 
 
-def apply_gear_upgrade(gear_str, upgrade, slot=None, voidforged=False):
-    """Applies a Midnight track/rank upgrade by converting it to the matching ilevel."""
+def apply_gear_upgrade(gear_str, upgrade, slot=None, voidforged=False, season=None):
+    """Applies a Midnight track/rank upgrade by converting it to the matching ilevel.
+
+    Ascension (Ascendant Voidforged/Venomforged) resolves to the season's
+    absolute ascended ilvl for the track (hero/myth only, per game rules:
+    ascension requires a fully upgraded Hero/Myth or max-quality crafted
+    base).
+    """
+    season = season or get_season()
     if not isinstance(upgrade, dict):
-        return apply_item_level(gear_str, None, slot=slot, voidforged=voidforged)
-    level = midnight_track_level(upgrade.get("track"), upgrade.get("rank"))
-    return apply_item_level(gear_str, level, slot=slot, voidforged=voidforged)
+        return apply_item_level(gear_str, None, slot=slot, voidforged=voidforged, season=season)
+    level = midnight_track_level(upgrade.get("track"), upgrade.get("rank"), season=season)
+    if voidforged and level is not None and is_ascension_eligible_slot(season, slot):
+        ascended = ascension_result(season, upgrade.get("track"))
+        if ascended is not None:
+            level = ascended
+    return apply_item_level(gear_str, level, slot=slot, voidforged=False, season=season)
 
 def generate_variations(item_list, slot_name, config, extra_sockets=None):
     """Generates all combinations of an item with its possible enchants and valid gems from config."""

@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "active_season": "midnight-s2",
+  "seasons": [
+    {
+      "id": "midnight-s1",
+      "name": "Midnight Season 1 (Dawncrests)",
+      "patch": "12.0.x",
+      "ilvl_band": [184, 298],
+      "crest_name": "Dawncrest",
+      "cost_per_rank": 20,
+      "crest_currency_ids": {
+        "adventurer": 3383,
+        "veteran": 3341,
+        "champion": 3343,
+        "hero": 3345,
+        "myth": 3347
+      },
+      "tracks": {
+        "adventurer": [220, 224, 227, 230, 233, 237],
+        "veteran": [233, 237, 240, 243, 246, 250],
+        "champion": [246, 250, 253, 256, 259, 263],
+        "hero": [259, 263, 266, 269, 272, 276],
+        "myth": [272, 276, 279, 282, 285, 289]
+      },
+      "elevated_ilvls": [],
+      "ascension": {
+        "name": "Ascendant Voidforged",
+        "currency_item_id": 268552,
+        "cost": 5,
+        "bonus_ids": ["13653", "13654"],
+        "eligible_slots": ["main_hand", "off_hand", "trinket", "trinket1", "trinket2"],
+        "results": { "hero": 285, "myth": 298 },
+        "legacy_bonus_ilvl": 9,
+        "legacy_final_ilvls": [285, 298]
+      }
+    },
+    {
+      "id": "midnight-s2",
+      "name": "Midnight Season 2 (Mistcrests)",
+      "patch": "12.1.x",
+      "ilvl_band": [266, 344],
+      "crest_name": "Mistcrest",
+      "cost_per_rank": 20,
+      "crest_currency_ids": {
+        "adventurer": 3442,
+        "veteran": 3443,
+        "champion": 3444,
+        "hero": 3445,
+        "myth": 3446
+      },
+      "tracks": {
+        "adventurer": [266, 269, 272, 276, 279, 282],
+        "veteran": [279, 282, 285, 289, 292, 295],
+        "champion": [292, 295, 298, 302, 305, 308],
+        "hero": [305, 308, 311, 315, 318, 321],
+        "myth": [318, 321, 324, 328, 331, 334]
+      },
+      "elevated_ilvls": [337, 344],
+      "ascension": {
+        "name": "Ascendant Venomforged",
+        "currency_item_id": 280562,
+        "cost": 10,
+        "bonus_ids": [],
+        "eligible_slots": ["neck", "main_hand", "off_hand", "trinket", "trinket1", "trinket2"],
+        "results": { "hero": 328, "myth": 340 },
+        "crafted_results": { "hero": 325, "myth": 338 }
+      }
+    }
+  ]
+}

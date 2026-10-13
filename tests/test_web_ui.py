@@ -93,7 +93,7 @@ def test_gear_selection_uses_midnight_track_rank_upgrades():
     js = js_response.text
     css = css_response.text
 
-    assert "MIDNIGHT_UPGRADE_TRACKS" in js
+    assert "seasonTracks()" in js
     assert "gear-track-select" in js
     assert "gear-rank-select" in js
     assert "gear_upgrades: gearUpgrades" in js
@@ -138,7 +138,7 @@ def test_gear_selection_allows_marking_voidforged_weapons_and_trinkets():
     assert "voidforge-input" in js
     assert "isVoidforgeEligibleSlot" in js
     assert "voidforged_items: voidforgedItems" in js
-    assert "Ascendant Voidforged +9" in js
+    assert "seasonAscension().name" in js
 
 
 def test_voidforged_control_toggles_itself_inside_item_tile():
@@ -151,14 +151,14 @@ def test_voidforged_control_toggles_itself_inside_item_tile():
     assert "classList.toggle('is-active', event.target.checked)" in js
 
 
-def test_voidforged_items_are_detected_from_final_item_levels():
+def test_voidforged_items_are_detected_from_season_ascension_data():
     response = client.get("/static/app.js")
     assert response.status_code == 200
     js = response.text
 
-    assert "const VOIDFORGE_FINAL_ITEM_LEVELS = [285, 298];" in js
+    assert "legacy_final_ilvls" in js
     assert "isAlreadyVoidforgedItem" in js
-    assert "Ascendant Voidforged +9" in js
+    assert "seasonAscension().name" in js
 
 
 def test_named_voidforged_items_start_with_ascendant_flag_enabled():
@@ -167,7 +167,7 @@ def test_named_voidforged_items_start_with_ascendant_flag_enabled():
     js = response.text
 
     assert "function isAlreadyVoidforgedItem(slot, item, label = '')" in js
-    assert "String(label).toLowerCase().includes('voidforged')" in js
+    assert "String(label).toLowerCase().includes(ascendedName)" in js
     assert "voidforgedItems[slot][item] = isAlreadyVoidforgedItem" in js
 
 
@@ -176,7 +176,7 @@ def test_plain_item_level_labels_do_not_start_with_ascendant_flag_enabled():
     assert response.status_code == 200
     js = response.text
 
-    assert "String(label).toLowerCase().includes('voidforged')" in js
+    assert "String(label).toLowerCase().includes(ascendedName)" in js
     assert "function finalItemLevelFromLabel(itemLabel)" not in js
     assert "const labelItemLevel = finalItemLevelFromLabel(itemLabel);" not in js
 
@@ -186,19 +186,54 @@ def test_voidforged_items_are_detected_from_bonus_ids_not_plain_item_levels():
     assert response.status_code == 200
     js = response.text
 
-    assert "const VOIDFORGE_BONUS_IDS = ['13653', '13654'];" in js
-    assert "bonuses.some(bonus => VOIDFORGE_BONUS_IDS.includes(bonus))" in js
-    assert "VOIDFORGE_BONUS_IDS.includes('13622')" not in js
+    assert "seasonAscension().bonus_ids" in js
+    assert "bonuses.some(bonus => ids.includes(bonus))" in js
+    assert "13622" not in js
 
 
-def test_voidforged_track_rank_inference_uses_base_level_before_plus_nine():
+def test_voidforged_track_rank_inference_uses_base_level_before_ascension():
     response = client.get("/static/app.js")
     assert response.status_code == 200
     js = response.text
 
     assert "function inferMidnightUpgrade(slot, item, label)" in js
     assert "hasVoidforgeBonus(item)" in js
-    assert "level -= 9;" in js
+    assert "level -= legacyDelta;" in js
+
+
+def test_upgrade_data_endpoint_serves_season_ladders():
+    response = client.get("/api/upgrade-data")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["active_season"] == "midnight-s2"
+    season_ids = [season["id"] for season in data["seasons"]]
+    assert "midnight-s1" in season_ids and "midnight-s2" in season_ids
+    s2 = next(season for season in data["seasons"] if season["id"] == "midnight-s2")
+    assert s2["tracks"]["myth"] == [318, 321, 324, 328, 331, 334]
+    assert s2["ascension"]["results"] == {"hero": 328, "myth": 340}
+    assert 344 in s2["elevated_ilvls"]
+
+
+def test_generate_accepts_upgrade_season_override():
+    payload = {
+        "base_profile": "warrior=Test",
+        "char_class": "warrior",
+        "char_name": "Test",
+        "equipped_gear": {"trinket1": "id=2,ilevel=250"},
+        "selected_items": {"trinket": ["id=2,ilevel=250"]},
+        "selected_enchants": {},
+        "selected_gems": [],
+        "gear_upgrades": {"trinket": {"id=2,ilevel=250": {"track": "myth", "rank": 6}}},
+        "voidforged_items": {},
+        "extra_sockets": {},
+        "upgrade_season": "midnight-s2",
+    }
+    response = client.post("/api/generate-simc", json=payload)
+    assert response.status_code == 200
+    generated = open(response.json()["file_path"]).read()
+    # ilvl 250 alone would detect Season 1 (myth 6 = 289); the override wins.
+    assert "trinket1=,id=2,ilevel=334" in generated
 
 
 def test_crafted_items_do_not_auto_infer_midnight_grade_from_item_level_label():

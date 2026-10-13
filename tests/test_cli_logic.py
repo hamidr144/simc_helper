@@ -16,6 +16,7 @@ from cli.generate_input import (
     parse_addon_file,
     select_items_interactive,
 )
+from core.upgrade_data import detect_season, get_season
 
 
 def test_load_config(tmp_path):
@@ -60,27 +61,55 @@ def test_apply_item_level_adds_and_replaces_ilevel():
 
 
 def test_apply_item_level_can_add_voidforge_bonus_for_weapons_and_trinkets():
-    assert apply_item_level("id=123,ilevel=276", "276", slot="trinket", voidforged=True) == ",id=123,ilevel=285"
-    assert apply_item_level("id=123,ilevel=289", "289", slot="main_hand", voidforged=True) == ",id=123,ilevel=298"
+    s1 = get_season("midnight-s1")
+    assert apply_item_level("id=123,ilevel=276", "276", slot="trinket", voidforged=True, season=s1) == ",id=123,ilevel=285"
+    assert apply_item_level("id=123,ilevel=289", "289", slot="main_hand", voidforged=True, season=s1) == ",id=123,ilevel=298"
+    # Season 2 Venomforged is track-dependent: no flat bonus on the manual path.
+    s2 = get_season("midnight-s2")
+    assert apply_item_level("id=123,ilevel=334", "334", slot="trinket", voidforged=True, season=s2) == ",id=123,ilevel=334"
 
 
 def test_midnight_track_level_maps_track_and_rank_to_item_level():
-    assert midnight_track_level("hero", 1) == 259
-    assert midnight_track_level("hero", 6) == 276
-    assert midnight_track_level("myth", 6) == 289
+    s1 = get_season("midnight-s1")
+    assert midnight_track_level("hero", 1, season=s1) == 259
+    assert midnight_track_level("hero", 6, season=s1) == 276
+    assert midnight_track_level("myth", 6, season=s1) == 289
     assert midnight_track_level("unknown", 1) is None
+    assert midnight_track_level("myth", 7) is None
+    # Default season is the live one (Season 2 ladders).
+    assert midnight_track_level("hero", 1) == 305
+    assert midnight_track_level("hero", 6) == 321
+    assert midnight_track_level("myth", 6) == 334
     assert midnight_track_level("myth", 7) is None
 
 
 def test_apply_gear_upgrade_uses_midnight_track_rank_instead_of_manual_item_level():
-    assert apply_gear_upgrade("id=123,bonus_id=456", {"track": "myth", "rank": 6}) == ",id=123,ilevel=289,bonus_id=456"
-    assert apply_gear_upgrade("id=123,ilevel=263", {"track": "hero", "rank": 6}) == ",id=123,ilevel=276"
-    assert apply_gear_upgrade("id=123,ilevel=276", {"track": "myth", "rank": 6}, slot="trinket", voidforged=True) == ",id=123,ilevel=298"
+    s1 = get_season("midnight-s1")
+    assert apply_gear_upgrade("id=123,bonus_id=456", {"track": "myth", "rank": 6}, season=s1) == ",id=123,ilevel=289,bonus_id=456"
+    assert apply_gear_upgrade("id=123,ilevel=263", {"track": "hero", "rank": 6}, season=s1) == ",id=123,ilevel=276"
+    assert apply_gear_upgrade("id=123,ilevel=276", {"track": "myth", "rank": 6}, slot="trinket", voidforged=True, season=s1) == ",id=123,ilevel=298"
+    # Season 2: Venomforged resolves to absolute ascended ilvls (hero 328 / myth 340).
+    assert apply_gear_upgrade("id=123,bonus_id=456", {"track": "myth", "rank": 6}) == ",id=123,ilevel=334,bonus_id=456"
+    assert apply_gear_upgrade("id=123,ilevel=334", {"track": "myth", "rank": 6}, slot="trinket", voidforged=True) == ",id=123,ilevel=340"
+    assert apply_gear_upgrade("id=123,ilevel=321", {"track": "hero", "rank": 6}, slot="main_hand", voidforged=True) == ",id=123,ilevel=328"
+    # Non-eligible slots never ascend.
+    assert apply_gear_upgrade("id=123,ilevel=334", {"track": "myth", "rank": 6}, slot="head", voidforged=True) == ",id=123,ilevel=334"
 
 
 def test_apply_item_level_does_not_voidforge_non_eligible_slots_or_double_apply():
     assert apply_item_level("id=123,ilevel=276", "276", slot="head", voidforged=True) == ",id=123,ilevel=276"
     assert apply_item_level("id=123,ilevel=298", "298", slot="trinket", voidforged=True) == ",id=123,ilevel=298"
+
+
+def test_detect_season_prefers_active_for_live_ilvls_and_falls_back_for_old_exports():
+    assert detect_season([318, 334, 295])["id"] == "midnight-s2"
+    # Overlapping ilvl (276 is in both ladders): live-first, active season wins.
+    assert detect_season([276])["id"] == "midnight-s2"
+    # Below the active band: archived Season 1 export still resolves.
+    assert detect_season([220, 250, 263])["id"] == "midnight-s1"
+    # No usable ilvls: active season default.
+    assert detect_season([])["id"] == "midnight-s2"
+    assert detect_season([None, "abc"])["id"] == "midnight-s2"
 
 
 def test_generate_variations():

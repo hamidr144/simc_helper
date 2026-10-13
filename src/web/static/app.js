@@ -1,14 +1,74 @@
 /** SimC Helper five-step workflow. */
 
-const MIDNIGHT_UPGRADE_TRACKS = {
-  adventurer: [220, 224, 227, 230, 233, 237],
-  veteran: [233, 237, 240, 243, 246, 250],
-  champion: [246, 250, 253, 256, 259, 263],
-  hero: [259, 263, 266, 269, 272, 276],
-  myth: [272, 276, 279, 282, 285, 289]
+/* Upgrade ladders are fetched from /api/upgrade-data (per-season data file);
+   this fallback only applies if the endpoint is unreachable. */
+const FALLBACK_SEASON = {
+  id: 'midnight-s1-offline',
+  name: 'Midnight Season 1 (offline data)',
+  crest_name: 'Dawncrest',
+  cost_per_rank: 20,
+  tracks: {
+    adventurer: [220, 224, 227, 230, 233, 237],
+    veteran: [233, 237, 240, 243, 246, 250],
+    champion: [246, 250, 253, 256, 259, 263],
+    hero: [259, 263, 266, 269, 272, 276],
+    myth: [272, 276, 279, 282, 285, 289]
+  },
+  elevated_ilvls: [],
+  ascension: {
+    name: 'Ascendant Voidforged',
+    cost: 5,
+    bonus_ids: ['13653', '13654'],
+    eligible_slots: ['main_hand', 'off_hand', 'trinket', 'trinket1', 'trinket2'],
+    results: { hero: 285, myth: 298 },
+    legacy_bonus_ilvl: 9,
+    legacy_final_ilvls: [285, 298]
+  }
 };
-const VOIDFORGE_FINAL_ITEM_LEVELS = [285, 298];
-const VOIDFORGE_BONUS_IDS = ['13653', '13654'];
+let upgradeData = null;
+let activeSeason = null;
+function season() { return activeSeason || FALLBACK_SEASON; }
+function seasonTracks() { return season().tracks || {}; }
+function seasonAscension() { return season().ascension || {}; }
+function isElevatedLevel(level) {
+  return level != null && (season().elevated_ilvls || []).includes(Number(level));
+}
+async function loadUpgradeData() {
+  try {
+    const response = await fetch('/api/upgrade-data');
+    if (!response.ok) return;
+    upgradeData = await response.json();
+    activeSeason = (upgradeData.seasons || [])
+      .find(item => item.id === upgradeData.active_season) || null;
+    renderSeasonChip();
+  } catch (error) {
+    console.warn('Upgrade data endpoint unavailable, using offline ladder', error);
+  }
+}
+function renderSeasonChip() {
+  const chip = document.getElementById('season-chip');
+  if (chip) chip.textContent = season().name || '';
+}
+function detectSeasonFromExport(data) {
+  // Mirror the server rule: live-first, older seasons for archived exports.
+  if (!upgradeData) return;
+  const levels = [];
+  for (const items of Object.values(data.items_by_slot || {})) {
+    for (const item of items) {
+      const level = Number(parseItemParams(item).ilevel) ||
+        itemLevelFromLabel((data.item_names || {})[item]);
+      if (level) levels.push(level);
+    }
+  }
+  if (!levels.length) return;
+  const top = Math.max(...levels);
+  const seasons = upgradeData.seasons || [];
+  const inBand = s => s.ilvl_band && top >= s.ilvl_band[0] && top <= s.ilvl_band[1];
+  const active = seasons.find(s => s.id === upgradeData.active_season);
+  if (active && inBand(active)) { activeSeason = active; return; }
+  const matches = seasons.filter(inBand);
+  if (matches.length) activeSeason = matches.reduce((a, b) => b.ilvl_band[1] > a.ilvl_band[1] ? b : a);
+}
 
 /* WoW class colors — identity accent only; the accent system stays --accent-color. */
 const CLASS_COLORS = {
@@ -310,12 +370,15 @@ function isCraftedItem(item) {
 }
 
 function isVoidforgeEligibleSlot(slot) {
-  return ['main_hand', 'off_hand', 'trinket'].includes(slot);
+  const base = String(slot || '').split('_')[0];
+  const slots = new Set((seasonAscension().eligible_slots || []).map(s => String(s).split('_')[0]));
+  return slots.has(base);
 }
 
 function hasVoidforgeBonus(item) {
+  const ids = (seasonAscension().bonus_ids || []).map(String);
   const bonuses = (parseItemParams(item).bonus_id || '').split('/');
-  return bonuses.some(bonus => VOIDFORGE_BONUS_IDS.includes(bonus));
+  return bonuses.some(bonus => ids.includes(bonus));
 }
 
 function itemLevelFromLabel(label) {
@@ -327,8 +390,19 @@ function inferMidnightUpgrade(slot, item, label) {
   if (isCraftedItem(item)) return null;
   let level = Number(parseItemParams(item).ilevel) || itemLevelFromLabel(label);
   if (!level) return null;
-  if (isVoidforgeEligibleSlot(slot) && hasVoidforgeBonus(item)) level -= 9;
-  for (const [track, levels] of Object.entries(MIDNIGHT_UPGRADE_TRACKS)) {
+  const ascension = seasonAscension();
+  const alreadyAscended = isVoidforgeEligibleSlot(slot) && hasVoidforgeBonus(item);
+  if (alreadyAscended) {
+    // Ascended items sit above the ladder; map back to the track's top rank.
+    for (const [track, ascended] of Object.entries(ascension.results || {})) {
+      if (Number(ascended) === level && seasonTracks()[track]) {
+        return { track, rank: seasonTracks()[track].length, item_level: level };
+      }
+    }
+    const legacyDelta = ascension.legacy_bonus_ilvl;
+    if (legacyDelta) level -= legacyDelta;
+  }
+  for (const [track, levels] of Object.entries(seasonTracks())) {
     const rank = levels.indexOf(level) + 1;
     if (rank > 0) return { track, rank, item_level: level };
   }
@@ -336,8 +410,10 @@ function inferMidnightUpgrade(slot, item, label) {
 }
 
 function isAlreadyVoidforgedItem(slot, item, label = '') {
+  const ascendedName = String(seasonAscension().name || '').toLowerCase().replace('ascendant ', '');
   return isVoidforgeEligibleSlot(slot) && (
-    hasVoidforgeBonus(item) || String(label).toLowerCase().includes('voidforged')
+    hasVoidforgeBonus(item) ||
+    (ascendedName && String(label).toLowerCase().includes(ascendedName))
   );
 }
 
@@ -437,10 +513,15 @@ function selectionChanged() {
 function renderTrackControls(slot, item) {
   if (isCraftedItem(item)) return '<span class="crafted-badge">Crafted · no grade</span>';
   const upgrade = gearUpgrades[slot]?.[item] || {};
-  const trackOptions = ['none', ...Object.keys(MIDNIGHT_UPGRADE_TRACKS)]
+  const currentLevel = Number(parseItemParams(item).ilevel) ||
+    itemLevelFromLabel(parsedData?.item_names?.[item]);
+  if (isElevatedLevel(currentLevel)) {
+    return '<div class="gear-controls-container"><span class="crafted-badge">Elevated · not upgradeable</span></div>';
+  }
+  const trackOptions = ['none', ...Object.keys(seasonTracks())]
     .map(track => `<option value="${track}" ${upgrade.track === track ? 'selected' : ''}>${track === 'none' ? 'No grade' : track[0].toUpperCase() + track.slice(1)}</option>`)
     .join('');
-  const levels = MIDNIGHT_UPGRADE_TRACKS[upgrade.track] || [];
+  const levels = seasonTracks()[upgrade.track] || [];
   const rankOptions = levels.map((level, index) =>
     `<option value="${index + 1}" ${upgrade.rank === index + 1 ? 'selected' : ''}>Rank ${index + 1} · ${level}</option>`
   ).join('');
@@ -489,7 +570,7 @@ function renderGear() {
           <span class="gear-card-info"><a href="https://www.wowhead.com/item=${encodeURIComponent(params.id || '0')}${params.bonus_id ? `?bonus=${encodeURIComponent(params.bonus_id.replace(/\//g, ':'))}` : ''}" class="item-option-name gear-card-name wowhead-item-link" data-wowhead="${params.bonus_id ? `bonus=${escapeHtml(params.bonus_id.replace(/\//g, ':'))}` : ''}" target="_blank">${escapeHtml(label.replace(/\s*\(\d+\)/, ''))}</a><span class="gear-card-slot">${level ? `Item level ${level}` : 'Item level unknown'}</span></span>
         </label>
         <div class="gear-card-controls">${renderTrackControls(slot, item)}</div>
-        ${isVoidforgeEligibleSlot(slot) ? `<label class="voidforge-field-container"><input type="checkbox" class="voidforge-input" ${voidforgedItems[slot][item] ? 'checked' : ''}> Ascendant Voidforged +9</label>` : ''}
+        ${isVoidforgeEligibleSlot(slot) ? `<label class="voidforge-field-container"><input type="checkbox" class="voidforge-input" ${voidforgedItems[slot][item] ? 'checked' : ''}> ${seasonAscension().name || 'Ascendant'} ×${seasonAscension().cost ?? ''}</label>` : ''}
       `;
 
       card.querySelector('.item-select-input').addEventListener('change', event => {
@@ -511,7 +592,7 @@ function renderGear() {
             rankSelect.disabled = true;
           } else {
             gearUpgrades[slot][item] = { track, rank: 1 };
-            rankSelect.innerHTML = MIDNIGHT_UPGRADE_TRACKS[track].map((level, index) =>
+            rankSelect.innerHTML = (seasonTracks()[track] || []).map((level, index) =>
               `<option value="${index + 1}">Rank ${index + 1} · ${level}</option>`
             ).join('');
             rankSelect.disabled = false;
@@ -661,7 +742,8 @@ function buildPayload() {
     item_levels: {},
     gear_upgrades: gearUpgrades,
     voidforged_items: voidforgedItems,
-    extra_sockets: extraSockets
+    extra_sockets: extraSockets,
+    upgrade_season: season().id
   };
 }
 
@@ -760,6 +842,9 @@ btnParseAddon.addEventListener('click', async () => {
     }
     parsedData = await parseResponse.json();
     appConfig = configResponse.ok ? await configResponse.json() : appConfig;
+    if (!upgradeData) await loadUpgradeData();
+    detectSeasonFromExport(parsedData);
+    renderSeasonChip();
     simulationDone = false;
     initializeSelections();
     renderRail();
@@ -795,6 +880,8 @@ observeWorkflowSteps();
 updateCharCount();
 pollWorkerStatus();
 setInterval(pollWorkerStatus, 15000);
+loadUpgradeData().then(renderSeasonChip);
+renderSeasonChip();
 
 // Report helpers retained for the result views.
 function gearSummary(item) {

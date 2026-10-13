@@ -98,6 +98,7 @@ class GenerateSimcRequest(BaseModel):
     gear_upgrades: Optional[Dict[str, Dict[str, Dict[str, Any]]]] = {}
     voidforged_items: Optional[Dict[str, Dict[str, bool]]] = {}
     extra_sockets: Optional[Dict[str, bool]] = {}
+    upgrade_season: Optional[str] = None
 
 
 class ParseAddonRequest(BaseModel):
@@ -708,7 +709,7 @@ def parse_wowhead_upgrade(xml_text: str) -> Optional[Dict[str, Any]]:
     tooltip = item.findtext("htmlTooltip") or ""
     text = re.sub(r"<[^>]+>", " ", tooltip)
     text = re.sub(r"\s+", " ", text)
-    match = re.search(r"Upgrade Level:\s*(Adventurer|Veteran|Champion|Hero|Myth)\s*([1-6])/6", text)
+    match = re.search(r"Upgrade Level:\s*(Adventurer|Veteran|Champion|Hero|Myth)\s*([1-9]\d*)/6", text)
     if not match:
         return None
     item_level = item.findtext("level")
@@ -948,6 +949,18 @@ async def get_task_status(task_id: Optional[str] = None):
         "total": len(task_status_store),
     }
 
+@app.get("/api/upgrade-data", tags=["Gear"])
+async def get_upgrade_data():
+    """Season-aware gear-upgrade data (track ladders, ascension, crest ids).
+
+    **Tags:** Gear
+    **Note:** The web UI renders upgrade dropdowns from this; one entry per
+    season so old exports keep resolving. See ``src/core/upgrade_data.py``.
+    """
+    from src.core.upgrade_data import season_payload
+    return season_payload()
+
+
 @app.get("/api/config", tags=["System"])
 async def get_config():
     """Retrieve the current configuration from ``config.json``.
@@ -1052,6 +1065,26 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest):
             generate_variations,
             load_config,
         )
+        from src.core.upgrade_data import detect_season, get_season
+
+        def _payload_ilvls(req):
+            levels = []
+            for slot_levels in (req.item_levels or {}).values():
+                if isinstance(slot_levels, dict):
+                    levels.extend(v for v in slot_levels.values() if isinstance(v, int))
+            for gear in list(req.equipped_gear.values()) + [
+                item for items in (req.selected_items or {}).values() for item in items
+            ]:
+                match = re.search(r"ilevel=(\d+)", str(gear))
+                if match:
+                    levels.append(int(match.group(1)))
+            return levels
+
+        season = (
+            get_season(payload.upgrade_season)
+            if payload.upgrade_season
+            else detect_season(_payload_ilvls(payload))
+        )
         config = load_config("config.json")
         if payload.selected_enchants:
             config["enchantments"] = payload.selected_enchants
@@ -1092,9 +1125,9 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest):
             voidforged = bool(slot_voidforged.get(item))
             upgrade = slot_upgrades.get(item)
             if upgrade:
-                return apply_gear_upgrade(item, upgrade, slot=slot, voidforged=voidforged)
+                return apply_gear_upgrade(item, upgrade, slot=slot, voidforged=voidforged, season=season)
             level = slot_levels.get(item)
-            return apply_item_level(item, level, slot=slot, voidforged=voidforged)
+            return apply_item_level(item, level, slot=slot, voidforged=voidforged, season=season)
 
         items_by_slot = {
             slot: [apply_level_override(slot, item) for item in items]

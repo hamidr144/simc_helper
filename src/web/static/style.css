@@ -1071,3 +1071,15 @@ button.btn-danger:hover {
 /* --- Theme-consistent checkboxes + focus rings --- */
 input[type="checkbox"] { accent-color: var(--accent-color); width: 16px; height: 16px; }
 :focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+
+/* Season data chip */
+.season-chip {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}

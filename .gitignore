@@ -45,3 +45,5 @@ bin/
 
 # Runtime data
 data/
+
+!src/core/data/
