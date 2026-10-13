@@ -1256,7 +1256,87 @@ btnParseAddon.addEventListener('click', async () => {
 
 const armoryInput = document.getElementById('armory-input');
 const armoryRegion = document.getElementById('armory-region');
+const armoryRealm = document.getElementById('armory-realm');
 const btnArmoryLoad = document.getElementById('btn-armory-load');
+
+/* ---------- Realm dropdown (static realms.json, EU/US grouped) ---------- */
+
+// "region/slug" -> { region, slug, name }.  Realms like Kel'thuzad exist in
+// BOTH regions with different ids, so the key carries the region and entries
+// are never deduped by name.
+const realmIndex = new Map();
+
+function populateRealmSelect(data) {
+  const groups = data && data.realms;
+  if (!groups || !Array.isArray(groups.eu) || !Array.isArray(groups.us)) {
+    throw new Error('unexpected realms.json shape');
+  }
+  const labels = { eu: 'EU', us: 'US' };
+  for (const region of ['eu', 'us']) {
+    if (!groups[region].length) continue;
+    const group = document.createElement('optgroup');
+    group.label = labels[region];
+    for (const realm of groups[region]) {
+      if (!realm || !realm.slug || !realm.name) continue;
+      const option = document.createElement('option');
+      option.value = `${region}/${realm.slug}`;
+      option.textContent = realm.name;
+      const details = [realm.type, realm.population, realm.timezone]
+        .filter(Boolean).join(' · ');
+      if (details) option.title = `${labels[region]} · ${details}`;
+      group.appendChild(option);
+      realmIndex.set(option.value, { region, slug: realm.slug, name: realm.name });
+    }
+    armoryRealm.appendChild(group);
+  }
+  armoryRealm.disabled = false;
+  armoryRealm.hidden = false;
+}
+
+async function loadRealms() {
+  if (!armoryRealm) return;
+  try {
+    const response = await fetch('/static/realms.json');
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    populateRealmSelect(await response.json());
+  } catch (error) {
+    // Graceful degradation: the dropdown is an enhancement over the manual
+    // Name-Realm typing flow.  If realms.json is missing, unreadable or
+    // malformed we keep the select hidden+disabled (its initial state in the
+    // markup) and stay silent to the user — typing still works exactly as
+    // before.
+    console.warn('Realm list unavailable:', error.message);
+  }
+}
+
+function buildArmoryPayload(value) {
+  // A pasted Armory link wins over the selectors (the link carries its own
+  // region/realm); plain Name-Realm / Name text uses them.
+  if (/^https?:\/\//i.test(value)) return { url: value };
+  const payload = { name: value, region: armoryRegion?.value || 'eu' };
+  const picked = realmIndex.get(armoryRealm?.value || '');
+  // A realm typed into the input ("Name-Realm", "Name, Realm") wins over the
+  // dropdown pick; the dropdown only supplies the realm for a bare name.
+  if (picked && !/[,-]/.test(value)) {
+    payload.realm = picked.slug;
+    payload.region = picked.region;
+  }
+  return payload;
+}
+
+loadRealms();
+
+armoryRealm?.addEventListener('change', () => {
+  const picked = realmIndex.get(armoryRealm.value);
+  if (picked && armoryRegion) armoryRegion.value = picked.region;
+});
+
+armoryRegion?.addEventListener('change', () => {
+  // A manual region switch (e.g. to KR/TW) must not leave a stale realm from
+  // another region attached to the request.
+  const picked = realmIndex.get(armoryRealm?.value || '');
+  if (picked && picked.region !== armoryRegion.value) armoryRealm.value = '';
+});
 
 function updateArmoryState() {
   if (!armoryInput || !btnArmoryLoad) return;
@@ -1270,11 +1350,7 @@ btnArmoryLoad?.addEventListener('click', async () => {
   btnArmoryLoad.textContent = 'Loading…';
   clearParseError();
   try {
-    // A pasted Armory link wins over the region selector (the link carries
-    // its own region); plain Name-Realm / Name, Realm text uses the selector.
-    const payload = /^https?:\/\//i.test(value)
-      ? { url: value }
-      : { name: value, region: armoryRegion?.value || 'eu' };
+    const payload = buildArmoryPayload(value);
     const [armoryResponse, configResponse] = await Promise.all([
       fetch('/api/armory-load', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },

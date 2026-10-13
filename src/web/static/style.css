@@ -1109,6 +1109,39 @@ button.btn-ghost:not(:disabled):hover {
   background: rgba(113, 112, 255, 0.08);
 }
 
+/* Realm picker joins the same control box; truncates instead of stretching
+   the field when a long realm name is picked. */
+.armory-realm-select {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 170px;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--panel-border);
+  border-radius: 0;
+  color: var(--text-primary);
+  padding: 12px 10px 12px 14px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  cursor: pointer;
+  outline: none;
+  box-shadow: none;
+  text-overflow: ellipsis;
+}
+
+.armory-realm-select:focus {
+  border-color: var(--panel-border);
+  box-shadow: none;
+  background: rgba(113, 112, 255, 0.08);
+}
+
+/* Native popup list is ~500 options deep; keep it on the dark palette. */
+.armory-realm-select option,
+.armory-realm-select optgroup {
+  background-color: #1e293b;
+  color: var(--text-primary);
+}
+
 /* Sentence case, body size — the global uppercase p rule made this shout. */
 .armory-hint {
   margin: 10px 0 0;

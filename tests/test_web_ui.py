@@ -380,3 +380,66 @@ def test_successful_simulation_exposes_uploaded_report_link():
     assert "message.report_file && message.task_id" in js
     assert "`/reports/${encodeURIComponent(message.task_id)}/${encodeURIComponent(message.report_file)}`" in js
     assert '>Open report</a>' in js
+
+
+# ---------------------------------------------------------------------------
+# Realm dropdown (static realms.json wiring, task t_d4399bc8)
+# ---------------------------------------------------------------------------
+
+def test_realms_json_is_served_as_static_asset():
+    response = client.get("/static/realms.json")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert set(data["realms"]) >= {"eu", "us"}
+    for region in ("eu", "us"):
+        realms = data["realms"][region]
+        assert realms, f"{region} group must not be empty"
+        for realm in realms:
+            assert set(realm) == {"region", "id", "slug", "name", "type", "timezone", "population"}
+            assert realm["region"] == region
+
+
+def test_realm_dropdown_markup_starts_hidden_and_disabled():
+    """Graceful-degradation baseline: before realms.json loads (or if it never
+    arrives) the select must not be visible or focusable."""
+    html = client.get("/").text
+    assert 'id="armory-realm"' in html
+    assert 'class="armory-realm-select"' in html
+    select_tag = html.split('<select id="armory-realm"', 1)[1].split(">", 1)[0]
+    assert "disabled" in select_tag and "hidden" in select_tag
+
+
+def test_app_fetches_static_realms_json_and_groups_by_region():
+    js = client.get("/static/app.js").text
+
+    assert "fetch('/static/realms.json')" in js
+    # EU/US optgroups, region-qualified keys (Kel'thuzad exists in both).
+    assert "createElement('optgroup')" in js
+    assert "const labels = { eu: 'EU', us: 'US' }" in js
+    assert "`${region}/${realm.slug}`" in js
+
+
+def test_realm_dropdown_degrades_gracefully_when_realms_json_missing():
+    js = client.get("/static/app.js").text
+
+    load_realms = js.split("async function loadRealms", 1)[1].split("function buildArmoryPayload", 1)[0]
+    # Failure path: log-and-keep-hidden only — no user-facing error panel,
+    # the manual Name-Realm typing flow keeps working untouched.
+    assert "Realm list unavailable" in load_realms
+    assert "showParseError" not in load_realms
+    # Malformed payloads are rejected before touching the DOM.
+    assert "unexpected realms.json shape" in js
+
+
+def test_realm_dropdown_pick_feeds_armory_payload():
+    js = client.get("/static/app.js").text
+
+    build_payload = js.split("function buildArmoryPayload", 1)[1].split("loadRealms();", 1)[0]
+    # Pasted Armory links still win outright.
+    assert "return { url: value }" in build_payload
+    # A dropdown pick supplies realm + its region for a bare character name;
+    # a realm typed into the input ("Name-Realm") wins over the pick.
+    assert "payload.realm = picked.slug" in build_payload
+    assert "payload.region = picked.region" in build_payload
+    assert "!/[,-]/.test(value)" in build_payload
