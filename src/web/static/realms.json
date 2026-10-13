@@ -1,0 +1,4632 @@
+{
+  "generated_at": "2026-10-13T22:12:18+00:00",
+  "source": "https://everythingwow.com/realms",
+  "source_crawled_at": "2026-10-13T06:00:35.699+00:00",
+  "counts": {
+    "eu": 267,
+    "us": 246
+  },
+  "realms": {
+    "eu": [
+      {
+        "region": "eu",
+        "id": 577,
+        "slug": "aegwynn",
+        "name": "Aegwynn",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1312,
+        "slug": "aerie-peak",
+        "name": "Aerie Peak",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 518,
+        "slug": "agamaggan",
+        "name": "Agamaggan",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1413,
+        "slug": "aggra-português",
+        "name": "Aggra (Português)",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 500,
+        "slug": "aggramar",
+        "name": "Aggramar",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1093,
+        "slug": "ahnqiraj",
+        "name": "Ahn'Qiraj",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 519,
+        "slug": "alakir",
+        "name": "Al'Akir",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 562,
+        "slug": "alexstrasza",
+        "name": "Alexstrasza",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 563,
+        "slug": "alleria",
+        "name": "Alleria",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1391,
+        "slug": "alonsus",
+        "name": "Alonsus",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 601,
+        "slug": "amanthul",
+        "name": "Aman'Thul",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1330,
+        "slug": "ambossar",
+        "name": "Ambossar",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1394,
+        "slug": "anachronos",
+        "name": "Anachronos",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1104,
+        "slug": "anetheron",
+        "name": "Anetheron",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 564,
+        "slug": "antonidas",
+        "name": "Antonidas",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 608,
+        "slug": "anubarak",
+        "name": "Anub'arak",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 512,
+        "slug": "arakarahm",
+        "name": "Arak-arahm",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1334,
+        "slug": "arathi",
+        "name": "Arathi",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 501,
+        "slug": "arathor",
+        "name": "Arathor",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 539,
+        "slug": "archimonde",
+        "name": "Archimonde",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1404,
+        "slug": "area-52",
+        "name": "Area 52",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 536,
+        "slug": "argent-dawn",
+        "name": "Argent Dawn",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 578,
+        "slug": "arthas",
+        "name": "Arthas",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1406,
+        "slug": "arygos",
+        "name": "Arygos",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1923,
+        "slug": "ashenvale",
+        "name": "Ashenvale",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 502,
+        "slug": "aszune",
+        "name": "Aszune",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1597,
+        "slug": "auchindoun",
+        "name": "Auchindoun",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 503,
+        "slug": "azjolnerub",
+        "name": "Azjol-Nerub",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 579,
+        "slug": "azshara",
+        "name": "Azshara",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1922,
+        "slug": "azuregos",
+        "name": "Azuregos",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1417,
+        "slug": "azuremyst",
+        "name": "Azuremyst",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 565,
+        "slug": "baelgun",
+        "name": "Baelgun",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 607,
+        "slug": "balnazzar",
+        "name": "Balnazzar",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 566,
+        "slug": "blackhand",
+        "name": "Blackhand",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 580,
+        "slug": "blackmoore",
+        "name": "Blackmoore",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 581,
+        "slug": "blackrock",
+        "name": "Blackrock",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1929,
+        "slug": "blackscar",
+        "name": "Blackscar",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1416,
+        "slug": "blades-edge",
+        "name": "Blade's Edge",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 521,
+        "slug": "bladefist",
+        "name": "Bladefist",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 630,
+        "slug": "bloodfeather",
+        "name": "Bloodfeather",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 504,
+        "slug": "bloodhoof",
+        "name": "Bloodhoof",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 522,
+        "slug": "bloodscalp",
+        "name": "Bloodscalp",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1613,
+        "slug": "blutkessel",
+        "name": "Blutkessel",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1924,
+        "slug": "booty-bay",
+        "name": "Booty Bay",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1625,
+        "slug": "borean-tundra",
+        "name": "Borean Tundra",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1299,
+        "slug": "boulderfist",
+        "name": "Boulderfist",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1393,
+        "slug": "bronze-dragonflight",
+        "name": "Bronze Dragonflight",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1081,
+        "slug": "bronzebeard",
+        "name": "Bronzebeard",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 523,
+        "slug": "burning-blade",
+        "name": "Burning Blade",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 524,
+        "slug": "burning-legion",
+        "name": "Burning Legion",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1392,
+        "slug": "burning-steppes",
+        "name": "Burning Steppes",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1381,
+        "slug": "cthun",
+        "name": "C'Thun",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1307,
+        "slug": "chamber-of-aspects",
+        "name": "Chamber of Aspects",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1620,
+        "slug": "chants-éternels",
+        "name": "Chants éternels",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 545,
+        "slug": "chogall",
+        "name": "Cho'gall",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1083,
+        "slug": "chromaggus",
+        "name": "Chromaggus",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1395,
+        "slug": "colinas-pardas",
+        "name": "Colinas Pardas",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1127,
+        "slug": "confrérie-du-thorium",
+        "name": "Confrérie du Thorium",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 644,
+        "slug": "conseil-des-ombres",
+        "name": "Conseil des Ombres",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 525,
+        "slug": "crushridge",
+        "name": "Crushridge",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1337,
+        "slug": "culte-de-la-rive-noire",
+        "name": "Culte de la Rive noire",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 526,
+        "slug": "daggerspine",
+        "name": "Daggerspine",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 538,
+        "slug": "dalaran",
+        "name": "Dalaran",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1321,
+        "slug": "dalvengyr",
+        "name": "Dalvengyr",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1317,
+        "slug": "darkmoon-faire",
+        "name": "Darkmoon Faire",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 631,
+        "slug": "darksorrow",
+        "name": "Darksorrow",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1389,
+        "slug": "darkspear",
+        "name": "Darkspear",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1619,
+        "slug": "das-konsortium",
+        "name": "Das Konsortium",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 614,
+        "slug": "das-syndikat",
+        "name": "Das Syndikat",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1605,
+        "slug": "deathguard",
+        "name": "Deathguard",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1617,
+        "slug": "deathweaver",
+        "name": "Deathweaver",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 527,
+        "slug": "deathwing",
+        "name": "Deathwing",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1609,
+        "slug": "deepholm",
+        "name": "Deepholm",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 635,
+        "slug": "defias-brotherhood",
+        "name": "Defias Brotherhood",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1084,
+        "slug": "dentarg",
+        "name": "Dentarg",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 1326,
+        "slug": "der-abyssische-rat",
+        "name": "Der abyssische Rat",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1327,
+        "slug": "der-mithrilorden",
+        "name": "Der Mithrilorden",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 617,
+        "slug": "der-rat-von-dalaran",
+        "name": "Der Rat von Dalaran",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 582,
+        "slug": "destromath",
+        "name": "Destromath",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 531,
+        "slug": "dethecus",
+        "name": "Dethecus",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1618,
+        "slug": "die-aldor",
+        "name": "Die Aldor",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1121,
+        "slug": "die-arguswacht",
+        "name": "Die Arguswacht",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1118,
+        "slug": "die-ewige-wacht",
+        "name": "Die ewige Wacht",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1333,
+        "slug": "die-nachtwache",
+        "name": "Die Nachtwache",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 576,
+        "slug": "die-silberne-hand",
+        "name": "Die Silberne Hand",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1119,
+        "slug": "die-todeskrallen",
+        "name": "Die Todeskrallen",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 505,
+        "slug": "doomhammer",
+        "name": "Doomhammer",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "eu",
+        "id": 506,
+        "slug": "draenor",
+        "name": "Draenor",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 507,
+        "slug": "dragonblight",
+        "name": "Dragonblight",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 528,
+        "slug": "dragonmaw",
+        "name": "Dragonmaw",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1092,
+        "slug": "drakthul",
+        "name": "Drak'thul",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 641,
+        "slug": "drekthar",
+        "name": "Drek'Thar",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1378,
+        "slug": "dun-modr",
+        "name": "Dun Modr",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 600,
+        "slug": "dun-morogh",
+        "name": "Dun Morogh",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "eu",
+        "id": 529,
+        "slug": "dunemaul",
+        "name": "Dunemaul",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 535,
+        "slug": "durotan",
+        "name": "Durotan",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 561,
+        "slug": "earthen-ring",
+        "name": "Earthen Ring",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1612,
+        "slug": "echsenkessel",
+        "name": "Echsenkessel",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 1123,
+        "slug": "eitrigg",
+        "name": "Eitrigg",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1336,
+        "slug": "eldrethalas",
+        "name": "Eldre'Thalas",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 540,
+        "slug": "elune",
+        "name": "Elune",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 508,
+        "slug": "emerald-dream",
+        "name": "Emerald Dream",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1091,
+        "slug": "emeriss",
+        "name": "Emeriss",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1310,
+        "slug": "eonar",
+        "name": "Eonar",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 583,
+        "slug": "eredar",
+        "name": "Eredar",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1925,
+        "slug": "eversong",
+        "name": "Eversong",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "eu",
+        "id": 1087,
+        "slug": "executus",
+        "name": "Executus",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1385,
+        "slug": "exodar",
+        "name": "Exodar",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "eu",
+        "id": 1611,
+        "slug": "festung-der-stürme",
+        "name": "Festung der Stürme",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1623,
+        "slug": "fordragon",
+        "name": "Fordragon",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 516,
+        "slug": "forscherliga",
+        "name": "Forscherliga",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1300,
+        "slug": "frostmane",
+        "name": "Frostmane",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 584,
+        "slug": "frostmourne",
+        "name": "Frostmourne",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 632,
+        "slug": "frostwhisper",
+        "name": "Frostwhisper",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 585,
+        "slug": "frostwolf",
+        "name": "Frostwolf",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1614,
+        "slug": "galakrond",
+        "name": "Galakrond",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 509,
+        "slug": "garona",
+        "name": "Garona",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1401,
+        "slug": "garrosh",
+        "name": "Garrosh",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 606,
+        "slug": "genjuros",
+        "name": "Genjuros",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1588,
+        "slug": "ghostlands",
+        "name": "Ghostlands",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 567,
+        "slug": "gilneas",
+        "name": "Gilneas",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1928,
+        "slug": "goldrinn",
+        "name": "Goldrinn",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1602,
+        "slug": "gordunni",
+        "name": "Gordunni",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 586,
+        "slug": "gorgonnash",
+        "name": "Gorgonnash",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1610,
+        "slug": "greymane",
+        "name": "Greymane",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1303,
+        "slug": "grim-batol",
+        "name": "Grim Batol",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1927,
+        "slug": "grom",
+        "name": "Grom",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 587,
+        "slug": "guldan",
+        "name": "Gul'dan",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 646,
+        "slug": "hakkar",
+        "name": "Hakkar",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 638,
+        "slug": "haomarush",
+        "name": "Haomarush",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1587,
+        "slug": "hellfire",
+        "name": "Hellfire",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 619,
+        "slug": "hellscream",
+        "name": "Hellscream",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1615,
+        "slug": "howling-fjord",
+        "name": "Howling Fjord",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 542,
+        "slug": "hyjal",
+        "name": "Hyjal",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 541,
+        "slug": "illidan",
+        "name": "Illidan",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1304,
+        "slug": "jaedenar",
+        "name": "Jaedenar",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 543,
+        "slug": "kaelthas",
+        "name": "Kael'thas",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1596,
+        "slug": "karazhan",
+        "name": "Karazhan",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 568,
+        "slug": "kargath",
+        "name": "Kargath",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1305,
+        "slug": "kazzak",
+        "name": "Kazzak",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 588,
+        "slug": "kelthuzad",
+        "name": "Kel'Thuzad",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1080,
+        "slug": "khadgar",
+        "name": "Khadgar",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 640,
+        "slug": "khaz-modan",
+        "name": "Khaz Modan",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "eu",
+        "id": 569,
+        "slug": "khazgoroth",
+        "name": "Khaz'goroth",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 589,
+        "slug": "kiljaeden",
+        "name": "Kil'jaeden",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1311,
+        "slug": "kilrogg",
+        "name": "Kilrogg",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 537,
+        "slug": "kirin-tor",
+        "name": "Kirin Tor",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 633,
+        "slug": "korgall",
+        "name": "Kor'gall",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 616,
+        "slug": "kragjin",
+        "name": "Krag'jin",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1332,
+        "slug": "krasus",
+        "name": "Krasus",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1082,
+        "slug": "kul-tiras",
+        "name": "Kul Tiras",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 613,
+        "slug": "kult-der-verdammten",
+        "name": "Kult der Verdammten",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1086,
+        "slug": "la-croisade-écarlate",
+        "name": "La Croisade écarlate",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 621,
+        "slug": "laughing-skull",
+        "name": "Laughing Skull",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1626,
+        "slug": "les-clairvoyants",
+        "name": "Les Clairvoyants",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 647,
+        "slug": "les-sentinelles",
+        "name": "Les Sentinelles",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1603,
+        "slug": "lich-king",
+        "name": "Lich King",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1388,
+        "slug": "lightbringer",
+        "name": "Lightbringer",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 637,
+        "slug": "lightnings-blade",
+        "name": "Lightning's Blade",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1409,
+        "slug": "lordaeron",
+        "name": "Lordaeron",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 1387,
+        "slug": "los-errantes",
+        "name": "Los Errantes",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 570,
+        "slug": "lothar",
+        "name": "Lothar",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 571,
+        "slug": "madmortem",
+        "name": "Madmortem",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 622,
+        "slug": "magtheridon",
+        "name": "Magtheridon",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 590,
+        "slug": "malganis",
+        "name": "Mal'Ganis",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 572,
+        "slug": "malfurion",
+        "name": "Malfurion",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1324,
+        "slug": "malorne",
+        "name": "Malorne",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1098,
+        "slug": "malygos",
+        "name": "Malygos",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 591,
+        "slug": "mannoroth",
+        "name": "Mannoroth",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1621,
+        "slug": "marécage-de-zangar",
+        "name": "Marécage de Zangar",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1089,
+        "slug": "mazrigos",
+        "name": "Mazrigos",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 517,
+        "slug": "medivh",
+        "name": "Medivh",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1386,
+        "slug": "minahonda",
+        "name": "Minahonda",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "eu",
+        "id": 1085,
+        "slug": "moonglade",
+        "name": "Moonglade",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1319,
+        "slug": "mugthol",
+        "name": "Mug'thol",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1589,
+        "slug": "nagrand",
+        "name": "Nagrand",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 594,
+        "slug": "nathrezim",
+        "name": "Nathrezim",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1624,
+        "slug": "naxxramas",
+        "name": "Naxxramas",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1105,
+        "slug": "nazjatar",
+        "name": "Nazjatar",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 612,
+        "slug": "nefarian",
+        "name": "Nefarian",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1316,
+        "slug": "nemesis",
+        "name": "Nemesis",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 624,
+        "slug": "neptulon",
+        "name": "Neptulon",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 544,
+        "slug": "nerzhul",
+        "name": "Ner'zhul",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 611,
+        "slug": "nerathor",
+        "name": "Nera'thor",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1607,
+        "slug": "nethersturm",
+        "name": "Nethersturm",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 618,
+        "slug": "nordrassil",
+        "name": "Nordrassil",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1408,
+        "slug": "norgannon",
+        "name": "Norgannon",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "eu",
+        "id": 574,
+        "slug": "nozdormu",
+        "name": "Nozdormu",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 610,
+        "slug": "onyxia",
+        "name": "Onyxia",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1301,
+        "slug": "outland",
+        "name": "Outland",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 575,
+        "slug": "perenolde",
+        "name": "Perenolde",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1309,
+        "slug": "pozzo-delleternità",
+        "name": "Pozzo dell'Eternità",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "eu",
+        "id": 593,
+        "slug": "proudmoore",
+        "name": "Proudmoore",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 623,
+        "slug": "quelthalas",
+        "name": "Quel'Thalas",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 626,
+        "slug": "ragnaros",
+        "name": "Ragnaros",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1322,
+        "slug": "rajaxx",
+        "name": "Rajaxx",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 642,
+        "slug": "rashgarroth",
+        "name": "Rashgarroth",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 554,
+        "slug": "ravencrest",
+        "name": "Ravencrest",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 1308,
+        "slug": "ravenholdt",
+        "name": "Ravenholdt",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1616,
+        "slug": "razuvious",
+        "name": "Razuvious",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1099,
+        "slug": "rexxar",
+        "name": "Rexxar",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 547,
+        "slug": "runetotem",
+        "name": "Runetotem",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1382,
+        "slug": "sanguino",
+        "name": "Sanguino",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 546,
+        "slug": "sargeras",
+        "name": "Sargeras",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1314,
+        "slug": "saurfang",
+        "name": "Saurfang",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1096,
+        "slug": "scarshield-legion",
+        "name": "Scarshield Legion",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 602,
+        "slug": "senjin",
+        "name": "Sen'jin",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 548,
+        "slug": "shadowsong",
+        "name": "Shadowsong",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1598,
+        "slug": "shattered-halls",
+        "name": "Shattered Halls",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 556,
+        "slug": "shattered-hand",
+        "name": "Shattered Hand",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1608,
+        "slug": "shattrath",
+        "name": "Shattrath",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1383,
+        "slug": "shendralar",
+        "name": "Shen'dralar",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 549,
+        "slug": "silvermoon",
+        "name": "Silvermoon",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 533,
+        "slug": "sinstralis",
+        "name": "Sinstralis",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 557,
+        "slug": "skullcrusher",
+        "name": "Skullcrusher",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1604,
+        "slug": "soulflayer",
+        "name": "Soulflayer",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 558,
+        "slug": "spinebreaker",
+        "name": "Spinebreaker",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1606,
+        "slug": "sporeggar",
+        "name": "Sporeggar",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1117,
+        "slug": "steamwheedle-cartel",
+        "name": "Steamwheedle Cartel",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 550,
+        "slug": "stormrage",
+        "name": "Stormrage",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 559,
+        "slug": "stormreaver",
+        "name": "Stormreaver",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 560,
+        "slug": "stormscale",
+        "name": "Stormscale",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 511,
+        "slug": "sunstrider",
+        "name": "Sunstrider",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1331,
+        "slug": "suramar",
+        "name": "Suramar",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 628,
+        "slug": "sylvanas",
+        "name": "Sylvanas",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1320,
+        "slug": "taerar",
+        "name": "Taerar",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 1090,
+        "slug": "talnivarr",
+        "name": "Talnivarr",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1306,
+        "slug": "tarren-mill",
+        "name": "Tarren Mill",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 1407,
+        "slug": "teldrassil",
+        "name": "Teldrassil",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1622,
+        "slug": "temple-noir",
+        "name": "Temple noir",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 551,
+        "slug": "terenas",
+        "name": "Terenas",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1415,
+        "slug": "terokkar",
+        "name": "Terokkar",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 615,
+        "slug": "terrordar",
+        "name": "Terrordar",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 627,
+        "slug": "the-maelstrom",
+        "name": "The Maelstrom",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1595,
+        "slug": "the-shatar",
+        "name": "The Sha'tar",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 636,
+        "slug": "the-venture-co",
+        "name": "The Venture Co",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 605,
+        "slug": "theradras",
+        "name": "Theradras",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1926,
+        "slug": "thermaplugg",
+        "name": "Thermaplugg",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 604,
+        "slug": "thrall",
+        "name": "Thrall",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 643,
+        "slug": "throkferoth",
+        "name": "Throk'Feroth",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 552,
+        "slug": "thunderhorn",
+        "name": "Thunderhorn",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1106,
+        "slug": "tichondrius",
+        "name": "Tichondrius",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 1328,
+        "slug": "tirion",
+        "name": "Tirion",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1405,
+        "slug": "todeswache",
+        "name": "Todeswache",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1088,
+        "slug": "trollbane",
+        "name": "Trollbane",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 553,
+        "slug": "turalyon",
+        "name": "Turalyon",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "eu",
+        "id": 513,
+        "slug": "twilights-hammer",
+        "name": "Twilight's Hammer",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 625,
+        "slug": "twisting-nether",
+        "name": "Twisting Nether",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 1384,
+        "slug": "tyrande",
+        "name": "Tyrande",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1122,
+        "slug": "uldaman",
+        "name": "Uldaman",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1323,
+        "slug": "ulduar",
+        "name": "Ulduar",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1380,
+        "slug": "uldum",
+        "name": "Uldum",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 1400,
+        "slug": "ungoro",
+        "name": "Un'Goro",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 645,
+        "slug": "varimathras",
+        "name": "Varimathras",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 629,
+        "slug": "vashj",
+        "name": "Vashj",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1318,
+        "slug": "veklor",
+        "name": "Vek'lor",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 1298,
+        "slug": "veknilash",
+        "name": "Vek'nilash",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 510,
+        "slug": "voljin",
+        "name": "Vol'jin",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1313,
+        "slug": "wildhammer",
+        "name": "Wildhammer",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 609,
+        "slug": "wrathbringer",
+        "name": "Wrathbringer",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 639,
+        "slug": "xavius",
+        "name": "Xavius",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1097,
+        "slug": "ysera",
+        "name": "Ysera",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1335,
+        "slug": "ysondre",
+        "name": "Ysondre",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 515,
+        "slug": "zenedar",
+        "name": "Zenedar",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 592,
+        "slug": "zirkel-des-cenarius",
+        "name": "Zirkel des Cenarius",
+        "type": "RP",
+        "timezone": "Europe/Paris",
+        "population": "HIGH"
+      },
+      {
+        "region": "eu",
+        "id": 1379,
+        "slug": "zuljin",
+        "name": "Zul'jin",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 573,
+        "slug": "zuluhed",
+        "name": "Zuluhed",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      }
+    ],
+    "us": [
+      {
+        "region": "us",
+        "id": 1136,
+        "slug": "aegwynn",
+        "name": "Aegwynn",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "us",
+        "id": 1284,
+        "slug": "aerie-peak",
+        "name": "Aerie Peak",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1129,
+        "slug": "agamaggan",
+        "name": "Agamaggan",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 106,
+        "slug": "aggramar",
+        "name": "Aggramar",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 1137,
+        "slug": "akama",
+        "name": "Akama",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1070,
+        "slug": "alexstrasza",
+        "name": "Alexstrasza",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 52,
+        "slug": "alleria",
+        "name": "Alleria",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1282,
+        "slug": "altar-of-storms",
+        "name": "Altar of Storms",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1293,
+        "slug": "alterac-mountains",
+        "name": "Alterac Mountains",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 3722,
+        "slug": "amanthul",
+        "name": "Aman'Thul",
+        "type": "NORMAL",
+        "timezone": "Australia/Melbourne",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1276,
+        "slug": "andorhal",
+        "name": "Andorhal",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1264,
+        "slug": "anetheron",
+        "name": "Anetheron",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1363,
+        "slug": "antonidas",
+        "name": "Antonidas",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1346,
+        "slug": "anubarak",
+        "name": "Anub'arak",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1288,
+        "slug": "anvilmar",
+        "name": "Anvilmar",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 1165,
+        "slug": "arathor",
+        "name": "Arathor",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 56,
+        "slug": "archimonde",
+        "name": "Archimonde",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1566,
+        "slug": "area-52",
+        "name": "Area 52",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 75,
+        "slug": "argent-dawn",
+        "name": "Argent Dawn",
+        "type": "RP",
+        "timezone": "America/New_York",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 69,
+        "slug": "arthas",
+        "name": "Arthas",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1297,
+        "slug": "arygos",
+        "name": "Arygos",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1555,
+        "slug": "auchindoun",
+        "name": "Auchindoun",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 77,
+        "slug": "azgalor",
+        "name": "Azgalor",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "us",
+        "id": 121,
+        "slug": "azjolnerub",
+        "name": "Azjol-Nerub",
+        "type": "NORMAL",
+        "timezone": "America/Denver",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 3209,
+        "slug": "azralon",
+        "name": "Azralon",
+        "type": "NORMAL",
+        "timezone": "America/Sao_Paulo",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1128,
+        "slug": "azshara",
+        "name": "Azshara",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "us",
+        "id": 1549,
+        "slug": "azuremyst",
+        "name": "Azuremyst",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1190,
+        "slug": "baelgun",
+        "name": "Baelgun",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1075,
+        "slug": "balnazzar",
+        "name": "Balnazzar",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 3723,
+        "slug": "barthilas",
+        "name": "Barthilas",
+        "type": "NORMAL",
+        "timezone": "Australia/Melbourne",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1280,
+        "slug": "black-dragonflight",
+        "name": "Black Dragonflight",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 54,
+        "slug": "blackhand",
+        "name": "Blackhand",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 10,
+        "slug": "blackrock",
+        "name": "Blackrock",
+        "type": "NORMAL",
+        "timezone": "America/Denver",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1347,
+        "slug": "blackwater-raiders",
+        "name": "Blackwater Raiders",
+        "type": "RP",
+        "timezone": "America/Denver",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1296,
+        "slug": "blackwing-lair",
+        "name": "Blackwing Lair",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1564,
+        "slug": "blades-edge",
+        "name": "Blade's Edge",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1353,
+        "slug": "bladefist",
+        "name": "Bladefist",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 73,
+        "slug": "bleeding-hollow",
+        "name": "Bleeding Hollow",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1558,
+        "slug": "blood-furnace",
+        "name": "Blood Furnace",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "us",
+        "id": 64,
+        "slug": "bloodhoof",
+        "name": "Bloodhoof",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 119,
+        "slug": "bloodscalp",
+        "name": "Bloodscalp",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 83,
+        "slug": "bonechewer",
+        "name": "Bonechewer",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "us",
+        "id": 1371,
+        "slug": "borean-tundra",
+        "name": "Borean Tundra",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 112,
+        "slug": "boulderfist",
+        "name": "Boulderfist",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 117,
+        "slug": "bronzebeard",
+        "name": "Bronzebeard",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 91,
+        "slug": "burning-blade",
+        "name": "Burning Blade",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 102,
+        "slug": "burning-legion",
+        "name": "Burning Legion",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 3721,
+        "slug": "caelestrasz",
+        "name": "Caelestrasz",
+        "type": "NORMAL",
+        "timezone": "Australia/Melbourne",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1361,
+        "slug": "cairne",
+        "name": "Cairne",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 88,
+        "slug": "cenarion-circle",
+        "name": "Cenarion Circle",
+        "type": "RP",
+        "timezone": "America/Denver",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 2,
+        "slug": "cenarius",
+        "name": "Cenarius",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1067,
+        "slug": "chogall",
+        "name": "Cho'gall",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1138,
+        "slug": "chromaggus",
+        "name": "Chromaggus",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1556,
+        "slug": "coilfang",
+        "name": "Coilfang",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 107,
+        "slug": "crushridge",
+        "name": "Crushridge",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 109,
+        "slug": "daggerspine",
+        "name": "Daggerspine",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "us",
+        "id": 66,
+        "slug": "dalaran",
+        "name": "Dalaran",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 1278,
+        "slug": "dalvengyr",
+        "name": "Dalvengyr",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 157,
+        "slug": "dark-iron",
+        "name": "Dark Iron",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 120,
+        "slug": "darkspear",
+        "name": "Darkspear",
+        "type": "NORMAL",
+        "timezone": "America/Denver",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1351,
+        "slug": "darrowmere",
+        "name": "Darrowmere",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 3735,
+        "slug": "dathremar",
+        "name": "Dath'Remar",
+        "type": "NORMAL",
+        "timezone": "Australia/Melbourne",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1582,
+        "slug": "dawnbringer",
+        "name": "Dawnbringer",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 15,
+        "slug": "deathwing",
+        "name": "Deathwing",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1286,
+        "slug": "demon-soul",
+        "name": "Demon Soul",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1271,
+        "slug": "dentarg",
+        "name": "Dentarg",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 79,
+        "slug": "destromath",
+        "name": "Destromath",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "us",
+        "id": 81,
+        "slug": "dethecus",
+        "name": "Dethecus",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 154,
+        "slug": "detheroc",
+        "name": "Detheroc",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 13,
+        "slug": "doomhammer",
+        "name": "Doomhammer",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 115,
+        "slug": "draenor",
+        "name": "Draenor",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 114,
+        "slug": "dragonblight",
+        "name": "Dragonblight",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 84,
+        "slug": "dragonmaw",
+        "name": "Dragonmaw",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1362,
+        "slug": "draktharon",
+        "name": "Drak'Tharon",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1140,
+        "slug": "drakthul",
+        "name": "Drak'thul",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1139,
+        "slug": "draka",
+        "name": "Draka",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1425,
+        "slug": "drakkari",
+        "name": "Drakkari",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "us",
+        "id": 3733,
+        "slug": "dreadmaul",
+        "name": "Dreadmaul",
+        "type": "NORMAL",
+        "timezone": "Australia/Melbourne",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 1377,
+        "slug": "drenden",
+        "name": "Drenden",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 111,
+        "slug": "dunemaul",
+        "name": "Dunemaul",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 63,
+        "slug": "durotan",
+        "name": "Durotan",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1258,
+        "slug": "duskwood",
+        "name": "Duskwood",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 100,
+        "slug": "earthen-ring",
+        "name": "Earthen Ring",
+        "type": "RP",
+        "timezone": "America/New_York",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1342,
+        "slug": "echo-isles",
+        "name": "Echo Isles",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 47,
+        "slug": "eitrigg",
+        "name": "Eitrigg",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 123,
+        "slug": "eldrethalas",
+        "name": "Eldre'Thalas",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 67,
+        "slug": "elune",
+        "name": "Elune",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 162,
+        "slug": "emerald-dream",
+        "name": "Emerald Dream",
+        "type": "RP",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 96,
+        "slug": "eonar",
+        "name": "Eonar",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 93,
+        "slug": "eredar",
+        "name": "Eredar",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 1277,
+        "slug": "executus",
+        "name": "Executus",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1565,
+        "slug": "exodar",
+        "name": "Exodar",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1370,
+        "slug": "farstriders",
+        "name": "Farstriders",
+        "type": "RP",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 118,
+        "slug": "feathermoon",
+        "name": "Feathermoon",
+        "type": "RP",
+        "timezone": "America/Los_Angeles",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1345,
+        "slug": "fenris",
+        "name": "Fenris",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 127,
+        "slug": "firetree",
+        "name": "Firetree",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1576,
+        "slug": "fizzcrank",
+        "name": "Fizzcrank",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 128,
+        "slug": "frostmane",
+        "name": "Frostmane",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 3725,
+        "slug": "frostmourne",
+        "name": "Frostmourne",
+        "type": "NORMAL",
+        "timezone": "Australia/Melbourne",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 7,
+        "slug": "frostwolf",
+        "name": "Frostwolf",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1581,
+        "slug": "galakrond",
+        "name": "Galakrond",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 3234,
+        "slug": "gallywix",
+        "name": "Gallywix",
+        "type": "NORMAL",
+        "timezone": "America/Sao_Paulo",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "us",
+        "id": 1141,
+        "slug": "garithos",
+        "name": "Garithos",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 51,
+        "slug": "garona",
+        "name": "Garona",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1373,
+        "slug": "garrosh",
+        "name": "Garrosh",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "us",
+        "id": 1578,
+        "slug": "ghostlands",
+        "name": "Ghostlands",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 97,
+        "slug": "gilneas",
+        "name": "Gilneas",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1287,
+        "slug": "gnomeregan",
+        "name": "Gnomeregan",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 3207,
+        "slug": "goldrinn",
+        "name": "Goldrinn",
+        "type": "NORMAL",
+        "timezone": "America/Sao_Paulo",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 92,
+        "slug": "gorefiend",
+        "name": "Gorefiend",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 80,
+        "slug": "gorgonnash",
+        "name": "Gorgonnash",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 158,
+        "slug": "greymane",
+        "name": "Greymane",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1579,
+        "slug": "grizzly-hills",
+        "name": "Grizzly Hills",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1068,
+        "slug": "guldan",
+        "name": "Gul'dan",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 3737,
+        "slug": "gundrak",
+        "name": "Gundrak",
+        "type": "NORMAL",
+        "timezone": "Australia/Melbourne",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 129,
+        "slug": "gurubashi",
+        "name": "Gurubashi",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "us",
+        "id": 1142,
+        "slug": "hakkar",
+        "name": "Hakkar",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "us",
+        "id": 1266,
+        "slug": "haomarush",
+        "name": "Haomarush",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 53,
+        "slug": "hellscream",
+        "name": "Hellscream",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 1368,
+        "slug": "hydraxis",
+        "name": "Hydraxis",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 6,
+        "slug": "hyjal",
+        "name": "Hyjal",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 14,
+        "slug": "icecrown",
+        "name": "Icecrown",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 57,
+        "slug": "illidan",
+        "name": "Illidan",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 1291,
+        "slug": "jaedenar",
+        "name": "Jaedenar",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 3736,
+        "slug": "jubeithos",
+        "name": "Jubei'Thos",
+        "type": "NORMAL",
+        "timezone": "Australia/Melbourne",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 1069,
+        "slug": "kaelthas",
+        "name": "Kael'thas",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 155,
+        "slug": "kalecgos",
+        "name": "Kalecgos",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 98,
+        "slug": "kargath",
+        "name": "Kargath",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 16,
+        "slug": "kelthuzad",
+        "name": "Kel'Thuzad",
+        "type": "NORMAL",
+        "timezone": "America/Denver",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 65,
+        "slug": "khadgar",
+        "name": "Khadgar",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1143,
+        "slug": "khaz-modan",
+        "name": "Khaz Modan",
+        "type": "NORMAL",
+        "timezone": "America/Denver",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 3726,
+        "slug": "khazgoroth",
+        "name": "Khaz'goroth",
+        "type": "NORMAL",
+        "timezone": "Australia/Melbourne",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 9,
+        "slug": "kiljaeden",
+        "name": "Kil'jaeden",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 4,
+        "slug": "kilrogg",
+        "name": "Kilrogg",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1071,
+        "slug": "kirin-tor",
+        "name": "Kirin Tor",
+        "type": "RP",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1146,
+        "slug": "korgath",
+        "name": "Korgath",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1349,
+        "slug": "korialstrasz",
+        "name": "Korialstrasz",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1147,
+        "slug": "kul-tiras",
+        "name": "Kul Tiras",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 101,
+        "slug": "laughing-skull",
+        "name": "Laughing Skull",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1295,
+        "slug": "lethon",
+        "name": "Lethon",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1,
+        "slug": "lightbringer",
+        "name": "Lightbringer",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 95,
+        "slug": "lightnings-blade",
+        "name": "Lightning's Blade",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1130,
+        "slug": "lightninghoof",
+        "name": "Lightninghoof",
+        "type": "RP",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 99,
+        "slug": "llane",
+        "name": "Llane",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 68,
+        "slug": "lothar",
+        "name": "Lothar",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1173,
+        "slug": "madoran",
+        "name": "Madoran",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 163,
+        "slug": "maelstrom",
+        "name": "Maelstrom",
+        "type": "RP",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 78,
+        "slug": "magtheridon",
+        "name": "Magtheridon",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1357,
+        "slug": "maiev",
+        "name": "Maiev",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 59,
+        "slug": "malganis",
+        "name": "Mal'Ganis",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1132,
+        "slug": "malfurion",
+        "name": "Malfurion",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1148,
+        "slug": "malorne",
+        "name": "Malorne",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 104,
+        "slug": "malygos",
+        "name": "Malygos",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 70,
+        "slug": "mannoroth",
+        "name": "Mannoroth",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "us",
+        "id": 62,
+        "slug": "medivh",
+        "name": "Medivh",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1350,
+        "slug": "misha",
+        "name": "Misha",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1374,
+        "slug": "moknathal",
+        "name": "Mok'Nathal",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1365,
+        "slug": "moon-guard",
+        "name": "Moon Guard",
+        "type": "RP",
+        "timezone": "America/Chicago",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 153,
+        "slug": "moonrunner",
+        "name": "Moonrunner",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1145,
+        "slug": "mugthol",
+        "name": "Mug'thol",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1182,
+        "slug": "muradin",
+        "name": "Muradin",
+        "type": "NORMAL",
+        "timezone": "America/Denver",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 3734,
+        "slug": "nagrand",
+        "name": "Nagrand",
+        "type": "NORMAL",
+        "timezone": "Australia/Melbourne",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 89,
+        "slug": "nathrezim",
+        "name": "Nathrezim",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1367,
+        "slug": "nazgrel",
+        "name": "Nazgrel",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1131,
+        "slug": "nazjatar",
+        "name": "Nazjatar",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "us",
+        "id": 3208,
+        "slug": "nemesis",
+        "name": "Nemesis",
+        "type": "NORMAL",
+        "timezone": "America/Sao_Paulo",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 8,
+        "slug": "nerzhul",
+        "name": "Ner'zhul",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1375,
+        "slug": "nesingwary",
+        "name": "Nesingwary",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1359,
+        "slug": "nordrassil",
+        "name": "Nordrassil",
+        "type": "NORMAL",
+        "timezone": "America/Denver",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1262,
+        "slug": "norgannon",
+        "name": "Norgannon",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1285,
+        "slug": "onyxia",
+        "name": "Onyxia",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 122,
+        "slug": "perenolde",
+        "name": "Perenolde",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 5,
+        "slug": "proudmoore",
+        "name": "Proudmoore",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 1372,
+        "slug": "queldorei",
+        "name": "Quel'dorei",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1428,
+        "slug": "quelthalas",
+        "name": "Quel'Thalas",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 1427,
+        "slug": "ragnaros",
+        "name": "Ragnaros",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 1072,
+        "slug": "ravencrest",
+        "name": "Ravencrest",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1352,
+        "slug": "ravenholdt",
+        "name": "Ravenholdt",
+        "type": "RP",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1151,
+        "slug": "rexxar",
+        "name": "Rexxar",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1358,
+        "slug": "rivendare",
+        "name": "Rivendare",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 151,
+        "slug": "runetotem",
+        "name": "Runetotem",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 76,
+        "slug": "sargeras",
+        "name": "Sargeras",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 3738,
+        "slug": "saurfang",
+        "name": "Saurfang",
+        "type": "NORMAL",
+        "timezone": "Australia/Melbourne",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 126,
+        "slug": "scarlet-crusade",
+        "name": "Scarlet Crusade",
+        "type": "RP",
+        "timezone": "America/Los_Angeles",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1267,
+        "slug": "scilla",
+        "name": "Scilla",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1185,
+        "slug": "senjin",
+        "name": "Sen'jin",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1290,
+        "slug": "sentinels",
+        "name": "Sentinels",
+        "type": "RP",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 125,
+        "slug": "shadow-council",
+        "name": "Shadow Council",
+        "type": "RP",
+        "timezone": "America/Denver",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 94,
+        "slug": "shadowmoon",
+        "name": "Shadowmoon",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 85,
+        "slug": "shadowsong",
+        "name": "Shadowsong",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1364,
+        "slug": "shandris",
+        "name": "Shandris",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1557,
+        "slug": "shattered-halls",
+        "name": "Shattered Halls",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 72,
+        "slug": "shattered-hand",
+        "name": "Shattered Hand",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1354,
+        "slug": "shuhalo",
+        "name": "Shu'halo",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 12,
+        "slug": "silver-hand",
+        "name": "Silver Hand",
+        "type": "RP",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 86,
+        "slug": "silvermoon",
+        "name": "Silvermoon",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1356,
+        "slug": "sisters-of-elune",
+        "name": "Sisters of Elune",
+        "type": "RP",
+        "timezone": "America/Denver",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 74,
+        "slug": "skullcrusher",
+        "name": "Skullcrusher",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 131,
+        "slug": "skywall",
+        "name": "Skywall",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 130,
+        "slug": "smolderthorn",
+        "name": "Smolderthorn",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 82,
+        "slug": "spinebreaker",
+        "name": "Spinebreaker",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 124,
+        "slug": "spirestone",
+        "name": "Spirestone",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 160,
+        "slug": "staghelm",
+        "name": "Staghelm",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1260,
+        "slug": "steamwheedle-cartel",
+        "name": "Steamwheedle Cartel",
+        "type": "RP",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 108,
+        "slug": "stonemaul",
+        "name": "Stonemaul",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 60,
+        "slug": "stormrage",
+        "name": "Stormrage",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 58,
+        "slug": "stormreaver",
+        "name": "Stormreaver",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 110,
+        "slug": "stormscale",
+        "name": "Stormscale",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 113,
+        "slug": "suramar",
+        "name": "Suramar",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1292,
+        "slug": "tanaris",
+        "name": "Tanaris",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 90,
+        "slug": "terenas",
+        "name": "Terenas",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1563,
+        "slug": "terokkar",
+        "name": "Terokkar",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 3724,
+        "slug": "thaurissan",
+        "name": "Thaurissan",
+        "type": "NORMAL",
+        "timezone": "Australia/Melbourne",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 1344,
+        "slug": "the-forgotten-coast",
+        "name": "The Forgotten Coast",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 1570,
+        "slug": "the-scryers",
+        "name": "The Scryers",
+        "type": "RP",
+        "timezone": "America/New_York",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1559,
+        "slug": "the-underbog",
+        "name": "The Underbog",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1289,
+        "slug": "the-venture-co",
+        "name": "The Venture Co",
+        "type": "RP",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1154,
+        "slug": "thorium-brotherhood",
+        "name": "Thorium Brotherhood",
+        "type": "RP",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1263,
+        "slug": "thrall",
+        "name": "Thrall",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 105,
+        "slug": "thunderhorn",
+        "name": "Thunderhorn",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 103,
+        "slug": "thunderlord",
+        "name": "Thunderlord",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "us",
+        "id": 11,
+        "slug": "tichondrius",
+        "name": "Tichondrius",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 3210,
+        "slug": "tol-barad",
+        "name": "Tol Barad",
+        "type": "NORMAL",
+        "timezone": "America/Sao_Paulo",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1360,
+        "slug": "tortheldrin",
+        "name": "Tortheldrin",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1175,
+        "slug": "trollbane",
+        "name": "Trollbane",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1265,
+        "slug": "turalyon",
+        "name": "Turalyon",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 164,
+        "slug": "twisting-nether",
+        "name": "Twisting Nether",
+        "type": "RP",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1283,
+        "slug": "uldaman",
+        "name": "Uldaman",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 116,
+        "slug": "uldum",
+        "name": "Uldum",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1294,
+        "slug": "undermine",
+        "name": "Undermine",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 156,
+        "slug": "ursin",
+        "name": "Ursin",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 3,
+        "slug": "uther",
+        "name": "Uther",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1348,
+        "slug": "vashj",
+        "name": "Vashj",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1184,
+        "slug": "veknilash",
+        "name": "Vek'nilash",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1567,
+        "slug": "velen",
+        "name": "Velen",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 71,
+        "slug": "warsong",
+        "name": "Warsong",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 55,
+        "slug": "whisperwind",
+        "name": "Whisperwind",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 159,
+        "slug": "wildhammer",
+        "name": "Wildhammer",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 87,
+        "slug": "windrunner",
+        "name": "Windrunner",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 1355,
+        "slug": "winterhoof",
+        "name": "Winterhoof",
+        "type": "NORMAL",
+        "timezone": "America/Los_Angeles",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1369,
+        "slug": "wyrmrest-accord",
+        "name": "Wyrmrest Accord",
+        "type": "RP",
+        "timezone": "America/Los_Angeles",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1270,
+        "slug": "ysera",
+        "name": "Ysera",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1268,
+        "slug": "ysondre",
+        "name": "Ysondre",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "LOW"
+      },
+      {
+        "region": "us",
+        "id": 1572,
+        "slug": "zangarmarsh",
+        "name": "Zangarmarsh",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 61,
+        "slug": "zuljin",
+        "name": "Zul'jin",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "FULL"
+      },
+      {
+        "region": "us",
+        "id": 1259,
+        "slug": "zuluhed",
+        "name": "Zuluhed",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "HIGH"
+      }
+    ]
+  }
+}
