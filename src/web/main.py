@@ -101,11 +101,30 @@ from src.worker import task_status_store
 # ---------------------------------------------------------------------------
 # Pydantic request / response schemas for OpenAPI docs
 # ---------------------------------------------------------------------------
+# Fighting styles for /api/generate-simc.  ``single_boss`` is the default and
+# emits no extra directives, so generated profiles stay byte-identical to the
+# pre-feature behaviour.  ``dungeon_slice`` models a short Mythic+ pull: the
+# enemy dies after ~30 s, so long fights (and their second cooldown window)
+# never happen.  ``time_to_die`` fixes the kill time; ``duration`` caps the
+# fight length for iterations where the sim would otherwise run longer.
+FIGHT_STYLE_SINGLE_BOSS = "single_boss"
+FIGHT_STYLE_DUNGEON_SLICE = "dungeon_slice"
+FIGHT_STYLE_DIRECTIVES = {
+    FIGHT_STYLE_SINGLE_BOSS: "",
+    FIGHT_STYLE_DUNGEON_SLICE: (
+        "# fighting style: dungeon slice (short Mythic+ pull)\n"
+        "duration=30\n"
+        "time_to_die=30\n"
+    ),
+}
+
+
 class GenerateSimcRequest(BaseModel):
     """Payload for ``/api/generate-simc`` – build a SimulationCraft profile."""
     char_class: str
     char_name: str
     base_profile: str
+    fight_style: Optional[str] = FIGHT_STYLE_SINGLE_BOSS
     equipped_gear: Dict[str, str]
     selected_items: Dict[str, List[str]]
     selected_enchants: Optional[Dict[str, Any]] = {}
@@ -1483,6 +1502,12 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest):
     and voidforge modifiers to build a full set of simc profiles (one per
     gear combination).  Writes the result to ``inputs/<input_id>.simc``.
     """
+    fight_style = payload.fight_style or FIGHT_STYLE_SINGLE_BOSS
+    if fight_style not in FIGHT_STYLE_DIRECTIVES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown fight_style '{fight_style}'; expected one of {sorted(FIGHT_STYLE_DIRECTIVES)}",
+        )
     try:
         from src.cli.generate_input import (
             apply_gear_upgrade,
@@ -1568,6 +1593,12 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest):
         extra_sockets = payload.extra_sockets or {}
 
         profile_content = payload.base_profile + "\n"
+
+        # Fighting-style overrides go after the base profile so they win over
+        # any duration/time_to_die the addon export carried, and before the
+        # copy blocks so every candidate profile inherits them.
+        if FIGHT_STYLE_DIRECTIVES[fight_style]:
+            profile_content += FIGHT_STYLE_DIRECTIVES[fight_style] + "\n"
 
         # Baseline gear
         for slot, details in equipped_gear.items():

@@ -1073,6 +1073,7 @@ function renderWorkflow() {
   renderCharChip();
   document.getElementById('run-bar').hidden = false;
   document.getElementById('btn-run').addEventListener('click', runSimulation);
+  document.getElementById('fight-style').addEventListener('change', selectionChanged);
   document.getElementById('btn-stop').addEventListener('click', stopSimulation);
   observeWorkflowSteps();
   updateSummary();
@@ -1116,6 +1117,7 @@ function buildPayload() {
     char_class: parsedData.char_class,
     char_name: parsedData.char_name,
     base_profile: parsedData.base_profile,
+    fight_style: document.getElementById('fight-style')?.value || 'single_boss',
     equipped_gear: parsedData.equipped_gear,
     selected_items: Object.fromEntries(Object.entries(selectedItems).map(([slot, items]) => [slot, Array.from(items)])),
     selected_enchants: enchantPayload,

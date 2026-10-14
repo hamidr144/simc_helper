@@ -1210,6 +1210,39 @@ button.btn-ghost:not(:disabled):hover {
 
 .run-bar button { margin-top: 0; min-height: 44px; }
 
+/* Fighting style selector (sim options in the run bar) */
+.fight-style-control {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.fight-style-label {
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.fight-style-select {
+  min-width: 150px;
+  background: rgba(113, 112, 255, 0.1);
+  border: 1px solid rgba(113, 112, 255, 0.28);
+  border-radius: 8px;
+  color: var(--text-primary);
+  padding: 9px 10px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.fight-style-select:focus {
+  outline: none;
+  border-color: var(--accent, #7170ff);
+  background: rgba(113, 112, 255, 0.18);
+}
+
 /* --- Slot group headers with counts + bulk toggle --- */
 .slot-group-header {
   display: flex;
