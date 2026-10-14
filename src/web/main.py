@@ -772,6 +772,13 @@ def client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+# Set SIMC_COOKIE_SECURE=1 once every client reaches the app through the
+# HTTPS front (docs/tls-fronting.md). Secure cookies are refused by
+# browsers over plain HTTP, so the default stays off while loopback HTTP
+# remains the host-local fallback.
+COOKIE_SECURE = os.environ.get("SIMC_COOKIE_SECURE", "0").strip() == "1"
+
+
 # In-memory per-IP limiters for the credential endpoints (audit F3).
 # Login counts *failed* attempts so a successful login clears the window;
 # register counts every attempt to cap account farming.
@@ -783,7 +790,7 @@ def app_response(request: Request) -> FileResponse:
     """Serve the app and ensure login-free users still get a stable identity."""
     response = FileResponse(APP_PAGE)
     if not request.cookies.get("user_id"):
-        response.set_cookie(key="user_id", value=str(uuid.uuid4()), max_age=31536000, samesite="lax")
+        response.set_cookie(key="user_id", value=str(uuid.uuid4()), max_age=31536000, samesite="lax", secure=COOKIE_SECURE)
     return response
 
 @app.get("/")
@@ -876,7 +883,8 @@ async def login(request: Request, response: Response, username: str = Form(...),
         value=user["user_id"], 
         httponly=True, 
         max_age=3600 * 24 * 7, 
-        samesite="lax"
+        samesite="lax",
+        secure=COOKIE_SECURE,
     )
     return redirect_resp
 

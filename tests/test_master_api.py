@@ -717,6 +717,33 @@ def test_register_stores_pbkdf2_hash(monkeypatch):
     master._registrations.reset()
 
 
+def test_session_cookie_secure_flag_follows_env(monkeypatch):
+    """TLS front (t_d034f7e9): SIMC_COOKIE_SECURE=1 adds the Secure attribute."""
+    _auth_on(monkeypatch)
+    master._login_failures.reset()
+    username = f"sec-{uuid.uuid4().hex[:8]}"
+    user_create(username, security.hash_password("pw-123456"))
+
+    monkeypatch.setattr(master, "COOKIE_SECURE", True)
+    anon = TestClient(app)
+    response = anon.post(
+        "/login", data={"username": username, "password": "pw-123456"}, follow_redirects=False
+    )
+    assert response.status_code == 303
+    cookie = response.headers["set-cookie"]
+    assert "Secure" in cookie and "HttpOnly" in cookie and "SameSite=lax" in cookie
+
+    # Without the TLS front, loopback HTTP must keep working: no Secure.
+    monkeypatch.setattr(master, "COOKIE_SECURE", False)
+    anon2 = TestClient(app)
+    response2 = anon2.post(
+        "/login", data={"username": username, "password": "pw-123456"}, follow_redirects=False
+    )
+    assert response2.status_code == 303
+    assert "Secure" not in response2.headers["set-cookie"]
+    master._login_failures.reset()
+
+
 def test_login_rate_limited_after_repeated_failures(monkeypatch):
     _auth_on(monkeypatch)
     master._login_failures.reset()

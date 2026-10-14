@@ -9,6 +9,7 @@ Simcraft Helper Suite is a Python/FastAPI toolchain for parsing World of Warcraf
 *   [**Master Node Guide**](master_node.md) – FastAPI master server, REST API reference, SSE log streaming, and worker management.
 *   [**Worker Node Guide**](worker_node.md) – Headless worker daemon, PTY log streaming, and SimC compilation.
 *   [**Deployment Guide**](deployment.md) – CMake packaging targets and `utils/deploy.py` commands.
+*   [**TLS Fronting**](tls-fronting.md) – HTTPS reverse proxy, cert trust, router/user-action checklist.
 *   [**Configuration Reference**](configuration.md) – `config.json`, deployment JSON schema, and all environment variables.
 
 ---

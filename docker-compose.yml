@@ -18,6 +18,12 @@
 # Environment variables (defaults are for local development):
 #   HOST              Master bind host          (default: 0.0.0.0)
 #   PORT              Master HTTP port          (default: 8000)
+#   MASTER_BIND       Host interface the master port is published on
+#                     (default: 127.0.0.1 — loopback only; see docs/tls-fronting.md)
+#   SIMC_SITE_ADDRESS Public HTTPS site host for the Caddy TLS front,
+#                     bare host (default: 192.168.0.4)
+#   SIMC_COOKIE_SECURE  Add the Secure attribute to session cookies
+#                     (default: 0; set 1 once all clients use HTTPS)
 #   ADMIN_TOKEN       Admin API token           (required for production)
 #   CLUSTER_SECRET    Master↔Worker secret      (required for production)
 #   SIMC_PATH         Path to SimC binary       (optional)
@@ -75,7 +81,12 @@ services:
   simc-master:
     <<: *common
     ports:
-      - "${PORT:-8000}:8000"
+      # Loopback-only by default (P1 TLS fronting, t_d034f7e9): cleartext
+      # HTTP must not be reachable from LAN/WAN — clients go through the
+      # Caddy TLS front on 443. Workers reach the master over the compose
+      # network (http://simc-master:8000), unaffected by this binding.
+      # Rollback knob: MASTER_BIND=0.0.0.0 restores the old exposure.
+      - "${MASTER_BIND:-127.0.0.1}:${PORT:-8000}:8000"
     environment:
       - HOST=${HOST:-0.0.0.0}
       - PORT=${PORT:-8000}
@@ -90,6 +101,34 @@ services:
       - simc-inputs:/app/data/master/inputs
       # Hot-reload the UI without rebuilding the image (dev-mode compose).
       - ./src/web/static:/app/src/web/static:ro
+
+  # -----------------------------------------------------------------------
+  # Caddy — TLS front (P1 audit HIGH-2, t_d034f7e9). Terminates HTTPS on
+  # 443 (Caddy internal CA; swap in Let's Encrypt when a domain exists) and
+  # proxies to simc-master. HTTP :80 only redirects to HTTPS.
+  # Decision + user-action checklist: docs/tls-fronting.md
+  # -----------------------------------------------------------------------
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      simc-master:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - SIMC_SITE_ADDRESS=${SIMC_SITE_ADDRESS:-192.168.0.4}
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # -----------------------------------------------------------------------
   # Worker(s) — distributed SimC execution nodes
@@ -168,6 +207,10 @@ volumes:
   simc-inputs:
     driver: local
   simc-engine:
+    driver: local
+  caddy-data:
+    driver: local
+  caddy-config:
     driver: local
   redis-data:
     driver: local
