@@ -30,6 +30,7 @@ from src.core.armory import (  # noqa: E402
     parse_armory_model,
     parse_armory_url,
     parse_name_realm,
+    resolve_realm_slug,
     slugify_realm,
 )
 from src.web.main import app  # noqa: E402
@@ -78,6 +79,102 @@ class TestSlugifyRealm:
     ])
     def test_slug_rules(self, raw, slug):
         assert slugify_realm(raw) == slug
+
+
+# ---------------------------------------------------------------------------
+# Non-ASCII known-slug preservation (card t_2f9b5e70, decision t_b9e549d1:
+# realms.json slugs are source-authoritative).  The 7 EU slugs below are the
+# ones NOT idempotent under slugify_realm; picking them in the dropdown must
+# not mangle them into a 404-ing slug.
+# ---------------------------------------------------------------------------
+
+NON_ASCII_SLUGS = [
+    "aggra-português",
+    "chants-éternels",
+    "confrérie-du-thorium",
+    "festung-der-stürme",
+    "la-croisade-écarlate",
+    "marécage-de-zangar",
+    "pozzo-delleternità",
+]
+
+REALMS_JSON = os.path.join(
+    os.path.dirname(__file__), "..", "src", "web", "static", "realms.json"
+)
+
+
+class TestKnownSlugPassthrough:
+    @pytest.mark.parametrize("slug", NON_ASCII_SLUGS)
+    def test_dropdown_pick_survives_parse_armory_input(self, slug):
+        """The exact path the frontend dropdown exercises (name/realm/region
+        fields -> _finish): the slug must come back verbatim."""
+        assert parse_armory_input(name="Testchar", realm=slug, region="eu") == (
+            "eu",
+            slug,
+            "Testchar",
+        )
+
+    @pytest.mark.parametrize("slug", NON_ASCII_SLUGS)
+    def test_resolve_realm_slug_identity_on_card_slugs(self, slug):
+        assert resolve_realm_slug(slug) == slug
+
+    def test_resolve_realm_slug_identity_on_every_realms_json_slug(self):
+        with open(REALMS_JSON, encoding="utf-8") as fh:
+            data = json.load(fh)
+        total = 0
+        for records in data["realms"].values():
+            for rec in records:
+                assert resolve_realm_slug(rec["slug"]) == rec["slug"]
+                total += 1
+        assert total == data["counts"]["eu"] + data["counts"]["us"]
+
+    def test_case_insensitive_match_returns_lowercase_slug(self):
+        assert resolve_realm_slug("Pozzo-Delleternità") == "pozzo-delleternità"
+
+    def test_percent_encoded_slug_in_url_survives(self):
+        assert parse_armory_url(
+            "https://eu.battle.net/wow/en/character/pozzo-delleternit%C3%A0/Testchar"
+        ) == ("eu", "pozzo-delleternità", "Testchar")
+
+    def test_model_url_percent_encodes_slug_on_the_wire(self):
+        request = httpx.Request("GET", build_model_url("eu", "pozzo-delleternità", "Testchar"))
+        assert b"/pozzo-delleternit%C3%A0/" in request.url.raw_path
+
+    def test_fetch_armory_model_keeps_non_ascii_slug(self, monkeypatch):
+        fake_get, calls = fake_get_factory([FakeResponse(200, json.dumps(HAMIDRIEL))])
+        monkeypatch.setattr(armory, "_http_get", fake_get)
+        asyncio.run(fetch_armory_model("eu", "pozzo-delleternità", "Testchar"))
+        assert "/pozzo-delleternità/" in calls[0]
+
+    def test_api_armory_load_preserves_non_ascii_realm(self, monkeypatch):
+        """Dropdown payload shape {name, region, realm} end-to-end through
+        POST /api/armory-load."""
+        seen = {}
+        async def fake_fetch(region, realm, name):
+            seen.update(region=region, realm=realm, name=name)
+            return HAMIDRIEL
+        monkeypatch.setattr("src.web.main.armory_source.fetch_armory_model", fake_fetch)
+        response = client.post("/api/armory-load", json={
+            "name": "Testchar", "region": "eu", "realm": "pozzo-delleternità",
+        })
+        assert response.status_code == 200
+        assert seen == {"region": "eu", "realm": "pozzo-delleternità", "name": "Testchar"}
+
+    # -- fallback: unknown text keeps the exact old slugify_realm behaviour --
+
+    def test_free_text_falls_back_to_slugify(self):
+        assert resolve_realm_slug("Pozzo dell'Eternità") == slugify_realm("Pozzo dell'Eternità")
+        assert resolve_realm_slug("Area 52") == "area-52"
+        assert resolve_realm_slug("Kel'Thuzad") == "kelthuzad"
+        assert resolve_realm_slug("Festung der Stürme") == "festung-der-st-rme"
+
+    def test_missing_realms_json_degrades_to_slugify(self, monkeypatch):
+        monkeypatch.setattr(
+            armory, "_REALMS_JSON_PATH",
+            os.path.join(os.path.dirname(__file__), "no-such-realms.json"),
+        )
+        monkeypatch.setattr(armory, "_known_realm_slugs_cache", None)
+        assert resolve_realm_slug("pozzo-delleternità") == "pozzo-delleternit"
 
 
 # ---------------------------------------------------------------------------
