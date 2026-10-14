@@ -85,6 +85,40 @@ def user_get(username: str) -> Optional[Dict[str, Any]]:
     finally:
         conn.close()
 
+def user_get_by_id(user_id: str) -> Optional[Dict[str, Any]]:
+    """Return the user record for *user_id*, or None if not found.
+
+    Used by the API session gate: a ``session_id`` cookie is valid only while
+    it names an existing user (the ``user_sessions`` table is a cooldown
+    tracker that is purged regularly and must not back auth decisions).
+    """
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT user_id, username, password_hash, created_at FROM users WHERE user_id = ?", (user_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "user_id": row[0],
+            "username": row[1],
+            "password_hash": row[2],
+            "created_at": row[3],
+        }
+    finally:
+        conn.close()
+
+def user_set_password_hash(user_id: str, password_hash: str) -> None:
+    """Overwrite the stored password hash for *user_id* (legacy-hash upgrade)."""
+    conn = _connect()
+    try:
+        conn.execute(
+            "UPDATE users SET password_hash = ? WHERE user_id = ?", (password_hash, user_id)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
 def user_create(username: str, password_hash: str) -> str:
     """Create a new user and return their *user_id*. Raises Exception if username exists."""
     conn = _connect()

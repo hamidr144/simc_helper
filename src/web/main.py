@@ -1,6 +1,5 @@
 import asyncio
 import glob
-import hashlib
 import html
 import json
 import logging
@@ -49,6 +48,7 @@ from xml.etree import ElementTree
 
 import httpx
 from fastapi import (
+    Depends,
     FastAPI,
     File,
     Form,
@@ -92,9 +92,17 @@ from src.core.db import (
     session_set,
     user_create,
     user_get,
+    user_get_by_id,
+    user_set_password_hash,
 )
 from src.core.env import get_bind_host, load_cluster_secret, require_admin_token
 from src.core.paths import safe_child_path, safe_task_dir, validate_safe_id
+from src.core.security import (
+    RateLimiter,
+    hash_password,
+    password_needs_rehash,
+    verify_password,
+)
 from src.worker import task_status_store
 
 
@@ -329,24 +337,29 @@ class ShutdownResponse(BaseModel):
 # Settings endpoints
 # ---------------------------------------------------------------------------
 class SettingsResponse(BaseModel):
-    """Response from ``/api/settings``."""
+    """Response from ``/api/settings``.
+
+    Sensitive runtime values (dev mode, WebSocket sizing) are deliberately
+    not exposed over the wire (audit F2).
+    """
     master_url: str
     log_level: str
     sim_cooldown_seconds: int
     cors_enabled: bool
     cors_allowed_origins: str
-    simc_helper_dev_mode: bool
-    ws_max_size: int
 
 
 class UpdateSettingsRequest(BaseModel):
-    """Payload for ``/api/settings`` (POST)."""
+    """Payload for ``/api/settings`` (POST).
+
+    ``SIMC_HELPER_DEV_MODE`` is env-only and cannot be toggled through this
+    API (audit F2); the field was removed from this model entirely.
+    """
     master_url: str
     log_level: str
     sim_cooldown_seconds: int
     cors_enabled: bool
     cors_allowed_origins: str
-    simc_helper_dev_mode: bool
     ws_max_size: int
 
 CLUSTER_SECRET = load_cluster_secret("master")
@@ -566,6 +579,7 @@ app = FastAPI(
         "- **Persistent storage** – SQLite-backed session & input history\n"
         "\n"
         "### Authentication\n"
+        "- Interactive pages and state-changing API endpoints require a logged-in session (`session_id` cookie); unauthenticated API calls get 401\n"
         "- Admin endpoints require an `X-Admin-Token` header or `admin_token` query parameter\n"
         "- Worker nodes authenticate via the `CLUSTER_SECRET` environment variable\n"
         "\n"
@@ -659,6 +673,46 @@ def authentication_enabled() -> bool:
     return os.environ.get("AUTHENTICATION_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"}
 
 
+def require_session(request: Request) -> str:
+    """FastAPI dependency: require a valid server-side session on an endpoint.
+
+    The ``session_id`` cookie set at login must name an existing user (the
+    ``user_sessions`` table is only a cooldown tracker and is purged
+    regularly, so validity is checked against the ``users`` table).
+
+    Security policy (P0 audit F1):
+    - ``SIMC_HELPER_DEV_MODE`` must NEVER bypass this gate — dev mode only
+      relaxes page redirects, never API auth.
+    - Only the operator-level ``AUTHENTICATION_ENABLED=false`` kill switch
+      (env-only) bypasses it, matching the login-free page behaviour.
+
+    Returns the authenticated user_id, or ``"anonymous"`` when auth is
+    disabled process-wide.
+    """
+    if not authentication_enabled():
+        return "anonymous"
+    session_id = request.cookies.get("session_id")
+    if not session_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    user = user_get_by_id(session_id)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+    return user["user_id"]
+
+
+def client_ip(request: Request) -> str:
+    """Best-effort client identity for rate limiting (proxy headers are
+    deliberately not trusted here — proxy hardening is a separate task)."""
+    return request.client.host if request.client else "unknown"
+
+
+# In-memory per-IP limiters for the credential endpoints (audit F3).
+# Login counts *failed* attempts so a successful login clears the window;
+# register counts every attempt to cap account farming.
+_login_failures = RateLimiter(max_events=5, window_seconds=300)
+_registrations = RateLimiter(max_events=5, window_seconds=3600)
+
+
 def app_response(request: Request) -> FileResponse:
     """Serve the app and ensure login-free users still get a stable identity."""
     response = FileResponse(APP_PAGE)
@@ -709,29 +763,44 @@ async def login_page(request: Request):
 
 
 @app.post("/register")
-async def register(username: str = Form(...), password: str = Form(...)):
+async def register(request: Request, username: str = Form(...), password: str = Form(...)):
     if not authentication_enabled():
         raise HTTPException(status_code=403, detail="User authentication is disabled")
+    ip = client_ip(request)
+    if _registrations.is_limited(ip):
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many registrations; retry in {_registrations.retry_after(ip)}s",
+        )
+    _registrations.record(ip)
     if user_get(username):
         raise HTTPException(status_code=400, detail="Username already exists")
-    
-    password_hash = hashlib.sha256(password.encode()).hexdigest()
+
+    password_hash = hash_password(password)
     user_id = user_create(username, password_hash)
     return {"status": "success", "user_id": user_id, "username": username}
 
 
 @app.post("/login")
-async def login(response: Response, username: str = Form(...), password: str = Form(...)):
+async def login(request: Request, response: Response, username: str = Form(...), password: str = Form(...)):
     if not authentication_enabled():
         raise HTTPException(status_code=403, detail="User authentication is disabled")
+    ip = client_ip(request)
+    if _login_failures.is_limited(ip):
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many failed login attempts; retry in {_login_failures.retry_after(ip)}s",
+        )
     user = user_get(username)
-    if not user:
+    if not user or not verify_password(password, user["password_hash"]):
+        _login_failures.record(ip)
         raise HTTPException(status_code=401, detail="Invalid username or password")
-    
-    expected_hash = hashlib.sha256(password.encode()).hexdigest()
-    if user["password_hash"] != expected_hash:
-        raise HTTPException(status_code=401, detail="Invalid username or password")
-    
+
+    # Transparent upgrade of legacy unsalted SHA-256 hashes to salted PBKDF2.
+    if password_needs_rehash(user["password_hash"]):
+        user_set_password_hash(user["user_id"], hash_password(password))
+    _login_failures.reset(ip)
+
     # Ensure session exists in DB
     session_set(user["user_id"], time.time())
     
@@ -762,7 +831,7 @@ async def get_session_route(user_id: str):
 
 
 @app.post("/session/{user_id}/update")
-async def update_session_route(user_id: str, request: SimulationRequest):
+async def update_session_route(user_id: str, request: SimulationRequest, _: str = Depends(require_session)):
     session_set(user_id, request.sim_time)
     return {"status": "success", "user_id": user_id, "last_sim_time": request.sim_time}
 
@@ -1405,7 +1474,7 @@ async def get_wowhead_upgrades(payload: WowheadUpgradesRequest):
     return {"status": "success", "gear_upgrades": results, "errors": errors}
 
 @app.post("/api/parse-addon", response_model=ParseAddonResponse, tags=["Addons"])
-async def parse_addon_text(payload: ParseAddonRequest):
+async def parse_addon_text(payload: ParseAddonRequest, _: str = Depends(require_session)):
     """Parse SimulationCraft addon text into structured character data.
 
     **Tags:** Addons
@@ -1437,7 +1506,7 @@ async def parse_addon_text(payload: ParseAddonRequest):
     }
 
 @app.post("/api/armory-load", response_model=ArmoryLoadResponse, tags=["Addons"])
-async def armory_load_character(payload: ArmoryLoadRequest):
+async def armory_load_character(payload: ArmoryLoadRequest, _: str = Depends(require_session)):
     """Load a character + equipped gear from the WoW Armory (no addon export).
 
     **Tags:** Addons
@@ -1495,7 +1564,7 @@ async def armory_load_character(payload: ArmoryLoadRequest):
 
 
 @app.post("/api/generate-simc", response_model=GenerateSimcResponse, tags=["Profiles"])
-async def generate_simc(request: Request, payload: GenerateSimcRequest):
+async def generate_simc(request: Request, payload: GenerateSimcRequest, current_user: str = Depends(require_session)):
     """Generate a SimulationCraft profile with item variations based on the selected gear.
 
     **Tags:** Profiles
@@ -1681,7 +1750,7 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest):
         with open("char_simc_addon.txt", "w", encoding="utf-8") as f:
             f.write(profile_content)
 
-        user_id = request.cookies.get("session_id") or request.cookies.get("user_id") or f"ip_{request.client.host}"
+        user_id = current_user if current_user != "anonymous" else (request.cookies.get("user_id") or f"ip_{request.client.host}")
         record = {"input_id": input_id, "file_path": file_path, "input_url": f"/inputs/{input_id}.simc"}
         generated_inputs_by_user[user_id] = record
         generated_inputs_by_user["latest"] = record
@@ -1695,11 +1764,12 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post('/api/update-simc', response_model=UpdateSimcResponse, tags=['Admin'])
-async def update_simc(request: Request):
+async def update_simc(request: Request, _: str = Depends(require_session)):
     """Request a SimulationCraft engine update on an idle worker.
 
     **Tags:** Admin
-    **Authentication:** Requires ``X-Admin-Token`` header or ``admin_token`` query param.
+    **Authentication:** Requires a logged-in session **and** the ``X-Admin-Token``
+    header (or ``admin_token`` query param) when ``ADMIN_TOKEN`` is configured.
     **Response Model:** ``UpdateSimcResponse``
     """
     require_admin_token(request.headers.get("X-Admin-Token") or request.query_params.get("admin_token"))
@@ -1795,10 +1865,12 @@ async def simulation_event_generator(task_id: str, worker_id: str):
         if task_id in manager.task_queues: del manager.task_queues[task_id]
 
 @app.post("/api/run-simulation", response_model=RunSimulationResponse, tags=["Simulation"])
-async def run_simulation(request: Request, worker_id: Optional[str] = Query(None), input_id: Optional[str] = Query(None)):
+async def run_simulation(request: Request, worker_id: Optional[str] = Query(None), input_id: Optional[str] = Query(None), current_user: str = Depends(require_session)):
     """Run a SimulationCraft simulation on an available worker.
 
     **Tags:** Simulation
+    **Authentication:** Requires a logged-in session (``session_id`` cookie);
+    unauthenticated callers get HTTP 401 — dev mode never bypasses this.
     **Query Parameters:**
       - ``worker_id``: Optional worker ID to target (auto-selected if omitted)
       - ``input_id``: Optional input file ID (defaults to user's latest)
@@ -1807,7 +1879,7 @@ async def run_simulation(request: Request, worker_id: Optional[str] = Query(None
 
     **Response Model:** ``RunSimulationResponse``
     """
-    user_id = request.cookies.get("session_id") or request.cookies.get("user_id") or f"ip_{request.client.host}"
+    user_id = current_user if current_user != "anonymous" else (request.cookies.get("user_id") or f"ip_{request.client.host}")
     now = time.time()
     db_time = session_get(user_id)
     if db_time is not None and now - db_time < 30:
@@ -1994,63 +2066,64 @@ async def worker_websocket(websocket: WebSocket, name: str, secret: str):
 async def get_settings():
     """Get current application settings.
 
+    Sensitive fields (dev mode, ws_max_size) are stripped from the response
+    (audit F2).
+
     **Tags:** Settings
     **Response Model:** ``SettingsResponse``
     """
     cors_origins_str = os.environ.get("CORS_ALLOWED_ORIGINS", "")
     cors_enabled = bool(cors_origins_str.strip()) or os.environ.get("SIMC_HELPER_DEV_MODE") == "1"
-    
+
     return {
         "master_url": os.environ.get("MASTER_URL", ""),
         "log_level": os.environ.get("LOG_LEVEL", "INFO"),
         "sim_cooldown_seconds": SIM_COOLDOWN_SECONDS,
         "cors_enabled": cors_enabled,
         "cors_allowed_origins": cors_origins_str,
-        "simc_helper_dev_mode": os.environ.get("SIMC_HELPER_DEV_MODE") == "1",
-        "ws_max_size": int(os.environ.get("WS_MAX_SIZE", "67108864")),  # 64MB default
     }
 
 
 @app.post("/api/settings", response_model=SettingsResponse, tags=["Settings"])
-async def update_settings(request: UpdateSettingsRequest):
+async def update_settings(request: Request, payload: UpdateSettingsRequest):
     """Update application settings (runtime only - restart required for some changes).
 
     **Tags:** Settings
+    **Authentication:** Requires ``X-Admin-Token`` header or ``admin_token``
+    query param (audit F2 — this endpoint mutates process environment).
     **Request Model:** ``UpdateSettingsRequest``
     """
+    require_admin_token(request.headers.get("X-Admin-Token") or request.query_params.get("admin_token"))
+
     # Update CORS settings if changed
-    if request.cors_enabled:
-        if request.cors_allowed_origins:
-            os.environ["CORS_ALLOWED_ORIGINS"] = request.cors_allowed_origins
-            logger.info("CORS enabled for origins: %s", request.cors_allowed_origins)
+    if payload.cors_enabled:
+        if payload.cors_allowed_origins:
+            os.environ["CORS_ALLOWED_ORIGINS"] = payload.cors_allowed_origins
+            logger.info("CORS enabled for origins: %s", payload.cors_allowed_origins)
         else:
             os.environ["CORS_ALLOWED_ORIGINS"] = '["*"]'
             logger.info("CORS enabled for all origins")
     else:
         os.environ["CORS_ALLOWED_ORIGINS"] = ""
         logger.info("CORS disabled")
-    
-    # Update dev mode
-    if request.simc_helper_dev_mode:
-        os.environ["SIMC_HELPER_DEV_MODE"] = "1"
-        logger.info("Dev mode enabled")
-    else:
-        os.environ["SIMC_HELPER_DEV_MODE"] = "0"
-        logger.info("Dev mode disabled")
-    
+
+    # NOTE: SIMC_HELPER_DEV_MODE is env-only and deliberately NOT settable
+    # here anymore (audit F2).  Runtime toggling used to let any unauthenticated
+    # caller disable auth redirects and open CORS to "*".
+
     # Update WebSocket max message size
-    os.environ["WS_MAX_SIZE"] = str(request.ws_max_size)
-    
+    os.environ["WS_MAX_SIZE"] = str(payload.ws_max_size)
+
     # Update sim cooldown
     global SIM_COOLDOWN_SECONDS
-    SIM_COOLDOWN_SECONDS = request.sim_cooldown_seconds
-    logger.info("Sim cooldown updated to %d seconds", request.sim_cooldown_seconds)
-    
+    SIM_COOLDOWN_SECONDS = payload.sim_cooldown_seconds
+    logger.info("Sim cooldown updated to %d seconds", payload.sim_cooldown_seconds)
+
     # Update log level
-    if request.log_level:
-        os.environ["LOG_LEVEL"] = request.log_level
+    if payload.log_level:
+        os.environ["LOG_LEVEL"] = payload.log_level
         # Note: full log level reload requires restart
-    
+
     logger.info("Settings updated successfully")
     return await get_settings()
 

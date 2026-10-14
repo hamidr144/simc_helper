@@ -544,3 +544,186 @@ def test_api_task_status_not_found():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "not_found"
+
+
+# =========================================================================
+# P0 security gate (audit t_0fef205c): session auth on state-changing APIs,
+# settings admin-token auth, PBKDF2 hashing with legacy upgrade, rate limits.
+# The suite-wide conftest disables auth (kill switch); these tests opt back in.
+# =========================================================================
+
+import hashlib
+import uuid
+
+import web.main as master
+from src.core import security
+from src.core.db import user_create, user_get
+
+
+def _auth_on(monkeypatch):
+    monkeypatch.setattr(master, "authentication_enabled", lambda: True)
+    monkeypatch.delenv("SIMC_HELPER_DEV_MODE", raising=False)
+
+
+def _settings_payload(**overrides):
+    payload = {
+        "master_url": "",
+        "log_level": "INFO",
+        "sim_cooldown_seconds": 300,
+        "cors_enabled": False,
+        "cors_allowed_origins": "",
+        "ws_max_size": 1048576,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _generate_payload():
+    return {
+        "char_class": "paladin",
+        "char_name": "Test",
+        "base_profile": "paladin=Test",
+        "equipped_gear": {},
+        "selected_items": {},
+    }
+
+
+def test_run_simulation_unauthenticated_returns_401(monkeypatch):
+    _auth_on(monkeypatch)
+    anon = TestClient(app)
+    response = anon.post("/api/run-simulation")
+    assert response.status_code == 401
+
+
+def test_invalid_session_cookie_returns_401(monkeypatch):
+    _auth_on(monkeypatch)
+    anon = TestClient(app)
+    anon.cookies.set("session_id", "user-id-that-does-not-exist")
+    response = anon.post("/api/parse-addon", json={"addon_text": "paladin=Test\nhead=id=123"})
+    assert response.status_code == 401
+
+
+def test_dev_mode_never_bypasses_api_session_gate(monkeypatch):
+    _auth_on(monkeypatch)
+    monkeypatch.setenv("SIMC_HELPER_DEV_MODE", "1")
+    anon = TestClient(app)
+    assert anon.post("/api/run-simulation").status_code == 401
+    assert anon.post("/api/parse-addon", json={"addon_text": "paladin=Test"}).status_code == 401
+    assert anon.post("/api/generate-simc", json=_generate_payload()).status_code == 401
+    assert anon.post("/api/armory-load", json={"name": "X-Y"}).status_code == 401
+    assert anon.post("/session/some-user/update", json={"user_id": "some-user", "sim_time": 1.0}).status_code == 401
+    assert anon.post("/api/update-simc").status_code == 401
+
+
+def test_valid_session_passes_gate_run_simulation(monkeypatch):
+    _auth_on(monkeypatch)
+    username = f"sec-{uuid.uuid4().hex[:8]}"
+    user_id = user_create(username, security.hash_password("pw-not-used"))
+    monkeypatch.setattr(master.manager, "get_idle_worker", lambda: None)
+    authed = TestClient(app)
+    authed.cookies.set("session_id", user_id)
+    response = authed.post("/api/run-simulation")
+    # Past the auth gate; fails later only because no workers are connected.
+    assert response.status_code == 503
+
+
+def test_settings_post_requires_admin_token(monkeypatch):
+    monkeypatch.setenv("ADMIN_TOKEN", "test-admin-token")
+    monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "")
+    monkeypatch.setenv("WS_MAX_SIZE", "67108864")
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    response = client.post("/api/settings", json=_settings_payload())
+    assert response.status_code == 403
+    ok = client.post(
+        "/api/settings", json=_settings_payload(), headers={"X-Admin-Token": "test-admin-token"}
+    )
+    assert ok.status_code == 200
+
+
+def test_settings_post_cannot_toggle_dev_mode(monkeypatch):
+    monkeypatch.setenv("ADMIN_TOKEN", "test-admin-token")
+    monkeypatch.setenv("SIMC_HELPER_DEV_MODE", "0")
+    monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "")
+    monkeypatch.setenv("WS_MAX_SIZE", "67108864")
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    response = client.post(
+        "/api/settings",
+        # Extra dev-mode field must be ignored (removed from the model).
+        json=_settings_payload(simc_helper_dev_mode=True),
+        headers={"X-Admin-Token": "test-admin-token"},
+    )
+    assert response.status_code == 200
+    assert os.environ["SIMC_HELPER_DEV_MODE"] == "0"
+    body = response.json()
+    assert "simc_helper_dev_mode" not in body
+    assert "ws_max_size" not in body
+
+
+def test_settings_get_strips_sensitive_fields(monkeypatch):
+    monkeypatch.setenv("SIMC_HELPER_DEV_MODE", "1")
+    body = client.get("/api/settings").json()
+    assert set(body) == {
+        "master_url",
+        "log_level",
+        "sim_cooldown_seconds",
+        "cors_enabled",
+        "cors_allowed_origins",
+    }
+
+
+def test_login_with_legacy_sha256_hash_succeeds_and_upgrades(monkeypatch):
+    _auth_on(monkeypatch)
+    master._login_failures.reset()
+    username = f"legacy-{uuid.uuid4().hex[:8]}"
+    password = "legacy-password-123"
+    user_create(username, hashlib.sha256(password.encode()).hexdigest())
+
+    anon = TestClient(app)
+    response = anon.post(
+        "/login", data={"username": username, "password": password}, follow_redirects=False
+    )
+    assert response.status_code == 303
+    assert anon.cookies.get("session_id")
+
+    stored = user_get(username)["password_hash"]
+    assert stored.startswith("pbkdf2_sha256$")
+    assert security.verify_password(password, stored)
+
+    # Second login verifies against the upgraded hash...
+    again = TestClient(app)
+    response2 = again.post(
+        "/login", data={"username": username, "password": password}, follow_redirects=False
+    )
+    assert response2.status_code == 303
+    # ...and the issued session cookie passes the API gate (UI keeps working).
+    gated = again.post("/api/parse-addon", json={"addon_text": "paladin=Test\nhead=id=123"})
+    assert gated.status_code == 200
+    master._login_failures.reset()
+
+
+def test_register_stores_pbkdf2_hash(monkeypatch):
+    _auth_on(monkeypatch)
+    master._registrations.reset()
+    username = f"reg-{uuid.uuid4().hex[:8]}"
+    anon = TestClient(app)
+    response = anon.post("/register", data={"username": username, "password": "pw-123456"})
+    assert response.status_code == 200
+    assert user_get(username)["password_hash"].startswith("pbkdf2_sha256$")
+    master._registrations.reset()
+
+
+def test_login_rate_limited_after_repeated_failures(monkeypatch):
+    _auth_on(monkeypatch)
+    master._login_failures.reset()
+    username = f"rl-{uuid.uuid4().hex[:8]}"
+    user_create(username, security.hash_password("correct-horse-battery"))
+    anon = TestClient(app)
+    for _ in range(5):
+        bad = anon.post("/login", data={"username": username, "password": "wrong"})
+        assert bad.status_code == 401
+    limited = anon.post("/login", data={"username": username, "password": "wrong"})
+    assert limited.status_code == 429
+    # While limited, even the correct password is refused (lockout by IP).
+    blocked = anon.post("/login", data={"username": username, "password": "correct-horse-battery"})
+    assert blocked.status_code == 429
+    master._login_failures.reset()
