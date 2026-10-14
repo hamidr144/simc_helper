@@ -1,0 +1,87 @@
+{
+  "generated_at": "2026-10-13T22:12:18+00:00",
+  "source": "https://everythingwow.com/realms",
+  "source_crawled_at": "2026-10-13T06:00:35.699+00:00",
+  "counts": {
+    "eu": 4,
+    "us": 4
+  },
+  "realms": {
+    "eu": [
+      {
+        "region": "eu",
+        "id": 577,
+        "slug": "aegwynn",
+        "name": "Aegwynn",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "LOW"
+      },
+      {
+        "region": "eu",
+        "id": 1413,
+        "slug": "aggra-português",
+        "name": "Aggra (Português)",
+        "type": "NORMAL",
+        "timezone": "Europe/Paris",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "eu",
+        "id": 588,
+        "slug": "kelthuzad",
+        "name": "Kel'Thuzad",
+        "type": "NORMAL",
+        "timezone": "Europe/Berlin",
+        "population": "FULL"
+      },
+      {
+        "region": "eu",
+        "id": 1309,
+        "slug": "pozzo-delleternità",
+        "name": "Pozzo dell'Eternità",
+        "type": "NORMAL",
+        "timezone": "Europe/Rome",
+        "population": "LOW"
+      }
+    ],
+    "us": [
+      {
+        "region": "us",
+        "id": 1136,
+        "slug": "aegwynn",
+        "name": "Aegwynn",
+        "type": "NORMAL",
+        "timezone": "America/Chicago",
+        "population": "RECOMMENDED"
+      },
+      {
+        "region": "us",
+        "id": 590,
+        "slug": "area-52",
+        "name": "Area 52",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "HIGH"
+      },
+      {
+        "region": "us",
+        "id": 1564,
+        "slug": "blades-edge",
+        "name": "Blade's Edge",
+        "type": "RP",
+        "timezone": "America/New_York",
+        "population": "MEDIUM"
+      },
+      {
+        "region": "us",
+        "id": 16,
+        "slug": "kelthuzad",
+        "name": "Kel'Thuzad",
+        "type": "NORMAL",
+        "timezone": "America/New_York",
+        "population": "NORMAL"
+      }
+    ]
+  }
+}
