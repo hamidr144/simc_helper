@@ -49,6 +49,17 @@ Expected behavior:
 - If a slot has no recognized equipped item, its first available item is selected as a fallback.
 - Rings and trinkets are presented as shared candidate groups for their respective paired slots.
 
+### Realm dropdown
+
+In the **Or load from Armory** controls, a realm dropdown lets the user pick a realm from a
+list instead of typing it: enter a bare character name, choose the realm (grouped EU/US), and
+**Load from Armory** sends the name with the picked realm's slug and region. A realm typed
+directly into the input (`Name-Realm` or `Name, Realm`) still wins over the dropdown pick, and
+a pasted Armory link wins over both. The list is a static snapshot up to date as of the
+`generated_at` date in `realms.json` (see [realm_list.md](realm_list.md)); if that file is
+missing or fails to load, the dropdown simply stays hidden and free-text `Name-Realm` entry
+works exactly as before.
+
 ## 2. Select gear candidates
 
 Each item card represents one candidate for its gear slot.
