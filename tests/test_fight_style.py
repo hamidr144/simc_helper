@@ -1,8 +1,9 @@
 """Fighting style selector: UI wiring and generated simc directives.
 
 Design (documented for review):
-- ``single_boss`` is the default and appends NOTHING, so profiles stay
-  byte-identical to the pre-feature behaviour for existing users.
+- ``single_boss`` is the default and fixes the fight at 5 minutes:
+  ``duration=300`` (no ``time_to_die`` — the boss must not die early), appended
+  after the base profile so it overrides any duration the addon export carried.
 - ``dungeon_slice`` models a short Mythic+ pull: ``time_to_die=30`` fixes the
   kill time and ``duration=30`` caps the fight length, both appended after the
   base profile so they override any duration the addon export carried.
@@ -50,11 +51,18 @@ def test_dungeon_slice_emits_short_fight_directives():
     assert generated.index("time_to_die=30") < generated.index('copy="Test_trinket_0')
 
 
-def test_default_fight_style_keeps_behaviour_unchanged():
+def test_default_fight_style_emits_single_boss_5min_directive():
     generated = _generate()
+    assert "# fighting style: single boss (5 min fixed fight)\n" in generated
+    assert "duration=300\n" in generated
+    # Directive must come after the base profile so it overrides the export.
+    assert generated.index("simulate 10000") < generated.index("duration=300")
+    # ...and before the copy blocks so every candidate inherits it.
+    assert generated.index("duration=300") < generated.index('copy="Test_trinket_0')
+    # Boss must not die early, and this must not be the dungeon-slice directives.
+    # (Check "duration=30\n" — plain "duration=30" is a prefix of "duration=300".)
     assert "time_to_die" not in generated
-    assert "duration=30" not in generated
-    assert "fighting style" not in generated
+    assert "duration=30\n" not in generated
 
 
 def test_single_boss_matches_default_output():
@@ -70,7 +78,7 @@ def test_unknown_fight_style_is_rejected():
 def test_run_bar_shows_fighting_style_dropdown_with_two_choices():
     html = client.get("/").text
     assert 'id="fight-style"' in html
-    assert '<option value="single_boss" selected>Single boss</option>' in html
+    assert '<option value="single_boss" selected>Single boss (5 min)</option>' in html
     assert '<option value="dungeon_slice">Dungeon slice</option>' in html
     # Exactly two choices.
     select_block = html.split('id="fight-style"', 1)[1].split("</select>", 1)[0]

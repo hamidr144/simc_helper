@@ -102,15 +102,19 @@ from src.worker import task_status_store
 # Pydantic request / response schemas for OpenAPI docs
 # ---------------------------------------------------------------------------
 # Fighting styles for /api/generate-simc.  ``single_boss`` is the default and
-# emits no extra directives, so generated profiles stay byte-identical to the
-# pre-feature behaviour.  ``dungeon_slice`` models a short Mythic+ pull: the
-# enemy dies after ~30 s, so long fights (and their second cooldown window)
-# never happen.  ``time_to_die`` fixes the kill time; ``duration`` caps the
-# fight length for iterations where the sim would otherwise run longer.
+# fixes the fight at 5 minutes with ``duration=300``; it deliberately emits no
+# ``time_to_die`` so the boss never dies early.  ``dungeon_slice`` models a
+# short Mythic+ pull: the enemy dies after ~30 s, so long fights (and their
+# second cooldown window) never happen.  ``time_to_die`` fixes the kill time;
+# ``duration`` caps the fight length for iterations where the sim would
+# otherwise run longer.
 FIGHT_STYLE_SINGLE_BOSS = "single_boss"
 FIGHT_STYLE_DUNGEON_SLICE = "dungeon_slice"
 FIGHT_STYLE_DIRECTIVES = {
-    FIGHT_STYLE_SINGLE_BOSS: "",
+    FIGHT_STYLE_SINGLE_BOSS: (
+        "# fighting style: single boss (5 min fixed fight)\n"
+        "duration=300\n"
+    ),
     FIGHT_STYLE_DUNGEON_SLICE: (
         "# fighting style: dungeon slice (short Mythic+ pull)\n"
         "duration=30\n"
