@@ -74,8 +74,8 @@ def clean_state():
 
 @pytest.fixture
 def client():
-    """FastAPI TestClient with a fresh app."""
-    return TestClient(app)
+    """FastAPI TestClient with a fresh app (localhost: /health keeps details)."""
+    return TestClient(app, client=("127.0.0.1", 55555))
 
 
 # ===================================================================
@@ -533,8 +533,9 @@ class TestWorkerFileUploadE2E:
         task_id = f"upload-{uuid.uuid4().hex}"
         file_content = b"test file content for upload"
         response = client.post(
-            f"/api/worker/upload-file?task_id={task_id}&file_name=test.txt&secret={CLUSTER_SECRET}",
+            f"/api/worker/upload-file?task_id={task_id}&file_name=test.txt",
             files={"file": ("test.txt", file_content, "text/plain")},
+            headers={"X-Cluster-Secret": CLUSTER_SECRET},
         )
         assert response.status_code == 200
         assert response.json()["status"] == "success"

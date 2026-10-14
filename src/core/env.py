@@ -29,7 +29,7 @@ def load_cluster_secret(role: str, logger=None) -> str:
     return generated
 
 
-def require_admin_token(provided: str = None) -> None:
+def require_admin_token(provided: "str | None" = None) -> None:
     """Raise a FastAPI HTTPException if ADMIN_TOKEN is configured and missing/wrong."""
     required = os.environ.get("ADMIN_TOKEN")
     if not required:

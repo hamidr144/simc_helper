@@ -132,12 +132,15 @@ async def upload_file(session, task_id, file_path):
     if not file_path or not os.path.exists(file_path):
         return None
     file_name = os.path.basename(file_path)
-    url = f"{MASTER_URL}/api/worker/upload-file?task_id={task_id}&file_name={file_name}&secret={CLUSTER_SECRET}"
+    # Audit MEDIUM-2: cluster secret travels in a header, never in the URL.
+    url = f"{MASTER_URL}/api/worker/upload-file?task_id={task_id}&file_name={file_name}"
     try:
         with open(file_path, "rb") as f:
             data = aiohttp.FormData()
             data.add_field('file', f, filename=file_name)
-            async with session.post(url, data=data) as resp:
+            async with session.post(
+                url, data=data, headers={"X-Cluster-Secret": CLUSTER_SECRET}
+            ) as resp:
                 return await resp.json()
     except Exception as e:
         logger.info(f"Failed to upload {file_name}: {e}")
@@ -429,7 +432,8 @@ async def run_worker():
             async with aiohttp.ClientSession(connector=connector) as session:
                 try:
                     async with websockets.connect(
-                        f"{WS_URL}?name={WORKER_NAME}&secret={CLUSTER_SECRET}",
+                        f"{WS_URL}?name={WORKER_NAME}",
+                        additional_headers={"X-Cluster-Secret": CLUSTER_SECRET},
                         max_size=67108864,
                         ping_interval=None,
                         ping_timeout=None,

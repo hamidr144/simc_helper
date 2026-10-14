@@ -1,5 +1,6 @@
 import asyncio
 import glob
+import hmac
 import html
 import json
 import logging
@@ -303,10 +304,15 @@ class HealthDetailsDisk(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """Response from ``/health``."""
+    """Response from ``/health``.
+
+    Audit LOW-1: unauthenticated remote callers only receive ``status``;
+    ``timestamp``/``details`` are populated for localhost callers and for
+    requests carrying a valid ``X-Admin-Token`` header.
+    """
     status: str
-    timestamp: str
-    details: Dict[str, Any]
+    timestamp: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None
 
 
 class StateResponse(BaseModel):
@@ -580,8 +586,8 @@ app = FastAPI(
         "\n"
         "### Authentication\n"
         "- Interactive pages and state-changing API endpoints require a logged-in session (`session_id` cookie); unauthenticated API calls get 401\n"
-        "- Admin endpoints require an `X-Admin-Token` header or `admin_token` query parameter\n"
-        "- Worker nodes authenticate via the `CLUSTER_SECRET` environment variable\n"
+        "- Admin endpoints require the `X-Admin-Token` header (`admin_token` query param is dev-mode only)\n"
+        "- Worker nodes authenticate via the `X-Cluster-Secret` header (`CLUSTER_SECRET` env var)\n"
         "\n"
         "### Rate Limiting\n"
         "- Simulations are rate-limited to one per user every 300 seconds (5 minutes)\n"
@@ -636,13 +642,18 @@ simc_errors_total = 0
 
 # Prometheus metrics endpoint – returns plain‑text exposition format
 @app.get("/metrics", tags=["Metrics"])
-async def get_metrics():
+async def get_metrics(request: Request):
     """Expose simple Prometheus metrics for the master service.
+
+    Audit LOW-1: metrics are operational data, so the endpoint now requires
+    the admin token (``X-Admin-Token`` header) whenever ``ADMIN_TOKEN`` is
+    configured.
 
     Currently provides:
     - ``simc_requests_total`` – total number of API requests handled
     - ``simc_errors_total`` – total number of error responses
     """
+    require_admin(request)
     # Increment request counter via a middleware hook (not shown here) – for demo we just expose current values
     return (
         f"# HELP simc_requests_total Total number of handled API requests\n"
@@ -698,6 +709,61 @@ def require_session(request: Request) -> str:
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
     return user["user_id"]
+
+
+def _dev_mode_enabled() -> bool:
+    return os.environ.get("SIMC_HELPER_DEV_MODE") == "1"
+
+
+def require_admin(request: Request) -> None:
+    """Audit MEDIUM-2: admin token must travel in a header, not a URL.
+
+    Only the ``X-Admin-Token`` header is accepted in production. The legacy
+    ``admin_token`` query parameter is honoured exclusively while
+    ``SIMC_HELPER_DEV_MODE=1`` (with a warning) so secrets never land in
+    access logs, browser history, or Referer headers.
+    """
+    token = request.headers.get("X-Admin-Token")
+    if not token:
+        token = request.query_params.get("admin_token")
+        if token:
+            if _dev_mode_enabled():
+                logger.warning(
+                    "admin_token query parameter is deprecated; use the X-Admin-Token header"
+                )
+            else:
+                token = None
+    require_admin_token(token)
+
+
+def _cluster_secret_ok(header_secret: Optional[str], query_secret: Optional[str]) -> bool:
+    """Audit MEDIUM-2: workers authenticate via ``X-Cluster-Secret`` header.
+
+    The legacy ``secret`` query parameter is accepted only in dev mode
+    (``SIMC_HELPER_DEV_MODE=1``) with a warning, keeping the cluster secret
+    out of URLs and access logs.
+    """
+    candidate = header_secret
+    if not candidate and query_secret:
+        if _dev_mode_enabled():
+            logger.warning(
+                "Cluster secret in URL query is dev-mode only; send the X-Cluster-Secret header"
+            )
+            candidate = query_secret
+    if not candidate:
+        return False
+    return hmac.compare_digest(candidate, CLUSTER_SECRET)
+
+
+def _require_own_session(user_id: str, current_user: str) -> None:
+    """Audit MEDIUM-1: session routes are scoped to the authenticated user.
+
+    ``current_user`` is ``"anonymous"`` only when the operator-level
+    ``AUTHENTICATION_ENABLED=false`` kill switch is on, in which case there
+    is no session concept to enforce.
+    """
+    if current_user != "anonymous" and user_id != current_user:
+        raise HTTPException(status_code=403, detail="Not your session")
 
 
 def client_ip(request: Request) -> str:
@@ -823,7 +889,8 @@ async def logout():
 
 
 @app.get("/session/{user_id}")
-async def get_session_route(user_id: str):
+async def get_session_route(user_id: str, current_user: str = Depends(require_session)):
+    _require_own_session(user_id, current_user)
     last_sim_time = session_get(user_id)
     if last_sim_time is None:
         return {"user_id": user_id, "last_sim_time": None}
@@ -831,7 +898,8 @@ async def get_session_route(user_id: str):
 
 
 @app.post("/session/{user_id}/update")
-async def update_session_route(user_id: str, request: SimulationRequest, _: str = Depends(require_session)):
+async def update_session_route(user_id: str, request: SimulationRequest, current_user: str = Depends(require_session)):
+    _require_own_session(user_id, current_user)
     session_set(user_id, request.sim_time)
     return {"status": "success", "user_id": user_id, "last_sim_time": request.sim_time}
 
@@ -972,20 +1040,60 @@ async def get_wowhead_tooltip_script():
     )
 
 
+WOWHEAD_NETHER_HOST = "nether.wowhead.com"
+# Audit MEDIUM-3: only the paths the bundled Wowhead tooltip script actually
+# requests through this proxy (``<route>/tooltip/<type>/<id>`` and the
+# ``/data/*-scaling`` / ``/data/spec-spells`` fetches in WH.REMOTE mode).
+WOWHEAD_NETHER_ALLOWED_PREFIXES = ("tooltip/", "ptr/tooltip/", "data/")
+
+
+async def _nether_fetch(url: str) -> httpx.Response:
+    """GET upstream with redirects pinned to ``nether.wowhead.com``.
+
+    Audit MEDIUM-3: automatic redirect following was disabled in favour of a
+    manual loop — any redirect that leaves the Wowhead host (SSRF pivot into
+    the LAN / cloud metadata) is refused with a 502 instead of being fetched.
+    """
+    async with httpx.AsyncClient(
+        timeout=15.0,
+        follow_redirects=False,
+        headers={"User-Agent": "simc-helper/1.0"},
+    ) as client:
+        for _ in range(4):  # initial request + up to 3 same-host redirects
+            response = await client.get(url)
+            if response.status_code not in (301, 302, 303, 307, 308):
+                return response
+            location = response.headers.get("location")
+            if not location:
+                return response
+            next_url = httpx.URL(url).join(location)
+            if next_url.host != WOWHEAD_NETHER_HOST:
+                logger.warning(
+                    "Refusing Wowhead proxy redirect to foreign host %s", next_url.host
+                )
+                raise HTTPException(status_code=502, detail="Wowhead tooltip data unavailable")
+            url = str(next_url)
+    raise HTTPException(status_code=502, detail="Wowhead tooltip data unavailable")
+
+
 @app.get("/api/wowhead-nether/{path:path}", tags=["Gear"])
 async def proxy_wowhead_tooltip_data(path: str, request: Request):
-    """Proxy native Wowhead tooltip data for browsers that block third parties."""
-    upstream_url = f"https://nether.wowhead.com/{path}"
+    """Proxy native Wowhead tooltip data for browsers that block third parties.
+
+    Audit MEDIUM-3: path traversal is rejected (400), anything outside the
+    tooltip/data prefix allowlist is rejected (403), and upstream redirects
+    are followed only while they stay on ``nether.wowhead.com``.
+    """
+    if ".." in path or path.startswith("//"):
+        raise HTTPException(status_code=400, detail="Invalid proxy path")
+    if not path.startswith(WOWHEAD_NETHER_ALLOWED_PREFIXES):
+        raise HTTPException(status_code=403, detail="Proxy path not allowed")
+    upstream_url = f"https://{WOWHEAD_NETHER_HOST}/{path}"
     if request.url.query:
         upstream_url = f"{upstream_url}?{request.url.query}"
     try:
-        async with httpx.AsyncClient(
-            timeout=15.0,
-            follow_redirects=True,
-            headers={"User-Agent": "simc-helper/1.0"},
-        ) as client:
-            response = await client.get(upstream_url)
-            response.raise_for_status()
+        response = await _nether_fetch(upstream_url)
+        response.raise_for_status()
     except httpx.HTTPError as exc:
         logger.warning("Unable to load Wowhead tooltip data: %s", exc)
         raise HTTPException(status_code=502, detail="Wowhead tooltip data unavailable") from exc
@@ -1297,11 +1405,15 @@ async def fetch_wowhead_upgrade(item: str) -> Optional[Dict[str, Any]]:
 
 
 @app.get("/api/state", response_model=StateResponse, tags=["System"])
-async def get_api_state():
+async def get_api_state(_: str = Depends(require_session)):
     """Retrieve the current system state – active input and connected workers.
 
     **Tags:** System
     **Response Model:** ``StateResponse``
+
+    Audit LOW-1: worker names/ids are internal topology, so this endpoint
+    now requires a logged-in session (the dashboard sends its session cookie
+    automatically).
     """
     return {
         "status": "ready",
@@ -1332,31 +1444,53 @@ def _check_disk_space(path: str) -> Dict[str, Any]:
 
 START_TIME = datetime.datetime.now(datetime.timezone.utc)
 
-@app.get("/health", response_model=HealthResponse, tags=["System"])
-async def health_check():
+LOCAL_REQUEST_HOSTS = {"127.0.0.1", "::1", "::ffff:127.0.0.1", "localhost"}
+
+
+def _is_local_request(request: Request) -> bool:
+    host = request.client.host if request.client else ""
+    return host in LOCAL_REQUEST_HOSTS
+
+
+def _admin_token_provided(request: Request) -> bool:
+    """True only when ADMIN_TOKEN is configured and the header matches it."""
+    required = os.environ.get("ADMIN_TOKEN")
+    provided = request.headers.get("X-Admin-Token")
+    return bool(required and provided and hmac.compare_digest(provided, required))
+
+
+@app.get("/health", response_model=HealthResponse, response_model_exclude_none=True, tags=["System"])
+async def health_check(request: Request):
     """Health-check endpoint for Docker healthchecks and operational monitoring.
 
     **Tags:** System
     **Response Model:** ``HealthResponse``
 
+    Audit LOW-1: remote unauthenticated callers get a bare ``{"status": ...}``
+    (the Docker healthcheck only needs the 200 + status). Worker connectivity
+    and disk details are reserved for localhost callers (the in-container
+    healthcheck) and for requests with a valid ``X-Admin-Token`` header.
+
     Returns JSON with:
       - status: "ok" or "degraded"
-      - timestamp: ISO-8601 UTC time
-      - details: worker connectivity, disk space
+      - timestamp: ISO-8601 UTC time (privileged callers only)
+      - details: worker connectivity, disk space (privileged callers only)
     """
     import datetime
+
+    # Determine overall status — only degraded if disk space is critically low
+    disk = _check_disk_space(INPUTS_DIR)
+    status = "ok"
+    if disk.get("free_percent", 100) < 5:
+        status = "degraded"
+
+    if not (_is_local_request(request) or _admin_token_provided(request)):
+        return {"status": status}
 
     workers = list(manager.active_workers.values())
     connected = len(workers)
     idle = sum(1 for w in workers if w.status == "Idle")
     busy = sum(1 for w in workers if w.status == "Busy")
-
-    disk = _check_disk_space(INPUTS_DIR)
-
-    # Determine overall status — only degraded if disk space is critically low
-    status = "ok"
-    if disk.get("free_percent", 100) < 5:
-        status = "degraded"
 
     return {
         "status": status,
@@ -1769,10 +1903,10 @@ async def update_simc(request: Request, _: str = Depends(require_session)):
 
     **Tags:** Admin
     **Authentication:** Requires a logged-in session **and** the ``X-Admin-Token``
-    header (or ``admin_token`` query param) when ``ADMIN_TOKEN`` is configured.
+    header when ``ADMIN_TOKEN`` is configured (query-param fallback is dev-mode only).
     **Response Model:** ``UpdateSimcResponse``
     """
-    require_admin_token(request.headers.get("X-Admin-Token") or request.query_params.get("admin_token"))
+    require_admin(request)
     worker_id = manager.get_idle_worker()
     if not worker_id: raise HTTPException(status_code=503, detail="No idle workers")
     task_id = "upd-" + str(uuid.uuid4())[:8]
@@ -1813,10 +1947,10 @@ async def stop_simulation(request: Request):
     """Stop all active simulations. Requires admin authentication.
 
     **Tags:** Admin
-    **Authentication:** Requires ``X-Admin-Token`` header or ``admin_token`` query param.
+    **Authentication:** Requires ``X-Admin-Token`` header (query-param fallback is dev-mode only).
     **Response Model:** ``StopSimulationResponse``
     """
-    require_admin_token(request.headers.get("X-Admin-Token") or request.query_params.get("admin_token"))
+    require_admin(request)
     stopped = False
     for wid, worker in manager.active_workers.items():
         if worker.status == "Busy" and worker.current_task:
@@ -1829,10 +1963,10 @@ async def shutdown(request: Request):
     """Shut down the master server. Requires admin authentication.
 
     **Tags:** Admin
-    **Authentication:** Requires ``X-Admin-Token`` header or ``admin_token`` query param.
+    **Authentication:** Requires ``X-Admin-Token`` header (query-param fallback is dev-mode only).
     **Response Model:** ``ShutdownResponse``
     """
-    require_admin_token(request.headers.get("X-Admin-Token") or request.query_params.get("admin_token"))
+    require_admin(request)
     logger.info("Shutdown requested...")
     os.kill(os.getpid(), signal.SIGTERM)
     return {"status": "shutting down"}
@@ -2016,14 +2150,22 @@ def _extract_zip_safely(zip_path: str, dest_dir: str):
 
 
 @app.post("/api/worker/upload-file", response_model=WorkerUploadFileResponse, tags=["Workers"])
-async def worker_upload_file(task_id: str, file_name: str, secret: str, file: UploadFile = File(...)):
+async def worker_upload_file(
+    request: Request,
+    task_id: str,
+    file_name: str,
+    secret: Optional[str] = None,
+    file: UploadFile = File(...),
+):
     """Upload an artifact (e.g. ``artifacts.zip``) from a worker node to the task directory.
 
     **Tags:** Workers
-    **Authentication:** Requires ``secret`` matching ``CLUSTER_SECRET``.
+    **Authentication:** ``X-Cluster-Secret`` header matching ``CLUSTER_SECRET``
+    (audit MEDIUM-2 — the legacy ``secret`` query param is dev-mode only).
     **Response Model:** ``WorkerUploadFileResponse``
     """
-    if secret != CLUSTER_SECRET: raise HTTPException(status_code=403)
+    if not _cluster_secret_ok(request.headers.get("X-Cluster-Secret"), secret):
+        raise HTTPException(status_code=403)
     dest_dir = _safe_task_dir(task_id)
     os.makedirs(dest_dir, exist_ok=True)
     dest_path = _safe_child_path(dest_dir, file_name)
@@ -2033,8 +2175,9 @@ async def worker_upload_file(task_id: str, file_name: str, secret: str, file: Up
     return {"status": "success"}
 
 @app.websocket("/ws/worker")
-async def worker_websocket(websocket: WebSocket, name: str, secret: str):
-    if secret != CLUSTER_SECRET: await websocket.close(code=1008); return
+async def worker_websocket(websocket: WebSocket, name: str, secret: Optional[str] = None):
+    if not _cluster_secret_ok(websocket.headers.get("x-cluster-secret"), secret):
+        await websocket.close(code=1008); return
     worker_id = await manager.connect(websocket, name)
     try:
         while True:
@@ -2089,11 +2232,12 @@ async def update_settings(request: Request, payload: UpdateSettingsRequest):
     """Update application settings (runtime only - restart required for some changes).
 
     **Tags:** Settings
-    **Authentication:** Requires ``X-Admin-Token`` header or ``admin_token``
-    query param (audit F2 — this endpoint mutates process environment).
+    **Authentication:** Requires ``X-Admin-Token`` header (audit F2 — this
+    endpoint mutates process environment; the legacy ``admin_token`` query
+    param is honoured only in dev mode, audit MEDIUM-2).
     **Request Model:** ``UpdateSettingsRequest``
     """
-    require_admin_token(request.headers.get("X-Admin-Token") or request.query_params.get("admin_token"))
+    require_admin(request)
 
     # Update CORS settings if changed
     if payload.cors_enabled:

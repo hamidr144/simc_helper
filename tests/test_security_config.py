@@ -134,3 +134,135 @@ def test_rate_limiter_reset():
     assert limiter.is_limited("ip", now=1.0)
     limiter.reset("ip")
     assert not limiter.is_limited("ip", now=1.0)
+
+
+# ---------------------------------------------------------------------------
+# P1 audit t_622b11ac: redirect pinning, cluster-secret header, admin header
+# ---------------------------------------------------------------------------
+
+import asyncio
+import httpx
+
+import web.main as master
+
+
+def _run(coro):
+    return asyncio.run(coro)
+
+
+class _RecordingClient:
+    """Stand-in for httpx.AsyncClient that scripts canned responses."""
+
+    def __init__(self, responses):
+        self.calls = []
+        self._responses = list(responses)
+
+    def __call__(self, *args, **kwargs):  # httpx.AsyncClient(...) construction
+        return self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def get(self, url):
+        self.calls.append(url)
+        status, headers = self._responses.pop(0)
+        return httpx.Response(
+            status, headers=headers, request=httpx.Request("GET", url)
+        )
+
+
+def test_nether_fetch_refuses_redirect_to_foreign_host(monkeypatch):
+    fake = _RecordingClient([
+        (302, {"location": "http://169.254.169.254/latest/meta-data/"}),
+    ])
+    monkeypatch.setattr(master.httpx, "AsyncClient", fake)
+    from fastapi import HTTPException
+    try:
+        _run(master._nether_fetch("https://nether.wowhead.com/tooltip/item/1"))
+        raise AssertionError("expected HTTPException(502)")
+    except HTTPException as exc:
+        assert exc.status_code == 502
+    # The metadata endpoint must never have been fetched.
+    assert fake.calls == ["https://nether.wowhead.com/tooltip/item/1"]
+
+
+def test_nether_fetch_follows_same_host_redirect(monkeypatch):
+    fake = _RecordingClient([
+        (301, {"location": "https://nether.wowhead.com/tooltip/item/2"}),
+        (200, {"content-type": "application/json"}),
+    ])
+    monkeypatch.setattr(master.httpx, "AsyncClient", fake)
+    response = _run(master._nether_fetch("https://nether.wowhead.com/tooltip/item/1"))
+    assert response.status_code == 200
+    assert fake.calls == [
+        "https://nether.wowhead.com/tooltip/item/1",
+        "https://nether.wowhead.com/tooltip/item/2",
+    ]
+
+
+def test_cluster_secret_header_wins_and_query_needs_dev_mode(monkeypatch):
+    monkeypatch.setattr(master, "CLUSTER_SECRET", "cluster-abc")
+    monkeypatch.delenv("SIMC_HELPER_DEV_MODE", raising=False)
+    assert master._cluster_secret_ok("cluster-abc", None) is True
+    assert master._cluster_secret_ok("wrong", None) is False
+    assert master._cluster_secret_ok(None, None) is False
+    # Query param alone: refused in production, honoured in dev mode.
+    assert master._cluster_secret_ok(None, "cluster-abc") is False
+    monkeypatch.setenv("SIMC_HELPER_DEV_MODE", "1")
+    assert master._cluster_secret_ok(None, "cluster-abc") is True
+    assert master._cluster_secret_ok(None, "nope") is False
+
+
+def test_require_admin_header_only_in_production(monkeypatch):
+    from fastapi import HTTPException
+    from starlette.requests import Request
+
+    monkeypatch.setenv("ADMIN_TOKEN", "admin-xyz")
+    monkeypatch.delenv("SIMC_HELPER_DEV_MODE", raising=False)
+
+    def make_request(query=""):
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/x",
+            "query_string": query.encode(),
+            "headers": [(b"x-admin-token", b"admin-xyz")],
+            "client": ("127.0.0.1", 1),
+        }
+        return Request(scope)
+
+    # Header always works.
+    master.require_admin(make_request())
+    # Query param without dev mode is ignored -> 403.
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/x",
+        "query_string": b"admin_token=admin-xyz",
+        "headers": [],
+        "client": ("127.0.0.1", 1),
+    }
+    try:
+        master.require_admin(Request(scope))
+        raise AssertionError("expected HTTPException(403)")
+    except HTTPException as exc:
+        assert exc.status_code == 403
+    # ...but works with dev mode on.
+    monkeypatch.setenv("SIMC_HELPER_DEV_MODE", "1")
+    master.require_admin(Request(scope))
+
+
+def test_require_own_session_scoping():
+    from fastapi import HTTPException
+    # Authenticated users may only touch their own id.
+    master._require_own_session("me", "me")
+    try:
+        master._require_own_session("victim", "attacker")
+        raise AssertionError("expected HTTPException(403)")
+    except HTTPException as exc:
+        assert exc.status_code == 403
+    # Kill-switch mode ("anonymous") has no session concept to enforce.
+    master._require_own_session("anyone", "anonymous")

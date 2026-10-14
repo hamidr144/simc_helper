@@ -44,7 +44,13 @@ def test_filter_best_empty():
 
 def test_upload_file_invalid_file(tmp_path):
     from web.main import CLUSTER_SECRET
-    response = client.post("/api/worker/upload-file", files={"file": ("test.txt", b"data")}, params={"task_id": "t1", "file_name": "report_1.html", "secret": CLUSTER_SECRET})
+    # Audit MEDIUM-2: cluster secret moves via header, not query param.
+    response = client.post(
+        "/api/worker/upload-file",
+        files={"file": ("test.txt", b"data")},
+        params={"task_id": "t1", "file_name": "report_1.html"},
+        headers={"X-Cluster-Secret": CLUSTER_SECRET},
+    )
     assert response.status_code == 200 # It accepts it and processes it
 
 def test_enforcer_exception():

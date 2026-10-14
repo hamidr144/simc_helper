@@ -9,7 +9,8 @@ from fastapi.testclient import TestClient
 
 from web.main import app, manager
 
-client = TestClient(app)
+# Audit LOW-1: /health details are reserved for localhost/admin callers.
+client = TestClient(app, client=("127.0.0.1", 55555))
 
 
 # ---------------------------------------------------------------------------

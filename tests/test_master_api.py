@@ -3,6 +3,7 @@ import sys
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -396,8 +397,9 @@ def test_api_upload_file():
     from web.main import CLUSTER_SECRET
     file_content = b"fake data"
     response = client.post(
-        f"/api/worker/upload-file?task_id=t1&file_name=test.txt&secret={CLUSTER_SECRET}",
-        files={"file": ("test.txt", file_content)}
+        "/api/worker/upload-file?task_id=t1&file_name=test.txt",
+        files={"file": ("test.txt", file_content)},
+        headers={"X-Cluster-Secret": CLUSTER_SECRET}
     )
     assert response.status_code == 200
     assert os.path.exists("/tmp/simc_reports/t1/test.txt")
@@ -406,8 +408,9 @@ def test_api_upload_file():
 def test_api_upload_file_rejects_path_traversal_filename():
     from web.main import CLUSTER_SECRET
     response = client.post(
-        f"/api/worker/upload-file?task_id=t1&file_name=../evil.txt&secret={CLUSTER_SECRET}",
-        files={"file": ("evil.txt", b"bad")}
+        "/api/worker/upload-file?task_id=t1&file_name=../evil.txt",
+        files={"file": ("evil.txt", b"bad")},
+        headers={"X-Cluster-Secret": CLUSTER_SECRET}
     )
     assert response.status_code == 400
     assert not os.path.exists("/tmp/simc_reports/evil.txt")
@@ -420,8 +423,9 @@ def test_api_upload_file_rejects_path_traversal_task_id():
         os.remove(outside_path)
 
     response = client.post(
-        f"/api/worker/upload-file?task_id=..&file_name=upload_task_escape.txt&secret={CLUSTER_SECRET}",
-        files={"file": ("upload_task_escape.txt", b"bad")}
+        "/api/worker/upload-file?task_id=..&file_name=upload_task_escape.txt",
+        files={"file": ("upload_task_escape.txt", b"bad")},
+        headers={"X-Cluster-Secret": CLUSTER_SECRET}
     )
 
     assert response.status_code == 400
@@ -440,8 +444,9 @@ def test_api_upload_file_rejects_zip_slip_members(tmp_path):
     payload.seek(0)
 
     response = client.post(
-        f"/api/worker/upload-file?task_id=tzip&file_name=artifacts.zip&secret={CLUSTER_SECRET}",
-        files={"file": ("artifacts.zip", payload.getvalue())}
+        "/api/worker/upload-file?task_id=tzip&file_name=artifacts.zip",
+        files={"file": ("artifacts.zip", payload.getvalue())},
+        headers={"X-Cluster-Secret": CLUSTER_SECRET}
     )
     assert response.status_code == 400
     assert not os.path.exists("/tmp/evil.txt")
@@ -727,3 +732,192 @@ def test_login_rate_limited_after_repeated_failures(monkeypatch):
     blocked = anon.post("/login", data={"username": username, "password": "correct-horse-battery"})
     assert blocked.status_code == 429
     master._login_failures.reset()
+
+
+# =========================================================================
+# P1 security (audit t_622b11ac): session IDOR scoping, secrets out of URLs,
+# Wowhead proxy lockdown, metrics/health/state info-disclosure gating.
+# =========================================================================
+
+
+def _authed_client(user_id):
+    authed = TestClient(app)
+    authed.cookies.set("session_id", user_id)
+    return authed
+
+
+# --- 1. Session IDOR (MEDIUM-1) -----------------------------------------
+
+def test_get_session_route_requires_auth(monkeypatch):
+    _auth_on(monkeypatch)
+    anon = TestClient(app)
+    assert anon.get("/session/whatever").status_code == 401
+
+
+def test_get_session_foreign_user_id_returns_403(monkeypatch):
+    _auth_on(monkeypatch)
+    me = user_create(f"idor-a-{uuid.uuid4().hex[:8]}", security.hash_password("pw"))
+    other = user_create(f"idor-b-{uuid.uuid4().hex[:8]}", security.hash_password("pw"))
+    authed = _authed_client(me)
+    assert authed.get(f"/session/{other}").status_code == 403
+    own = authed.get(f"/session/{me}")
+    assert own.status_code == 200
+    assert own.json()["user_id"] == me
+
+
+def test_update_session_foreign_user_id_returns_403(monkeypatch):
+    _auth_on(monkeypatch)
+    me = user_create(f"idor-c-{uuid.uuid4().hex[:8]}", security.hash_password("pw"))
+    other = user_create(f"idor-d-{uuid.uuid4().hex[:8]}", security.hash_password("pw"))
+    authed = _authed_client(me)
+    response = authed.post(f"/session/{other}/update", json={"user_id": other, "sim_time": 1.0})
+    assert response.status_code == 403
+    # The victim's cooldown timestamp must be untouched.
+    assert master.session_get(other) in (None, 0.0)
+    ok = authed.post(f"/session/{me}/update", json={"user_id": me, "sim_time": 123.0})
+    assert ok.status_code == 200
+    assert master.session_get(me) == 123.0
+
+
+def test_session_routes_open_under_auth_kill_switch(monkeypatch):
+    # conftest already disables auth (require_session -> "anonymous"); the
+    # own-session check must not break the login-free deployment mode.
+    anon = TestClient(app)
+    assert anon.get("/session/anyone").status_code == 200
+
+
+# --- 2. Secrets out of URLs (MEDIUM-2) ----------------------------------
+
+def test_admin_token_query_param_rejected_in_production(monkeypatch):
+    monkeypatch.setenv("ADMIN_TOKEN", "tok-123")
+    monkeypatch.delenv("SIMC_HELPER_DEV_MODE", raising=False)
+    monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "")
+    monkeypatch.setenv("WS_MAX_SIZE", "67108864")
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    response = client.post(f"/api/settings?admin_token=tok-123", json=_settings_payload())
+    assert response.status_code == 403
+    ok = client.post(
+        "/api/settings", json=_settings_payload(), headers={"X-Admin-Token": "tok-123"}
+    )
+    assert ok.status_code == 200
+
+
+def test_admin_token_query_param_allowed_in_dev_mode(monkeypatch):
+    monkeypatch.setenv("ADMIN_TOKEN", "tok-123")
+    monkeypatch.setenv("SIMC_HELPER_DEV_MODE", "1")
+    monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "")
+    monkeypatch.setenv("WS_MAX_SIZE", "67108864")
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    response = client.post(f"/api/settings?admin_token=tok-123", json=_settings_payload())
+    assert response.status_code == 200
+
+
+def test_upload_file_query_secret_rejected_in_production(monkeypatch):
+    monkeypatch.delenv("SIMC_HELPER_DEV_MODE", raising=False)
+    response = client.post(
+        f"/api/worker/upload-file?task_id=t1&file_name=q.txt&secret={master.CLUSTER_SECRET}",
+        files={"file": ("q.txt", b"x")},
+    )
+    assert response.status_code == 403
+
+
+def test_upload_file_query_secret_allowed_in_dev_mode(monkeypatch):
+    monkeypatch.setenv("SIMC_HELPER_DEV_MODE", "1")
+    response = client.post(
+        f"/api/worker/upload-file?task_id=t1&file_name=q2.txt&secret={master.CLUSTER_SECRET}",
+        files={"file": ("q2.txt", b"x")},
+    )
+    assert response.status_code == 200
+
+
+def test_worker_websocket_rejects_query_secret_in_production(monkeypatch):
+    monkeypatch.delenv("SIMC_HELPER_DEV_MODE", raising=False)
+    ws_client = TestClient(app, client=("203.0.113.9", 1))
+    from starlette.websockets import WebSocketDisconnect
+    with pytest.raises(WebSocketDisconnect):
+        with ws_client.websocket_connect(
+            f"/ws/worker?name=w1&secret={master.CLUSTER_SECRET}"
+        ):
+            pass
+
+
+def test_worker_websocket_accepts_cluster_secret_header(monkeypatch):
+    ws_client = TestClient(app, client=("203.0.113.9", 1))
+    with ws_client.websocket_connect(
+        "/ws/worker?name=hdr-worker", headers={"X-Cluster-Secret": master.CLUSTER_SECRET}
+    ):
+        pass  # accepted; context manager closes cleanly
+
+
+# --- 3. Wowhead proxy lockdown (MEDIUM-3) -------------------------------
+
+def test_wowhead_proxy_rejects_traversal():
+    response = client.get("/api/wowhead-nether/%2e%2e/%2e%2e/etc/passwd")
+    assert response.status_code == 400
+
+
+def test_wowhead_proxy_rejects_foreign_prefix():
+    response = client.get("/api/wowhead-nether/admin/secret")
+    assert response.status_code == 403
+
+
+def test_wowhead_proxy_allows_tooltip_prefix(monkeypatch):
+    seen = {}
+
+    async def fake_fetch(url):
+        seen["url"] = url
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            content=b'{"id": 1}',
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(master, "_nether_fetch", fake_fetch)
+    response = client.get("/api/wowhead-nether/tooltip/item/123?dataEnv=1")
+    assert response.status_code == 200
+    assert seen["url"] == "https://nether.wowhead.com/tooltip/item/123?dataEnv=1"
+
+
+# --- 4. Info disclosure gating (LOW-1) ----------------------------------
+
+def test_metrics_requires_admin_token(monkeypatch):
+    monkeypatch.setenv("ADMIN_TOKEN", "tok-metrics")
+    anon = TestClient(app)
+    assert anon.get("/metrics").status_code == 403
+    ok = anon.get("/metrics", headers={"X-Admin-Token": "tok-metrics"})
+    assert ok.status_code == 200
+    assert "simc_requests_total" in ok.text
+
+
+def test_health_trims_details_for_remote_caller():
+    remote = TestClient(app, client=("203.0.113.9", 1))
+    response = remote.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"} or set(response.json()) == {"status"}
+
+
+def test_health_keeps_details_for_localhost():
+    local = TestClient(app, client=("127.0.0.1", 4321))
+    body = local.get("/health").json()
+    assert "details" in body and "timestamp" in body
+    assert "workers" in body["details"]
+
+
+def test_health_keeps_details_for_admin_token(monkeypatch):
+    monkeypatch.setenv("ADMIN_TOKEN", "tok-health")
+    remote = TestClient(app, client=("203.0.113.9", 1))
+    body = remote.get("/health", headers={"X-Admin-Token": "tok-health"}).json()
+    assert "details" in body
+
+
+def test_api_state_requires_session(monkeypatch):
+    _auth_on(monkeypatch)
+    monkeypatch.setattr(master.manager, "active_workers", {})
+    anon = TestClient(app)
+    assert anon.get("/api/state").status_code == 401
+    me = user_create(f"state-{uuid.uuid4().hex[:8]}", security.hash_password("pw"))
+    authed = _authed_client(me)
+    response = authed.get("/api/state")
+    assert response.status_code == 200
+    assert "workers" in response.json()
