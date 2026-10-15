@@ -399,6 +399,11 @@ init_db()
 user_last_sim_time = load_sessions()
 generated_inputs_by_user: dict = load_inputs()
 generated_inputs_by_user["latest"] = None
+# t_c968bf8d: task_id -> user_id so worker uploads land in the owner's report
+# directory. Ephemeral by design: uploads for tasks started before a master
+# restart fall back to the "anonymous" bucket (the durable run_history table
+# from t_b3b78acd supersedes this map).
+task_user_map: dict = {}
 wowhead_upgrade_cache = {}
 wowhead_icon_cache: Dict[str, tuple[bytes, str]] = {}
 wowhead_tooltip_script_cache: Optional[bytes] = None
@@ -628,7 +633,14 @@ if allowed_origins:
     logger.info("CORS enabled for origins: %s", allowed_origins)
 
 # Create and mount reports directory
-REPORTS_DIR = "/tmp/simc_reports"  # nosec B108
+# t_c968bf8d: durable report storage on the simc-data volume (mounted at
+# $BASE_DIR/data in both master and worker containers). Layout is
+#   <REPORTS_DIR>/<user_id>/<task_id>/report_*.html
+# so results survive container restarts. Existing /tmp/simc_reports data is
+# intentionally NOT migrated (it was already lost on every restart).
+REPORTS_DIR = os.environ.get("REPORTS_DIR") or os.path.join(BASE_DIR, "data", "reports")
+# Per-user retention cap: the oldest run directories are pruned on insert.
+REPORT_RETENTION = int(os.environ.get("REPORT_RETENTION", "50"))
 os.makedirs(REPORTS_DIR, exist_ok=True)
 app.mount("/reports", StaticFiles(directory=REPORTS_DIR), name="reports")
 
@@ -2048,6 +2060,7 @@ async def run_simulation(request: Request, worker_id: Optional[str] = Query(None
     session_set(user_id, now)
     task_id = str(uuid.uuid4())[:8]
     manager.task_queues[task_id] = asyncio.Queue()
+    task_user_map[task_id] = user_id  # t_c968bf8d: owner of the report directory
     try:
         input_record = None
         if input_id:
@@ -2141,13 +2154,13 @@ async def get_results(task_id: str = Query(default="latest")):
     try:
         html_path = None
         if task_id == "latest":
-             all_reports = glob.glob(os.path.join(REPORTS_DIR, "*", "report_*.html"))
+             all_reports = glob.glob(os.path.join(REPORTS_DIR, "*", "*", "report_*.html"))
              if not all_reports: return {"status": "error", "message": "No reports found"}
              all_reports.sort(key=os.path.getmtime, reverse=True)
              html_path = all_reports[0]
         else:
-            tmp_dir = _safe_task_dir(task_id)
-            if not os.path.exists(tmp_dir):
+            tmp_dir = _find_task_report_dir(task_id)
+            if not tmp_dir or not os.path.exists(tmp_dir):
                 return {"status": "error", "message": f"Task {task_id} results not found"}
             report_files = [f for f in os.listdir(tmp_dir) if f.startswith("report_") and f.endswith(".html")]
             if not report_files: return {"status": "error", "message": "No reports found"}
@@ -2162,6 +2175,28 @@ async def get_results(task_id: str = Query(default="latest")):
     except Exception as e:
         logger.error(f"Error parsing results: {e}")
         return {"status": "error", "message": str(e)}
+
+@app.get("/api/report-url", tags=["Simulation"])
+async def get_report_url(task_id: str = Query(...)):
+    """Resolve the static URL of a run's HTML report (t_c968bf8d).
+
+    Durable reports live under the owner's user directory
+    (``/reports/<user_id>/<task_id>/report_*.html``), which the frontend
+    cannot derive from ``task_id`` alone. Exposure is equivalent to the
+    ``/reports`` static mount itself — no new access surface.
+    """
+    from urllib.parse import quote
+
+    task_dir = _find_task_report_dir(task_id)
+    if not task_dir or not os.path.isdir(task_dir):
+        raise HTTPException(status_code=404, detail="Report not found")
+    report_files = [f for f in os.listdir(task_dir) if f.startswith("report_") and f.endswith(".html")]
+    if not report_files:
+        raise HTTPException(status_code=404, detail="Report not found")
+    report_files.sort(key=lambda x: os.path.getmtime(os.path.join(task_dir, x)), reverse=True)
+    rel = os.path.relpath(os.path.join(task_dir, report_files[0]), REPORTS_DIR)
+    return {"status": "success", "url": "/reports/" + "/".join(quote(part) for part in rel.split(os.sep))}
+
 
 @app.get("/inputs/{file_name}")
 async def get_input_file(file_name: str):
@@ -2183,8 +2218,63 @@ def _safe_child_path(parent_dir: str, child_name: str) -> str:
     return safe_child_path(parent_dir, child_name)
 
 
-def _safe_task_dir(task_id: str) -> str:
-    return safe_task_dir(REPORTS_DIR, task_id)
+def _user_report_dir(user_id: str) -> str:
+    """Sanitize a user_id into a safe per-user reports directory name (t_c968bf8d).
+
+    Registered users get their uuid-hex id; anonymous uuid cookies pass through
+    unchanged; the ``ip_<host>`` fallback (dots!) is flattened to ``ip_..._...``.
+    """
+    return re.sub(r"[^A-Za-z0-9_-]", "_", user_id or "") or "anonymous"
+
+
+def _task_report_dir(user_dir: str, task_id: str) -> str:
+    """REPORTS_DIR/<user_dir>/<task_id> with the same traversal checks as before."""
+    return safe_task_dir(os.path.join(REPORTS_DIR, user_dir), task_id)
+
+
+def _find_task_report_dir(task_id: str) -> Optional[str]:
+    """Locate the report directory for *task_id* across user directories.
+
+    Checks the owner's directory first via the in-memory task map, then scans
+    ``REPORTS_DIR/*/<task_id>`` — covers uploads whose owner was lost across a
+    master restart. Returns None when the task has no directory yet.
+    """
+    validate_safe_id(task_id, "task id")
+    owner = task_user_map.get(task_id)
+    if owner:
+        candidate = os.path.join(REPORTS_DIR, _user_report_dir(owner), task_id)
+        if os.path.isdir(candidate):
+            return candidate
+    for match in glob.glob(os.path.join(REPORTS_DIR, "*", task_id)):
+        if os.path.isdir(match):
+            return match
+    return None
+
+
+def _prune_user_reports(user_dir: str, keep: Optional[int] = None) -> None:
+    """Retention cap (t_c968bf8d): keep only the newest ``keep`` run dirs for a
+    user (by mtime), deleting the oldest. Called on artifact insert (upload)."""
+    import shutil
+
+    keep = REPORT_RETENTION if keep is None else keep
+    base = os.path.join(REPORTS_DIR, user_dir)
+    try:
+        entries = [os.path.join(base, name) for name in os.listdir(base)]
+        entries = [p for p in entries if os.path.isdir(p)]
+    except OSError:
+        return
+    if len(entries) <= keep:
+        return
+
+    def _mtime(p: str) -> float:
+        try:
+            return os.path.getmtime(p)
+        except OSError:
+            return 0.0
+
+    entries.sort(key=lambda p: (_mtime(p), p))
+    for stale in entries[: len(entries) - keep]:
+        shutil.rmtree(stale, ignore_errors=True)
 
 
 def _extract_zip_safely(zip_path: str, dest_dir: str):
@@ -2215,12 +2305,15 @@ async def worker_upload_file(
     """
     if not _cluster_secret_ok(request.headers.get("X-Cluster-Secret"), secret):
         raise HTTPException(status_code=403)
-    dest_dir = _safe_task_dir(task_id)
+    user_dir = _user_report_dir(task_user_map.get(task_id, ""))
+    dest_dir = _task_report_dir(user_dir, task_id)
     os.makedirs(dest_dir, exist_ok=True)
     dest_path = _safe_child_path(dest_dir, file_name)
     with open(dest_path, "wb") as f: f.write(await file.read())
     if file_name == "artifacts.zip":
         _extract_zip_safely(dest_path, dest_dir)
+    # Retention cap (t_c968bf8d): prune this user's oldest runs beyond the cap.
+    _prune_user_reports(user_dir)
     return {"status": "success"}
 
 @app.websocket("/ws/worker")

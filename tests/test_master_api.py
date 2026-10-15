@@ -16,6 +16,7 @@ from web.main import (
     parse_wowhead_upgrade,
     wowhead_xml_url,
 )
+from web.main import REPORTS_DIR as MASTER_REPORTS_DIR
 
 client = TestClient(app)
 
@@ -517,9 +518,9 @@ def test_api_generate_simc_does_not_add_standard_gems_to_unsocketed_items():
 
 def test_api_get_results(tmp_path):
     task_id = "test-task"
-    reports_dir = "/tmp/simc_reports"
-    os.makedirs(os.path.join(reports_dir, task_id), exist_ok=True)
-    with open(os.path.join(reports_dir, task_id, "report_t.html"), "w") as f:
+    task_dir = os.path.join(MASTER_REPORTS_DIR, "testuser", task_id)
+    os.makedirs(task_dir, exist_ok=True)
+    with open(os.path.join(task_dir, "report_t.html"), "w") as f:
         f.write('<h2 class="toggle">C1&#160;:&#160;100,000 dps</h2>')
 
     response = client.get(f"/api/get-results?task_id={task_id}")
@@ -535,7 +536,112 @@ def test_api_upload_file():
         headers={"X-Cluster-Secret": CLUSTER_SECRET}
     )
     assert response.status_code == 200
-    assert os.path.exists("/tmp/simc_reports/t1/test.txt")
+    # t_c968bf8d: uploads land under the owner's user directory; tasks with no
+    # entry in task_user_map (e.g. after a master restart) go to "anonymous".
+    assert os.path.exists(os.path.join(MASTER_REPORTS_DIR, "anonymous", "t1", "test.txt"))
+
+
+def test_api_upload_file_lands_in_owner_directory():
+    """t_c968bf8d: the report-write path is per-user: REPORTS_DIR/<user_id>/<task_id>/."""
+    import web.main as m
+    from web.main import CLUSTER_SECRET
+    m.task_user_map["towner"] = "u-alice"
+    try:
+        response = client.post(
+            "/api/worker/upload-file?task_id=towner&file_name=report_1.html",
+            files={"file": ("report_1.html", b"<html/>")},
+            headers={"X-Cluster-Secret": CLUSTER_SECRET}
+        )
+        assert response.status_code == 200
+        assert os.path.isdir(os.path.join(MASTER_REPORTS_DIR, "u-alice", "towner"))
+        assert not os.path.exists(os.path.join(MASTER_REPORTS_DIR, "anonymous", "towner"))
+    finally:
+        m.task_user_map.pop("towner", None)
+
+
+def test_api_upload_file_sanitizes_user_directory():
+    """t_c968bf8d: hostile user ids (e.g. the ip_<host> fallback) cannot escape REPORTS_DIR."""
+    import web.main as m
+    from web.main import CLUSTER_SECRET
+    m.task_user_map["tsanit"] = "../evil"
+    try:
+        response = client.post(
+            "/api/worker/upload-file?task_id=tsanit&file_name=test.txt",
+            files={"file": ("test.txt", b"x")},
+            headers={"X-Cluster-Secret": CLUSTER_SECRET}
+        )
+        assert response.status_code == 200
+        assert os.path.isdir(os.path.join(MASTER_REPORTS_DIR, "___evil", "tsanit"))
+        assert not os.path.exists(os.path.join(os.path.dirname(MASTER_REPORTS_DIR), "evil", "tsanit"))
+    finally:
+        m.task_user_map.pop("tsanit", None)
+
+
+def test_api_upload_file_prunes_oldest_runs_beyond_cap():
+    """t_c968bf8d: per-user retention cap — the oldest run dirs are pruned on insert."""
+    import shutil
+
+    import web.main as m
+    from web.main import CLUSTER_SECRET
+
+    user = "u-prune"
+    base = os.path.join(MASTER_REPORTS_DIR, user)
+    shutil.rmtree(base, ignore_errors=True)
+    os.makedirs(base)
+    # Seed 3 old runs with staggered mtimes, cap at 3.
+    for i in range(3):
+        d = os.path.join(base, f"oldrun{i}")
+        os.makedirs(d)
+        os.utime(d, (1_000_000 + i * 100, 1_000_000 + i * 100))
+    m.task_user_map["tnew"] = user
+    monkey_cap = m.REPORT_RETENTION
+    m.REPORT_RETENTION = 3
+    try:
+        response = client.post(
+            "/api/worker/upload-file?task_id=tnew&file_name=report_9.html",
+            files={"file": ("report_9.html", b"<html/>")},
+            headers={"X-Cluster-Secret": CLUSTER_SECRET}
+        )
+        assert response.status_code == 200
+        remaining = sorted(os.listdir(base))
+        assert len(remaining) == 3
+        assert "tnew" in remaining
+        assert "oldrun0" not in remaining  # oldest pruned
+        assert "oldrun2" in remaining
+    finally:
+        m.REPORT_RETENTION = monkey_cap
+        m.task_user_map.pop("tnew", None)
+        shutil.rmtree(base, ignore_errors=True)
+
+
+def test_report_url_endpoint():
+    """t_c968bf8d: /api/report-url resolves the per-user static report URL."""
+    task_id = "turl"
+    task_dir = os.path.join(MASTER_REPORTS_DIR, "u-url", task_id)
+    os.makedirs(task_dir, exist_ok=True)
+    report = os.path.join(task_dir, "report_5.html")
+    with open(report, "w") as f:
+        f.write("<html/>")
+
+    response = client.get(f"/api/report-url?task_id={task_id}")
+    assert response.status_code == 200
+    assert response.json()["url"] == f"/reports/u-url/{task_id}/report_5.html"
+
+    missing = client.get("/api/report-url?task_id=nope-missing")
+    assert missing.status_code == 404
+
+
+def test_get_results_latest_spans_user_directories():
+    """t_c968bf8d: task_id=latest globs the new <user>/<task> layout."""
+    task_dir = os.path.join(MASTER_REPORTS_DIR, "u-latest", "latest-task")
+    os.makedirs(task_dir, exist_ok=True)
+    with open(os.path.join(task_dir, "report_latest.html"), "w") as f:
+        f.write('<h2 class="toggle">Latest&#160;:&#160;4242 dps</h2>')
+    os.utime(task_dir, None)  # bump mtime so it is the newest report
+
+    response = client.get("/api/get-results?task_id=latest")
+    assert response.status_code == 200
+    assert response.json()["results"][0]["name"] == "Latest"
 
 
 def test_api_upload_file_rejects_path_traversal_filename():
@@ -546,7 +652,7 @@ def test_api_upload_file_rejects_path_traversal_filename():
         headers={"X-Cluster-Secret": CLUSTER_SECRET}
     )
     assert response.status_code == 400
-    assert not os.path.exists("/tmp/simc_reports/evil.txt")
+    assert not os.path.exists(os.path.join(MASTER_REPORTS_DIR, "anonymous", "evil.txt"))
 
 
 def test_api_upload_file_rejects_path_traversal_task_id():
@@ -598,9 +704,9 @@ def test_api_get_results_rejects_path_traversal_task_id(tmp_path):
 
 def test_api_get_results_complex_html(tmp_path):
     task_id = "test-complex"
-    reports_dir = "/tmp/simc_reports"
-    os.makedirs(os.path.join(reports_dir, task_id), exist_ok=True)
-    with open(os.path.join(reports_dir, task_id, "report_c.html"), "w") as f:
+    task_dir = os.path.join(MASTER_REPORTS_DIR, "testuser", task_id)
+    os.makedirs(task_dir, exist_ok=True)
+    with open(os.path.join(task_dir, "report_c.html"), "w") as f:
         f.write('<h2 class="toggle">A&#160;:&#160;1,234,567 dps</h2>\n<h2 class="toggle">B&#160;:&#160;987,654 dps</h2>')
 
     response = client.get(f"/api/get-results?task_id={task_id}")
@@ -618,10 +724,10 @@ def test_api_get_results_nightly_report_format():
     import shutil
 
     task_id = "test-nightly-fixture"
-    reports_dir = "/tmp/simc_reports"
-    os.makedirs(os.path.join(reports_dir, task_id), exist_ok=True)
+    task_dir = os.path.join(MASTER_REPORTS_DIR, "testuser", task_id)
+    os.makedirs(task_dir, exist_ok=True)
     fixture = os.path.join(os.path.dirname(__file__), "fixtures", "simc_report_nightly_snippet.html")
-    shutil.copy(fixture, os.path.join(reports_dir, task_id, "report_nightly.html"))
+    shutil.copy(fixture, os.path.join(task_dir, "report_nightly.html"))
 
     response = client.get(f"/api/get-results?task_id={task_id}")
     assert response.status_code == 200

@@ -72,7 +72,7 @@ class Config(BaseModel):
 
     # --- Data Directories ---
     inputs_dir: Optional[str] = Field(default=None, description="Directory for generated .simc input files.")
-    reports_dir: Optional[str] = Field(default="/tmp/simc_reports", description="Directory for simulation reports.")
+    reports_dir: Optional[str] = Field(default=None, description="Directory for simulation reports. Defaults to <base_dir>/data/reports (durable simc-data volume) when unset.")
 
     # --- Web Server (master) ---
     port: int = Field(default=8000, ge=1, le=65535, description="HTTP server port.")
@@ -127,7 +127,7 @@ class Config(BaseModel):
             "base_dir": _read_env("BASE_DIR", "."),
             "simc_path": _read_env("SIMC_PATH"),
             "inputs_dir": _read_env("INPUTS_DIR"),
-            "reports_dir": _read_env("REPORTS_DIR", "/tmp/simc_reports"),
+            "reports_dir": _read_env("REPORTS_DIR"),
             "port": _read_int("PORT", 8000),
             "host": _read_env("HOST", "127.0.0.1"),
             "ssl_keyfile": _read_env("SSL_KEYFILE"),

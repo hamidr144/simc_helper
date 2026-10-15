@@ -28,6 +28,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # Re-import after sys.path is set so all modules use the right path
 from src.web.main import app, manager, CLUSTER_SECRET  # noqa: E402
+from src.web.main import REPORTS_DIR as MASTER_REPORTS_DIR  # noqa: E402
 from src.web.main import user_last_sim_time  # noqa: E402
 
 # Fix deprecation warning from starlette
@@ -390,7 +391,7 @@ class TestResultsPipelineE2E:
     def test_get_results_with_real_file(self, client):
         """Writing a result file then fetching it should work."""
         task_id = f"results-test-{uuid.uuid4().hex}"
-        results_dir = f"/tmp/simc_reports/{task_id}"
+        results_dir = f"{MASTER_REPORTS_DIR}/testuser/{task_id}"
         os.makedirs(results_dir, exist_ok=True)
 
         result_file = os.path.join(results_dir, "report_1.html")
@@ -487,7 +488,7 @@ class TestFullWorkflowE2E:
             status.updated_at = time.time()
 
         # Step 7: Write a fake result
-        task_dir = f"/tmp/simc_reports/{task_id}"
+        task_dir = f"{MASTER_REPORTS_DIR}/testuser/{task_id}"
         os.makedirs(task_dir, exist_ok=True)
         result_file = os.path.join(task_dir, "report_1.html")
         with open(result_file, "w") as f:

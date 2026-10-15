@@ -119,7 +119,7 @@ Useful environment variables are fully documented in `.env.example` (copy it to 
 | `SIMC_NIGHTLY_TAG` | `1210-2026-10-13-eaf8c46` | Pinned `simulationcraftorg/simc` nightly tag (compose stack; override in `.env`). |
 | `SIMC_HELPER_INSECURE_TLS` | — | Set to `1` to skip TLS certificate verification on worker connections (dev only). |
 | `INPUTS_DIR` | — | Directory for generated `.simc` inputs (`data/master/inputs/` by default). |
-| `REPORTS_DIR` | — | Directory for simulation reports (`/tmp/simc_reports` by default). |
+| `REPORTS_DIR` | — | Directory for simulation reports (`<BASE_DIR>/data/reports` by default, on the durable simc-data volume; layout `<user_id>/<task_id>/`). |
 
 ### Use the web UI
 

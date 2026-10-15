@@ -15,6 +15,7 @@ Security tests that exercise the gate opt back in per-test with
 
 import os
 import sys
+import tempfile
 
 import pytest
 
@@ -23,6 +24,12 @@ _SRC = os.path.join(_ROOT, "src")
 for _p in (_SRC, _ROOT):
     if _p not in sys.path:
         sys.path.insert(0, _p)
+
+# t_c968bf8d: reports moved off /tmp/simc_reports onto the durable
+# $BASE_DIR/data/reports path. Point REPORTS_DIR at a per-run temp dir BEFORE
+# web.main is imported (it reads the env at import time) so the suite never
+# writes into the repo's data/ directory.
+os.environ.setdefault("REPORTS_DIR", tempfile.mkdtemp(prefix="simc_reports_test_"))
 
 
 @pytest.fixture(autouse=True)
