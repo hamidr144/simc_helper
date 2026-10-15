@@ -178,6 +178,32 @@ def test_api_generate_simc():
     assert response.json()["status"] == "success"
 
 
+def test_generate_simc_default_selection_reports_zero_combinations():
+    """t_4485565b: selecting only equipped gear yields 0 candidate copies and an
+    honest combinations=0 (no max(1, ...) fudge) — the run becomes a baseline
+    current-gear report instead of a doomed comparison job."""
+    payload = {
+        "base_profile": "paladin=Test",
+        "char_class": "paladin",
+        "char_name": "Test",
+        "equipped_gear": {"head": "id=1"},
+        "selected_items": {"head": ["id=1"]},
+        "selected_enchants": {},
+        "selected_gems": [],
+    }
+    with patch(
+        "src.cli.generate_input.load_config",
+        return_value={"gems": {"meta": [], "standard": []}, "enchantments": {}},
+    ):
+        response = client.post("/api/generate-simc", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    assert response.json()["combinations"] == 0
+    with open("char_simc_addon.txt") as generated_file:
+        assert 'copy="' not in generated_file.read()
+
+
 def test_api_generate_simc_deduplicates_equivalent_item_field_order():
     payload = {
         "base_profile": "paladin=Test",

@@ -137,3 +137,49 @@ def test_get_character_name_quoted(tmp_path):
     f = tmp_path / "q.simc"
     f.write_text("paladin='Hamidriel'\n")
     assert get_character_name(str(f)) == "Hamidriel"
+
+
+def test_main_zero_combos_runs_baseline_report(tmp_path, capsys):
+    """t_4485565b: an input with no copy= blocks must produce a baseline
+    current-gear HTML report instead of exiting 1 with 'No combos found'."""
+    from cli.sim_helper import main
+    input_file = tmp_path / "baseline.simc"
+    input_file.write_text('paladin="Test"\n')
+
+    with patch("sys.argv", ["sim_helper.py", "simc_path=s", f"input_file={input_file}"]), \
+         patch("cli.sim_helper.get_character_name", return_value="Test"), \
+         patch("cli.sim_helper.get_all_combos", return_value=[]), \
+         patch("cli.sim_helper.run_simc", return_value=0) as mock_run, \
+         patch("cli.sim_helper.filter_best") as mock_filter, \
+         patch("cli.sim_helper.prepare_stage") as mock_prepare:
+        main()  # must NOT raise SystemExit
+
+    out = capsys.readouterr().out
+    assert "BASELINE" in out
+    assert "No combos found" not in out
+    assert "Simcraft Helper complete!" in out
+
+    mock_run.assert_called_once()
+    args, kwargs = mock_run.call_args
+    assert args[1] == str(input_file)  # base profile simulated directly
+    assert args[2] == "single_actor_batch=1"  # full precision, no 100-iter filter pass
+    assert str(kwargs.get("html_report", "")).endswith(".html")
+    mock_filter.assert_not_called()
+    mock_prepare.assert_not_called()
+
+
+def test_main_zero_combos_baseline_failure_exits(tmp_path, capsys):
+    """A failing baseline simulation still surfaces a non-zero exit."""
+    import pytest
+    from cli.sim_helper import main
+    input_file = tmp_path / "baseline.simc"
+    input_file.write_text('paladin="Test"\n')
+
+    with patch("sys.argv", ["sim_helper.py", "simc_path=s", f"input_file={input_file}"]), \
+         patch("cli.sim_helper.get_character_name", return_value="Test"), \
+         patch("cli.sim_helper.get_all_combos", return_value=[]), \
+         patch("cli.sim_helper.run_simc", return_value=1):
+        with pytest.raises(SystemExit) as excinfo:
+            main()
+    assert excinfo.value.code == 1
+    assert "baseline simulation" in capsys.readouterr().out

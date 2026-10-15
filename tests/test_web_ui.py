@@ -154,6 +154,23 @@ def test_gear_selection_stacks_cards_vertically():
         )
 
 
+def test_zero_combination_run_is_labelled_baseline():
+    """t_4485565b: a 0-candidate selection must be offered as a baseline
+    current-gear run — never hidden behind a fake '1 combination' or a
+    silently-disabled Run button."""
+    response = client.get("/static/app.js")
+    assert response.status_code == 200
+    js = response.text
+
+    assert "Ready to run a baseline current-gear report." in js
+    # Run generates input even when the client-side estimate is 0.
+    assert "if (!generatedInput) await generateInput();" in js
+    # Run stays enabled once a character is loaded.
+    assert "runButton.disabled = !(generatedInput || parsedData);" in js
+    # The old early-return that froze generation at 0 combinations is gone.
+    assert "if (!estimateCombinations()) return;" not in js
+
+
 def test_gear_selection_allows_marking_voidforged_weapons_and_trinkets():
     response = client.get("/static/app.js")
     assert response.status_code == 200

@@ -558,7 +558,9 @@ function updateSummary() {
   const itemWord = document.getElementById('item-word');
   if (comboWord) comboWord.textContent = count === 1 ? 'combination' : 'combinations';
   if (itemWord) itemWord.textContent = selectedItemCount() === 1 ? 'item' : 'items';
-  if (runButton) runButton.disabled = !generatedInput;
+  // t_4485565b: once a character is loaded, Run is always meaningful — a
+  // 0-candidate selection runs the baseline current-gear report.
+  if (runButton) runButton.disabled = !(generatedInput || parsedData);
   updateRailState();
 }
 
@@ -566,7 +568,8 @@ function selectionChanged() {
   generatedInput = null;
   updateSummary();
   clearTimeout(generationTimer);
-  if (!estimateCombinations()) return;
+  // t_4485565b: regenerate even at an estimated 0 combinations so the status
+  // line reflects the honest baseline-only state instead of a stale count.
   const status = document.getElementById('workflow-status');
   if (status) status.textContent = 'Updating comparison…';
   generationTimer = setTimeout(() => generateInput(true), 250);
@@ -1159,7 +1162,10 @@ async function generateInput(quiet = false) {
     if (!response.ok) throw new Error(data.detail || 'Generation failed');
     generatedInput = data;
     document.getElementById('combo-count').textContent = data.combinations.toLocaleString();
-    status.textContent = `Ready to run ${data.combinations.toLocaleString()} candidate ${data.combinations === 1 ? 'combination' : 'combinations'}.`;
+    // t_4485565b: 0 candidates is a valid baseline run, not a doomed job.
+    status.textContent = data.combinations === 0
+      ? 'Ready to run a baseline current-gear report. Select gear changes, gems, or enchants to compare candidates.'
+      : `Ready to run ${data.combinations.toLocaleString()} candidate ${data.combinations === 1 ? 'combination' : 'combinations'}.`;
   } catch (error) {
     generatedInput = null;
     status.textContent = `Could not generate input: ${error.message}`;
@@ -1169,7 +1175,9 @@ async function generateInput(quiet = false) {
 }
 
 async function runSimulation() {
-  if (!generatedInput && estimateCombinations()) await generateInput();
+  // t_4485565b: generate even when the client-side estimate is 0 — a
+  // 0-candidate input is a valid baseline current-gear run.
+  if (!generatedInput) await generateInput();
   if (!generatedInput) return;
   const status = document.getElementById('workflow-status');
   const log = document.getElementById('simulation-log');

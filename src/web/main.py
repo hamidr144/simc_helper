@@ -1911,8 +1911,10 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
         input_set("latest", record)
 
         # The base actor is always a valid current-gear simulation, even if no
-        # alternate item profiles were generated.
-        return {"status": "success", "file_path": file_path, "input_id": input_id, "input_url": record["input_url"], "combinations": max(1, count)}
+        # alternate item profiles were generated. Report the true candidate
+        # count (0 allowed) so the UI can label a baseline-only run honestly
+        # and sim_helper can take its baseline path (t_4485565b).
+        return {"status": "success", "file_path": file_path, "input_id": input_id, "input_url": record["input_url"], "combinations": count}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
