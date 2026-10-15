@@ -16,6 +16,7 @@ from web.main import (
     parse_wowhead_upgrade,
     wowhead_xml_url,
 )
+from web.main import REPORTS_DIR as MASTER_REPORTS_DIR
 
 client = TestClient(app)
 
@@ -517,9 +518,9 @@ def test_api_generate_simc_does_not_add_standard_gems_to_unsocketed_items():
 
 def test_api_get_results(tmp_path):
     task_id = "test-task"
-    reports_dir = "/tmp/simc_reports"
-    os.makedirs(os.path.join(reports_dir, task_id), exist_ok=True)
-    with open(os.path.join(reports_dir, task_id, "report_t.html"), "w") as f:
+    task_dir = os.path.join(MASTER_REPORTS_DIR, "testuser", task_id)
+    os.makedirs(task_dir, exist_ok=True)
+    with open(os.path.join(task_dir, "report_t.html"), "w") as f:
         f.write('<h2 class="toggle">C1&#160;:&#160;100,000 dps</h2>')
 
     response = client.get(f"/api/get-results?task_id={task_id}")
@@ -535,7 +536,112 @@ def test_api_upload_file():
         headers={"X-Cluster-Secret": CLUSTER_SECRET}
     )
     assert response.status_code == 200
-    assert os.path.exists("/tmp/simc_reports/t1/test.txt")
+    # t_c968bf8d: uploads land under the owner's user directory; tasks with no
+    # entry in task_user_map (e.g. after a master restart) go to "anonymous".
+    assert os.path.exists(os.path.join(MASTER_REPORTS_DIR, "anonymous", "t1", "test.txt"))
+
+
+def test_api_upload_file_lands_in_owner_directory():
+    """t_c968bf8d: the report-write path is per-user: REPORTS_DIR/<user_id>/<task_id>/."""
+    import web.main as m
+    from web.main import CLUSTER_SECRET
+    m.task_user_map["towner"] = "u-alice"
+    try:
+        response = client.post(
+            "/api/worker/upload-file?task_id=towner&file_name=report_1.html",
+            files={"file": ("report_1.html", b"<html/>")},
+            headers={"X-Cluster-Secret": CLUSTER_SECRET}
+        )
+        assert response.status_code == 200
+        assert os.path.isdir(os.path.join(MASTER_REPORTS_DIR, "u-alice", "towner"))
+        assert not os.path.exists(os.path.join(MASTER_REPORTS_DIR, "anonymous", "towner"))
+    finally:
+        m.task_user_map.pop("towner", None)
+
+
+def test_api_upload_file_sanitizes_user_directory():
+    """t_c968bf8d: hostile user ids (e.g. the ip_<host> fallback) cannot escape REPORTS_DIR."""
+    import web.main as m
+    from web.main import CLUSTER_SECRET
+    m.task_user_map["tsanit"] = "../evil"
+    try:
+        response = client.post(
+            "/api/worker/upload-file?task_id=tsanit&file_name=test.txt",
+            files={"file": ("test.txt", b"x")},
+            headers={"X-Cluster-Secret": CLUSTER_SECRET}
+        )
+        assert response.status_code == 200
+        assert os.path.isdir(os.path.join(MASTER_REPORTS_DIR, "___evil", "tsanit"))
+        assert not os.path.exists(os.path.join(os.path.dirname(MASTER_REPORTS_DIR), "evil", "tsanit"))
+    finally:
+        m.task_user_map.pop("tsanit", None)
+
+
+def test_api_upload_file_prunes_oldest_runs_beyond_cap():
+    """t_c968bf8d: per-user retention cap — the oldest run dirs are pruned on insert."""
+    import shutil
+
+    import web.main as m
+    from web.main import CLUSTER_SECRET
+
+    user = "u-prune"
+    base = os.path.join(MASTER_REPORTS_DIR, user)
+    shutil.rmtree(base, ignore_errors=True)
+    os.makedirs(base)
+    # Seed 3 old runs with staggered mtimes, cap at 3.
+    for i in range(3):
+        d = os.path.join(base, f"oldrun{i}")
+        os.makedirs(d)
+        os.utime(d, (1_000_000 + i * 100, 1_000_000 + i * 100))
+    m.task_user_map["tnew"] = user
+    monkey_cap = m.REPORT_RETENTION
+    m.REPORT_RETENTION = 3
+    try:
+        response = client.post(
+            "/api/worker/upload-file?task_id=tnew&file_name=report_9.html",
+            files={"file": ("report_9.html", b"<html/>")},
+            headers={"X-Cluster-Secret": CLUSTER_SECRET}
+        )
+        assert response.status_code == 200
+        remaining = sorted(os.listdir(base))
+        assert len(remaining) == 3
+        assert "tnew" in remaining
+        assert "oldrun0" not in remaining  # oldest pruned
+        assert "oldrun2" in remaining
+    finally:
+        m.REPORT_RETENTION = monkey_cap
+        m.task_user_map.pop("tnew", None)
+        shutil.rmtree(base, ignore_errors=True)
+
+
+def test_report_url_endpoint():
+    """t_c968bf8d: /api/report-url resolves the per-user static report URL."""
+    task_id = "turl"
+    task_dir = os.path.join(MASTER_REPORTS_DIR, "u-url", task_id)
+    os.makedirs(task_dir, exist_ok=True)
+    report = os.path.join(task_dir, "report_5.html")
+    with open(report, "w") as f:
+        f.write("<html/>")
+
+    response = client.get(f"/api/report-url?task_id={task_id}")
+    assert response.status_code == 200
+    assert response.json()["url"] == f"/reports/u-url/{task_id}/report_5.html"
+
+    missing = client.get("/api/report-url?task_id=nope-missing")
+    assert missing.status_code == 404
+
+
+def test_get_results_latest_spans_user_directories():
+    """t_c968bf8d: task_id=latest globs the new <user>/<task> layout."""
+    task_dir = os.path.join(MASTER_REPORTS_DIR, "u-latest", "latest-task")
+    os.makedirs(task_dir, exist_ok=True)
+    with open(os.path.join(task_dir, "report_latest.html"), "w") as f:
+        f.write('<h2 class="toggle">Latest&#160;:&#160;4242 dps</h2>')
+    os.utime(task_dir, None)  # bump mtime so it is the newest report
+
+    response = client.get("/api/get-results?task_id=latest")
+    assert response.status_code == 200
+    assert response.json()["results"][0]["name"] == "Latest"
 
 
 def test_api_upload_file_rejects_path_traversal_filename():
@@ -546,7 +652,7 @@ def test_api_upload_file_rejects_path_traversal_filename():
         headers={"X-Cluster-Secret": CLUSTER_SECRET}
     )
     assert response.status_code == 400
-    assert not os.path.exists("/tmp/simc_reports/evil.txt")
+    assert not os.path.exists(os.path.join(MASTER_REPORTS_DIR, "anonymous", "evil.txt"))
 
 
 def test_api_upload_file_rejects_path_traversal_task_id():
@@ -598,9 +704,9 @@ def test_api_get_results_rejects_path_traversal_task_id(tmp_path):
 
 def test_api_get_results_complex_html(tmp_path):
     task_id = "test-complex"
-    reports_dir = "/tmp/simc_reports"
-    os.makedirs(os.path.join(reports_dir, task_id), exist_ok=True)
-    with open(os.path.join(reports_dir, task_id, "report_c.html"), "w") as f:
+    task_dir = os.path.join(MASTER_REPORTS_DIR, "testuser", task_id)
+    os.makedirs(task_dir, exist_ok=True)
+    with open(os.path.join(task_dir, "report_c.html"), "w") as f:
         f.write('<h2 class="toggle">A&#160;:&#160;1,234,567 dps</h2>\n<h2 class="toggle">B&#160;:&#160;987,654 dps</h2>')
 
     response = client.get(f"/api/get-results?task_id={task_id}")
@@ -618,10 +724,10 @@ def test_api_get_results_nightly_report_format():
     import shutil
 
     task_id = "test-nightly-fixture"
-    reports_dir = "/tmp/simc_reports"
-    os.makedirs(os.path.join(reports_dir, task_id), exist_ok=True)
+    task_dir = os.path.join(MASTER_REPORTS_DIR, "testuser", task_id)
+    os.makedirs(task_dir, exist_ok=True)
     fixture = os.path.join(os.path.dirname(__file__), "fixtures", "simc_report_nightly_snippet.html")
-    shutil.copy(fixture, os.path.join(reports_dir, task_id, "report_nightly.html"))
+    shutil.copy(fixture, os.path.join(task_dir, "report_nightly.html"))
 
     response = client.get(f"/api/get-results?task_id={task_id}")
     assert response.status_code == 200
@@ -1189,3 +1295,218 @@ def test_login_does_not_seed_run_cooldown(monkeypatch):
     finally:
         master.manager.active_workers.pop("worker1", None)
         master.manager.task_queues.pop(task_id, None)
+
+
+# ---------------------------------------------------------------------------
+# t_b3b78acd — run_history table + task-done insert hook
+# ---------------------------------------------------------------------------
+
+def _rh_user(tag):
+    """Create a throwaway registered user and return its user_id."""
+    return user_create(f"rh-{tag}-{uuid.uuid4().hex[:8]}", security.hash_password("pw"))
+
+
+def test_run_history_table_and_index_exist():
+    """t_b3b78acd: init_db creates run_history and the (user_id, created_at DESC) index."""
+    import sqlite3
+
+    from src.core.db import get_db_path
+
+    conn = sqlite3.connect(get_db_path())
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(run_history)")}
+        assert {
+            "run_id", "user_id", "created_at", "fighting_style", "spec",
+            "source", "char_name", "realm_slug", "region", "top_dps",
+            "report_path", "status",
+        } <= cols
+        idx = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='index' "
+            "AND name='idx_run_history_user_created'"
+        ).fetchone()
+        assert idx and "created_at DESC" in idx[0]
+    finally:
+        conn.close()
+
+
+def test_run_history_insert_list_and_cascade():
+    """t_b3b78acd: rows insert, list newest-first, and vanish with the user (FK CASCADE)."""
+    from src.core.db import run_history_insert, run_history_list
+
+    uid = _rh_user("cascade")
+    base = time.time()
+    run_ids = [f"rh-casc-{uuid.uuid4().hex[:8]}-{i}" for i in range(2)]
+    for i, dps in enumerate((100, 200)):
+        run_history_insert({
+            "run_id": run_ids[i], "user_id": uid, "created_at": base + i,
+            "fighting_style": "single_target", "spec": "ret", "source": "armory",
+            "char_name": "Casc", "realm_slug": "rerun", "region": "eu",
+            "top_dps": dps, "report_path": f"{uid}/t{dps}/report_{dps}.html",
+            "status": "success",
+        })
+    rows = run_history_list(uid)
+    assert [r["top_dps"] for r in rows] == [200, 100]  # newest first
+    assert rows[0]["realm_slug"] == "rerun"
+
+    from src.core.db import user_delete
+    user_delete(uid)
+    assert run_history_list(uid) == []
+
+
+def test_run_history_fk_rejects_unknown_user():
+    """t_b3b78acd: user_id is a real FK — rows for unknown users are refused."""
+    import sqlite3
+
+    from src.core.db import run_history_insert
+
+    with pytest.raises(sqlite3.IntegrityError):
+        run_history_insert({
+            "run_id": "rh-orphan", "user_id": "no-such-user",
+            "created_at": time.time(), "status": "success",
+        })
+
+
+def test_record_run_history_success_extracts_top_dps():
+    """t_b3b78acd: the done hook writes a row with top_dps from the report parser
+    and report_path relative to REPORTS_DIR."""
+    import shutil
+
+    import web.main as m
+    from src.core.db import run_history_list
+
+    uid = _rh_user("hist1")
+    task = "thist1"
+    user_dir = m._user_report_dir(uid)
+    task_dir = os.path.join(MASTER_REPORTS_DIR, user_dir, task)
+    shutil.rmtree(task_dir, ignore_errors=True)
+    os.makedirs(task_dir)
+    with open(os.path.join(task_dir, "report_1.html"), "w") as f:
+        f.write(
+            '<h2 class="toggle">Base&#160;:&#160;1000 dps</h2>'
+            '<h2 id="player2toggle" class="toggle"">Winner&#160;:&#160;2500 dps</h2>'
+        )
+    m.task_user_map[task] = uid
+    m.task_meta_map[task] = {
+        "fighting_style": "aoe", "spec": "fire", "source": "armory",
+        "char_name": "Zed", "realm_slug": "dragonblight", "region": "eu",
+    }
+    try:
+        m._record_run_history(task, "success")
+        rows = run_history_list(uid)
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["top_dps"] == 2500
+        assert row["status"] == "success"
+        assert row["report_path"] == os.path.join(user_dir, task, "report_1.html")
+        assert row["fighting_style"] == "aoe"
+        assert row["spec"] == "fire"
+        assert row["source"] == "armory"
+        assert row["char_name"] == "Zed"
+        assert row["realm_slug"] == "dragonblight"
+        assert row["region"] == "eu"
+        assert task not in m.task_meta_map  # snapshot consumed
+    finally:
+        m.task_user_map.pop(task, None)
+        m.task_meta_map.pop(task, None)
+        shutil.rmtree(task_dir, ignore_errors=True)
+        from src.core.db import user_delete as _ud
+        _ud(uid)
+
+
+def test_record_run_history_failed_without_report():
+    """t_b3b78acd: a failed run still lands in history with null dps/path."""
+    import web.main as m
+    from src.core.db import run_history_list
+
+    uid = _rh_user("hist2")
+    task = "thist2"
+    m.task_user_map[task] = uid
+    m.task_meta_map[task] = {"source": "addon", "char_name": "Fails"}
+    try:
+        m._record_run_history(task, "failed")
+        rows = run_history_list(uid)
+        assert len(rows) == 1
+        assert rows[0]["status"] == "failed"
+        assert rows[0]["top_dps"] is None
+        assert rows[0]["report_path"] is None
+        assert rows[0]["char_name"] == "Fails"
+    finally:
+        m.task_user_map.pop(task, None)
+        m.task_meta_map.pop(task, None)
+        from src.core.db import user_delete as _ud
+        _ud(uid)
+
+
+def test_record_run_history_swallows_fk_violation():
+    """t_b3b78acd: anonymous/ip owners (no users row) must not raise from the SSE hook."""
+    import web.main as m
+    from src.core.db import run_history_list
+
+    task = "thist3"
+    m.task_user_map[task] = f"ip_10_0_0_{uuid.uuid4().hex[:6]}"
+    try:
+        m._record_run_history(task, "success")  # must not raise
+        assert run_history_list(m.task_user_map[task]) == []
+    finally:
+        m.task_user_map.pop(task, None)
+        m.task_meta_map.pop(task, None)
+
+
+def test_generate_simc_captures_run_metadata():
+    """t_b3b78acd: generate-simc snapshots fighting_style/spec/char_name and
+    defaults source to 'addon' when no load step ran."""
+    import web.main as m
+
+    before = {k: dict(v) for k, v in m.run_meta_by_user.items()}
+    payload = {
+        "base_profile": "mage=Histy\nspec=fire",
+        "char_class": "mage",
+        "char_name": "Histy",
+        "equipped_gear": {"head": "id=1"},
+        "selected_items": {"head": ["id=1", "id=2"]},
+        "selected_enchants": {},
+        "selected_gems": [],
+    }
+    with patch(
+        "src.cli.generate_input.load_config",
+        return_value={"gems": {"meta": [], "standard": []}, "enchantments": {}},
+    ):
+        response = client.post("/api/generate-simc", json=payload)
+    assert response.status_code == 200
+
+    fresh = {k: v for k, v in m.run_meta_by_user.items() if before.get(k) != v}
+    assert fresh, "generate-simc did not record run metadata"
+    meta = next(iter(fresh.values()))
+    assert meta["char_name"] == "Histy"
+    assert meta["spec"] == "fire"
+    assert meta["source"] == "addon"
+    assert meta["fighting_style"] == master.FIGHT_STYLE_SINGLE_BOSS
+
+
+def test_run_simulation_snapshots_task_metadata(monkeypatch):
+    """t_b3b78acd: run_simulation freezes the user's run metadata per task."""
+    import web.main as m
+    from src.core.db import session_cleanup_older_than
+
+    _auth_on(monkeypatch)  # real session -> current_user is the created user
+    uid = _rh_user("snap")
+    m.run_meta_by_user[uid] = {"source": "armory", "char_name": "Snap"}
+    m.user_last_sim_time.pop(uid, None)
+    session_cleanup_older_than(0, time.time())
+    task_id = None
+    try:
+        with patch.object(manager, "get_idle_worker", return_value="worker-snap"), \
+             patch.object(manager, "send_task", return_value=None):
+            manager.active_workers["worker-snap"] = MagicMock(status="Idle")
+            authed = _authed_client(uid)
+            response = authed.post("/api/run-simulation")
+            assert response.status_code == 200
+            task_id = response.json()["task_id"]
+        assert m.task_meta_map[task_id] == {"source": "armory", "char_name": "Snap"}
+    finally:
+        if task_id:
+            m.task_meta_map.pop(task_id, None)
+        m.run_meta_by_user.pop(uid, None)
+        manager.active_workers.pop("worker-snap", None)
+        from src.core.db import user_delete as _ud
+        _ud(uid)

@@ -62,8 +62,8 @@ target_dir/ (e.g., /home/user/simc_helper)
 │   └── master/
 │       ├── inputs/           # Generated .simc task inputs
 │       └── simc_helper.sqlite# SQLite user/session storage
-├── reports/ (or /tmp/simc_reports/)
-│   └── <task_id>/            # Unzipped HTML reports & logs
+├── data/reports/             # Durable reports (simc-data volume; was /tmp/simc_reports)
+│   └── <user_id>/<task_id>/  # Unzipped HTML reports & logs (50 runs/user, oldest pruned)
 └── thirdparties/
     └── simc/                 # SimulationCraft source and compiled binary
 ```

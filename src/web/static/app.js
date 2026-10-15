@@ -1193,7 +1193,7 @@ async function runSimulation() {
     startRunProgress();
     updateRailState();
     const events = new EventSource(`/api/simulation/stream/${data.task_id}?worker_id=${encodeURIComponent(data.worker_id)}`);
-    events.onmessage = event => {
+    events.onmessage = async event => {
       const message = JSON.parse(event.data);
       if (message.type === 'log') {
         log.textContent += `${message.text}\n`;
@@ -1216,8 +1216,17 @@ async function runSimulation() {
         if (message.type === 'done') simulationDone = true;
         updateRailState();
         if (message.type === 'done' && message.report_file && message.task_id) {
-          const reportUrl = `/reports/${encodeURIComponent(message.task_id)}/${encodeURIComponent(message.report_file)}`;
-          status.innerHTML = `${escapeHtml(message.text)} <a href="${reportUrl}" target="_blank">Open report</a>`;
+          // t_c968bf8d: durable reports live under /reports/<user_id>/<task_id>/,
+          // which only the master can resolve — ask it for the URL.
+          let reportLink = '';
+          try {
+            const urlResp = await fetch(`/api/report-url?task_id=${encodeURIComponent(message.task_id)}`);
+            if (urlResp.ok) {
+              const urlData = await urlResp.json();
+              if (urlData.url) reportLink = ` <a href="${urlData.url}" target="_blank">Open report</a>`;
+            }
+          } catch (e) { /* report link is best-effort */ }
+          status.innerHTML = `${escapeHtml(message.text)}${reportLink}`;
           const baseline = parsedData?.char_name || '';
           window.location.assign(`/results?task_id=${encodeURIComponent(message.task_id)}&baseline=${encodeURIComponent(baseline)}`);
         } else {

@@ -90,6 +90,9 @@ services:
     environment:
       - HOST=${HOST:-0.0.0.0}
       - PORT=${PORT:-8000}
+      # t_c968bf8d: durable reports at $BASE_DIR/data/reports on the simc-data
+      # volume (was /tmp/simc_reports, lost on every container restart).
+      - BASE_DIR=/app
       - ADMIN_TOKEN=${ADMIN_TOKEN:-change-me-in-production}
       - CLUSTER_SECRET=${CLUSTER_SECRET:-change-me-in-production}
       - SIMC_HELPER_DEV_MODE=${SIMC_HELPER_DEV_MODE:-0}

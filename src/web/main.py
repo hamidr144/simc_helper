@@ -88,6 +88,9 @@ from src.core.db import (
     input_set,
     load_inputs,
     load_sessions,
+    run_history_get,
+    run_history_insert,
+    run_history_list,
     session_cleanup_older_than,
     session_get,
     session_set,
@@ -399,6 +402,17 @@ init_db()
 user_last_sim_time = load_sessions()
 generated_inputs_by_user: dict = load_inputs()
 generated_inputs_by_user["latest"] = None
+# t_c968bf8d: task_id -> user_id so worker uploads land in the owner's report
+# directory. Ephemeral by design: uploads for tasks started before a master
+# restart fall back to the "anonymous" bucket (the durable run_history table
+# from t_b3b78acd supersedes this map).
+task_user_map: dict = {}
+# t_b3b78acd: per-user character metadata captured as the user walks the flow
+# (parse-addon / armory-load record the source; generate-simc records the
+# fight style, spec and name). run_simulation snapshots it per task so the
+# SSE done hook can write a run_history row.
+run_meta_by_user: Dict[str, Dict[str, Any]] = {}
+task_meta_map: Dict[str, Dict[str, Any]] = {}
 wowhead_upgrade_cache = {}
 wowhead_icon_cache: Dict[str, tuple[bytes, str]] = {}
 wowhead_tooltip_script_cache: Optional[bytes] = None
@@ -628,7 +642,14 @@ if allowed_origins:
     logger.info("CORS enabled for origins: %s", allowed_origins)
 
 # Create and mount reports directory
-REPORTS_DIR = "/tmp/simc_reports"  # nosec B108
+# t_c968bf8d: durable report storage on the simc-data volume (mounted at
+# $BASE_DIR/data in both master and worker containers). Layout is
+#   <REPORTS_DIR>/<user_id>/<task_id>/report_*.html
+# so results survive container restarts. Existing /tmp/simc_reports data is
+# intentionally NOT migrated (it was already lost on every restart).
+REPORTS_DIR = os.environ.get("REPORTS_DIR") or os.path.join(BASE_DIR, "data", "reports")
+# Per-user retention cap: the oldest run directories are pruned on insert.
+REPORT_RETENTION = int(os.environ.get("REPORT_RETENTION", "50"))
 os.makedirs(REPORTS_DIR, exist_ok=True)
 app.mount("/reports", StaticFiles(directory=REPORTS_DIR), name="reports")
 
@@ -674,6 +695,7 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 LOGIN_PAGE = os.path.abspath(os.path.join(static_dir, "login.html"))
 APP_PAGE = os.path.abspath(os.path.join(static_dir, "app.html"))
 RESULTS_PAGE = os.path.abspath(os.path.join(static_dir, "results.html"))
+HISTORY_PAGE = os.path.abspath(os.path.join(static_dir, "history.html"))
 
 
 templates = Jinja2Templates(directory=static_dir)
@@ -832,6 +854,23 @@ async def results_page(request: Request):
         return FileResponse(RESULTS_PAGE)
     if _page_session_valid(request):
         return FileResponse(RESULTS_PAGE)
+    return RedirectResponse(url="/login", status_code=303)
+
+
+@app.get("/history")
+async def history_page(request: Request):
+    """Run-history page (t_d34ced81).
+
+    Gate note: unlike the older page routes above, the session cookie is
+    validated against the ``users`` table — the same rule as
+    ``require_session`` — because ``session_get`` reads the cooldown table
+    that gets purged, which would bounce logged-in users to /login.
+    """
+    if not authentication_enabled() or "pytest" in sys.modules or os.environ.get("SIMC_HELPER_DEV_MODE") == "1":
+        return FileResponse(HISTORY_PAGE)
+    session_id = request.cookies.get("session_id")
+    if session_id and user_get_by_id(session_id) is not None:
+        return FileResponse(HISTORY_PAGE)
     return RedirectResponse(url="/login", status_code=303)
 
 
@@ -1627,7 +1666,7 @@ async def get_wowhead_upgrades(payload: WowheadUpgradesRequest):
     return {"status": "success", "gear_upgrades": results, "errors": errors}
 
 @app.post("/api/parse-addon", response_model=ParseAddonResponse, tags=["Addons"])
-async def parse_addon_text(payload: ParseAddonRequest, _: str = Depends(require_session)):
+async def parse_addon_text(request: Request, payload: ParseAddonRequest, current_user: str = Depends(require_session)):
     """Parse SimulationCraft addon text into structured character data.
 
     **Tags:** Addons
@@ -1647,6 +1686,11 @@ async def parse_addon_text(payload: ParseAddonRequest, _: str = Depends(require_
         raise HTTPException(status_code=400, detail=FOREVER_EXPORT_MESSAGE)
     warnings = forever_export_warnings(lines)
     base_profile, equipped_gear, items_by_slot, item_names, char_name, char_class, item_upgrades = parse_addon_lines(lines)
+    # t_b3b78acd: remember where this user's character came from so the
+    # eventual run_history row can say "addon".
+    run_meta_by_user.setdefault(_resolved_user_id(request, current_user), {}).update(
+        {"source": "addon", "char_name": char_name}
+    )
     return {
         "base_profile": base_profile.rstrip("\n"),
         "equipped_gear": equipped_gear,
@@ -1659,7 +1703,7 @@ async def parse_addon_text(payload: ParseAddonRequest, _: str = Depends(require_
     }
 
 @app.post("/api/armory-load", response_model=ArmoryLoadResponse, tags=["Addons"])
-async def armory_load_character(payload: ArmoryLoadRequest, _: str = Depends(require_session)):
+async def armory_load_character(request: Request, payload: ArmoryLoadRequest, current_user: str = Depends(require_session)):
     """Load a character + equipped gear from the WoW Armory (no addon export).
 
     **Tags:** Addons
@@ -1713,6 +1757,16 @@ async def armory_load_character(payload: ArmoryLoadRequest, _: str = Depends(req
         "Loaded %s from Armory %s/%s (%d slots)",
         parsed["char_name"], region, realm_slug, len(parsed["equipped_gear"]),
     )
+    # t_b3b78acd: Armory is the only source that knows region/realm/spec.
+    run_meta_by_user.setdefault(_resolved_user_id(request, current_user), {}).update(
+        {
+            "source": "armory",
+            "char_name": parsed["char_name"],
+            "region": region,
+            "realm_slug": realm_slug,
+            "spec": parsed.get("char_spec") or None,
+        }
+    )
     return parsed
 
 
@@ -1734,6 +1788,20 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
             status_code=422,
             detail=f"Unknown fight_style '{fight_style}'; expected one of {sorted(FIGHT_STYLE_DIRECTIVES)}",
         )
+    # t_b3b78acd: snapshot what this run is about for the run_history row.
+    # ``source`` keeps whatever the load step recorded (addon/armory); plain
+    # paste-in profiles with no load step default to "addon".
+    _gen_meta = run_meta_by_user.setdefault(
+        _resolved_user_id(request, current_user), {}
+    )
+    _gen_meta.update(
+        {
+            "fighting_style": fight_style,
+            "char_name": payload.char_name,
+            "spec": _extract_spec(payload.base_profile) or _gen_meta.get("spec"),
+        }
+    )
+    _gen_meta.setdefault("source", "addon")
     try:
         from src.cli.generate_input import (
             apply_gear_upgrade,
@@ -2016,6 +2084,9 @@ async def simulation_event_generator(task_id: str, worker_id: str):
                 elif data["type"] == "task_status_update":
                     yield f"data: {json.dumps({'type': 'task_status_update', 'task_id': data['task_id'], 'status': data['status']})}\n\n"
                 elif data["type"] == "done":
+                    # t_b3b78acd: durable results-history row at the task-done
+                    # point (best-effort; never breaks the stream).
+                    _record_run_history(task_id, "success" if data["code"] == 0 else "failed")
                     if data["code"] == 0:
                         yield f"data: {json.dumps({'type': 'done', 'text': 'Simulation finished successfully!', 'report_file': data.get('report_file'), 'task_id': task_id})}\n\n"
                     else:
@@ -2029,6 +2100,9 @@ async def simulation_event_generator(task_id: str, worker_id: str):
                 yield ": keep-alive\n\n"
     finally:
         if task_id in manager.task_queues: del manager.task_queues[task_id]
+        # t_b3b78acd: drop the metadata snapshot if the done event never
+        # reached the hook (worker dropped, stream cancelled).
+        task_meta_map.pop(task_id, None)
 
 @app.post("/api/run-simulation", response_model=RunSimulationResponse, tags=["Simulation"])
 async def run_simulation(request: Request, worker_id: Optional[str] = Query(None), input_id: Optional[str] = Query(None), current_user: str = Depends(require_session)):
@@ -2063,6 +2137,10 @@ async def run_simulation(request: Request, worker_id: Optional[str] = Query(None
     session_set(user_id, now)
     task_id = str(uuid.uuid4())[:8]
     manager.task_queues[task_id] = asyncio.Queue()
+    task_user_map[task_id] = user_id  # t_c968bf8d: owner of the report directory
+    # t_b3b78acd: freeze the character metadata for this task; the SSE done
+    # hook consumes (and pops) it when writing the run_history row.
+    task_meta_map[task_id] = dict(run_meta_by_user.get(user_id) or {})
     try:
         input_record = None
         if input_id:
@@ -2159,13 +2237,13 @@ async def get_results(task_id: str = Query(default="latest")):
     try:
         html_path = None
         if task_id == "latest":
-             all_reports = glob.glob(os.path.join(REPORTS_DIR, "*", "report_*.html"))
+             all_reports = glob.glob(os.path.join(REPORTS_DIR, "*", "*", "report_*.html"))
              if not all_reports: return {"status": "error", "message": "No reports found"}
              all_reports.sort(key=os.path.getmtime, reverse=True)
              html_path = all_reports[0]
         else:
-            tmp_dir = _safe_task_dir(task_id)
-            if not os.path.exists(tmp_dir):
+            tmp_dir = _find_task_report_dir(task_id)
+            if not tmp_dir or not os.path.exists(tmp_dir):
                 return {"status": "error", "message": f"Task {task_id} results not found"}
             report_files = [f for f in os.listdir(tmp_dir) if f.startswith("report_") and f.endswith(".html")]
             if not report_files: return {"status": "error", "message": "No reports found"}
@@ -2180,6 +2258,88 @@ async def get_results(task_id: str = Query(default="latest")):
     except Exception as e:
         logger.error(f"Error parsing results: {e}")
         return {"status": "error", "message": str(e)}
+
+@app.get("/api/report-url", tags=["Simulation"])
+async def get_report_url(task_id: str = Query(...)):
+    """Resolve the static URL of a run's HTML report (t_c968bf8d).
+
+    Durable reports live under the owner's user directory
+    (``/reports/<user_id>/<task_id>/report_*.html``), which the frontend
+    cannot derive from ``task_id`` alone. Exposure is equivalent to the
+    ``/reports`` static mount itself — no new access surface.
+    """
+    from urllib.parse import quote
+
+    task_dir = _find_task_report_dir(task_id)
+    if not task_dir or not os.path.isdir(task_dir):
+        raise HTTPException(status_code=404, detail="Report not found")
+    report_files = [f for f in os.listdir(task_dir) if f.startswith("report_") and f.endswith(".html")]
+    if not report_files:
+        raise HTTPException(status_code=404, detail="Report not found")
+    report_files.sort(key=lambda x: os.path.getmtime(os.path.join(task_dir, x)), reverse=True)
+    rel = os.path.relpath(os.path.join(task_dir, report_files[0]), REPORTS_DIR)
+    return {"status": "success", "url": "/reports/" + "/".join(quote(part) for part in rel.split(os.sep))}
+
+
+# ---------------------------------------------------------------------------
+# run_history read API (t_d34ced81: /history page + per-run view)
+# ---------------------------------------------------------------------------
+
+def _history_report_url(report_path: Optional[str]) -> Optional[str]:
+    """Resolve a stored ``report_path`` (relative to REPORTS_DIR) to a static
+    URL, or ``None`` when absent or no longer on disk (retention prunes old
+    run dirs). Exposure equals the ``/reports`` mount — no new surface."""
+    if not report_path:
+        return None
+    from urllib.parse import quote
+
+    abs_path = os.path.normpath(os.path.join(os.path.abspath(REPORTS_DIR), report_path))
+    if not abs_path.startswith(os.path.abspath(REPORTS_DIR) + os.sep):
+        return None  # stored path escaped the reports root — never serve it
+    if not os.path.isfile(abs_path):
+        return None
+    rel = os.path.relpath(abs_path, REPORTS_DIR)
+    return "/reports/" + "/".join(quote(part) for part in rel.split(os.sep))
+
+
+def _history_run_view(row: Dict[str, Any]) -> Dict[str, Any]:
+    """One run_history row plus the client-ready ``report_url`` (t_d34ced81)."""
+    run = dict(row)
+    run["report_url"] = _history_report_url(row.get("report_path"))
+    return run
+
+
+@app.get("/api/history", tags=["Simulation"])
+async def get_history(
+    request: Request,
+    limit: int = Query(50, ge=1, le=200),
+    current_user: str = Depends(require_session),
+):
+    """List the caller's stored runs, newest first (t_d34ced81).
+
+    Anonymous visitors (kill-switch mode, ``ip_*`` identities) get an empty
+    list: the write hook only records rows for registered users, so history
+    is the account feature's read side.
+    """
+    user_id = _resolved_user_id(request, current_user)
+    runs = [_history_run_view(r) for r in run_history_list(user_id, limit=limit)]
+    return {"status": "success", "runs": runs}
+
+
+@app.get("/api/history/{run_id}", tags=["Simulation"])
+async def get_history_run(
+    run_id: str,
+    request: Request,
+    current_user: str = Depends(require_session),
+):
+    """Per-run detail view data (t_d34ced81). Ownership is enforced in the
+    query, so another user's ``run_id`` is indistinguishable from a miss."""
+    user_id = _resolved_user_id(request, current_user)
+    row = run_history_get(run_id, user_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return {"status": "success", "run": _history_run_view(row)}
+
 
 @app.get("/inputs/{file_name}")
 async def get_input_file(file_name: str):
@@ -2201,8 +2361,143 @@ def _safe_child_path(parent_dir: str, child_name: str) -> str:
     return safe_child_path(parent_dir, child_name)
 
 
-def _safe_task_dir(task_id: str) -> str:
-    return safe_task_dir(REPORTS_DIR, task_id)
+def _user_report_dir(user_id: str) -> str:
+    """Sanitize a user_id into a safe per-user reports directory name (t_c968bf8d).
+
+    Registered users get their uuid-hex id; anonymous uuid cookies pass through
+    unchanged; the ``ip_<host>`` fallback (dots!) is flattened to ``ip_..._...``.
+    """
+    return re.sub(r"[^A-Za-z0-9_-]", "_", user_id or "") or "anonymous"
+
+
+# ---------------------------------------------------------------------------
+# run_history recording (t_b3b78acd)
+# ---------------------------------------------------------------------------
+
+_REPORT_SPEC_RE = re.compile(r"^\s*spec\s*=\s*([A-Za-z0-9_]+)", re.MULTILINE)
+
+
+def _resolved_user_id(request: Request, current_user: Optional[str]) -> str:
+    """Same identity rule as run_simulation/generate_simc (t_b3b78acd)."""
+    if current_user and current_user != "anonymous":
+        return current_user
+    host = request.client.host if request.client else "unknown"
+    return request.cookies.get("user_id") or f"ip_{host}"
+
+
+def _extract_spec(base_profile: str) -> Optional[str]:
+    """Pull the SimC ``spec=`` directive out of a base profile, if present."""
+    m = _REPORT_SPEC_RE.search(base_profile or "")
+    return m.group(1) if m else None
+
+
+def _record_run_history(task_id: str, status: str) -> None:
+    """Insert a run_history row for a finished simulation (t_b3b78acd).
+
+    Called from the task-done SSE point. Best-effort by design: a missing
+    report, an FK violation (anonymous/ip user), or a read error must never
+    break the SSE stream — failures are logged and swallowed. ``top_dps``
+    reuses the t_fdd385ef report parser; ``report_path`` is stored relative
+    to REPORTS_DIR (``<user_dir>/<task_id>/report_*.html``).
+    """
+    try:
+        user_id = task_user_map.get(task_id)
+        if not user_id:
+            return
+        meta = task_meta_map.pop(task_id, {}) or {}
+        top_dps: Optional[int] = None
+        report_rel: Optional[str] = None
+        task_dir = _find_task_report_dir(task_id)
+        if task_dir and os.path.isdir(task_dir):
+            report_files = [
+                f for f in os.listdir(task_dir)
+                if f.startswith("report_") and f.endswith(".html")
+            ]
+            if report_files:
+                report_files.sort(
+                    key=lambda x: os.path.getmtime(os.path.join(task_dir, x)),
+                    reverse=True,
+                )
+                report_path = os.path.join(task_dir, report_files[0])
+                report_rel = os.path.relpath(report_path, REPORTS_DIR)
+                try:
+                    with open(report_path, encoding="utf-8", errors="replace") as f:
+                        parsed = parse_report_results(f.read())
+                    if parsed:
+                        top_dps = max(r["dps"] for r in parsed)
+                except OSError:
+                    pass
+        elif status == "success":
+            user_dir = _user_report_dir(user_id)
+            report_rel = os.path.join(user_dir, task_id, "report_<ts>.html")
+        run_history_insert(
+            {
+                "run_id": uuid.uuid4().hex[:12],
+                "user_id": user_id,
+                "created_at": time.time(),
+                "fighting_style": meta.get("fighting_style"),
+                "spec": meta.get("spec"),
+                "source": meta.get("source"),
+                "char_name": meta.get("char_name"),
+                "realm_slug": meta.get("realm_slug"),
+                "region": meta.get("region"),
+                "top_dps": top_dps,
+                "report_path": report_rel,
+                "status": status,
+            }
+        )
+    except Exception as exc:  # noqa: BLE001 — history must never sink the stream
+        logger.warning("run_history insert failed for task %s: %s", task_id, exc)
+
+
+def _task_report_dir(user_dir: str, task_id: str) -> str:
+    """REPORTS_DIR/<user_dir>/<task_id> with the same traversal checks as before."""
+    return safe_task_dir(os.path.join(REPORTS_DIR, user_dir), task_id)
+
+
+def _find_task_report_dir(task_id: str) -> Optional[str]:
+    """Locate the report directory for *task_id* across user directories.
+
+    Checks the owner's directory first via the in-memory task map, then scans
+    ``REPORTS_DIR/*/<task_id>`` — covers uploads whose owner was lost across a
+    master restart. Returns None when the task has no directory yet.
+    """
+    validate_safe_id(task_id, "task id")
+    owner = task_user_map.get(task_id)
+    if owner:
+        candidate = os.path.join(REPORTS_DIR, _user_report_dir(owner), task_id)
+        if os.path.isdir(candidate):
+            return candidate
+    for match in glob.glob(os.path.join(REPORTS_DIR, "*", task_id)):
+        if os.path.isdir(match):
+            return match
+    return None
+
+
+def _prune_user_reports(user_dir: str, keep: Optional[int] = None) -> None:
+    """Retention cap (t_c968bf8d): keep only the newest ``keep`` run dirs for a
+    user (by mtime), deleting the oldest. Called on artifact insert (upload)."""
+    import shutil
+
+    keep = REPORT_RETENTION if keep is None else keep
+    base = os.path.join(REPORTS_DIR, user_dir)
+    try:
+        entries = [os.path.join(base, name) for name in os.listdir(base)]
+        entries = [p for p in entries if os.path.isdir(p)]
+    except OSError:
+        return
+    if len(entries) <= keep:
+        return
+
+    def _mtime(p: str) -> float:
+        try:
+            return os.path.getmtime(p)
+        except OSError:
+            return 0.0
+
+    entries.sort(key=lambda p: (_mtime(p), p))
+    for stale in entries[: len(entries) - keep]:
+        shutil.rmtree(stale, ignore_errors=True)
 
 
 def _extract_zip_safely(zip_path: str, dest_dir: str):
@@ -2233,12 +2528,15 @@ async def worker_upload_file(
     """
     if not _cluster_secret_ok(request.headers.get("X-Cluster-Secret"), secret):
         raise HTTPException(status_code=403)
-    dest_dir = _safe_task_dir(task_id)
+    user_dir = _user_report_dir(task_user_map.get(task_id, ""))
+    dest_dir = _task_report_dir(user_dir, task_id)
     os.makedirs(dest_dir, exist_ok=True)
     dest_path = _safe_child_path(dest_dir, file_name)
     with open(dest_path, "wb") as f: f.write(await file.read())
     if file_name == "artifacts.zip":
         _extract_zip_safely(dest_path, dest_dir)
+    # Retention cap (t_c968bf8d): prune this user's oldest runs beyond the cap.
+    _prune_user_reports(user_dir)
     return {"status": "success"}
 
 @app.websocket("/ws/worker")
