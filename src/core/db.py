@@ -327,6 +327,35 @@ def run_history_list(user_id: str, limit: int = 50) -> list[Dict[str, Any]]:
     finally:
         conn.close()
 
+def run_history_get(run_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+    """Return one run row only when it belongs to *user_id* (t_d34ced81).
+
+    Ownership is enforced in SQL so a caller can never leak another user's
+    run by guessing a ``run_id`` — a miss and a foreign row both return
+    ``None``.
+    """
+    conn = _connect()
+    try:
+        row = conn.execute(
+            """
+            SELECT run_id, user_id, created_at, fighting_style, spec, source,
+                   char_name, realm_slug, region, top_dps, report_path, status
+            FROM run_history
+            WHERE run_id = ? AND user_id = ?
+            """,
+            (run_id, user_id),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "run_id": row[0], "user_id": row[1], "created_at": row[2],
+            "fighting_style": row[3], "spec": row[4], "source": row[5],
+            "char_name": row[6], "realm_slug": row[7], "region": row[8],
+            "top_dps": row[9], "report_path": row[10], "status": row[11],
+        }
+    finally:
+        conn.close()
+
 def load_sessions() -> Dict[str, float]:
     """Return all sessions as {user_id: last_sim_time}.
     Called once at startup to restore in-memory state."""

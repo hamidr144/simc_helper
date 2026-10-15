@@ -88,7 +88,9 @@ from src.core.db import (
     input_set,
     load_inputs,
     load_sessions,
+    run_history_get,
     run_history_insert,
+    run_history_list,
     session_cleanup_older_than,
     session_get,
     session_set,
@@ -693,6 +695,7 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 LOGIN_PAGE = os.path.abspath(os.path.join(static_dir, "login.html"))
 APP_PAGE = os.path.abspath(os.path.join(static_dir, "app.html"))
 RESULTS_PAGE = os.path.abspath(os.path.join(static_dir, "results.html"))
+HISTORY_PAGE = os.path.abspath(os.path.join(static_dir, "history.html"))
 
 
 templates = Jinja2Templates(directory=static_dir)
@@ -841,6 +844,23 @@ async def results_page(request: Request):
     session_id = request.cookies.get("session_id")
     if session_id and session_get(session_id) is not None:
         return FileResponse(RESULTS_PAGE)
+    return RedirectResponse(url="/login", status_code=303)
+
+
+@app.get("/history")
+async def history_page(request: Request):
+    """Run-history page (t_d34ced81).
+
+    Gate note: unlike the older page routes above, the session cookie is
+    validated against the ``users`` table — the same rule as
+    ``require_session`` — because ``session_get`` reads the cooldown table
+    that gets purged, which would bounce logged-in users to /login.
+    """
+    if not authentication_enabled() or "pytest" in sys.modules or os.environ.get("SIMC_HELPER_DEV_MODE") == "1":
+        return FileResponse(HISTORY_PAGE)
+    session_id = request.cookies.get("session_id")
+    if session_id and user_get_by_id(session_id) is not None:
+        return FileResponse(HISTORY_PAGE)
     return RedirectResponse(url="/login", status_code=303)
 
 
@@ -2241,6 +2261,66 @@ async def get_report_url(task_id: str = Query(...)):
     report_files.sort(key=lambda x: os.path.getmtime(os.path.join(task_dir, x)), reverse=True)
     rel = os.path.relpath(os.path.join(task_dir, report_files[0]), REPORTS_DIR)
     return {"status": "success", "url": "/reports/" + "/".join(quote(part) for part in rel.split(os.sep))}
+
+
+# ---------------------------------------------------------------------------
+# run_history read API (t_d34ced81: /history page + per-run view)
+# ---------------------------------------------------------------------------
+
+def _history_report_url(report_path: Optional[str]) -> Optional[str]:
+    """Resolve a stored ``report_path`` (relative to REPORTS_DIR) to a static
+    URL, or ``None`` when absent or no longer on disk (retention prunes old
+    run dirs). Exposure equals the ``/reports`` mount — no new surface."""
+    if not report_path:
+        return None
+    from urllib.parse import quote
+
+    abs_path = os.path.normpath(os.path.join(os.path.abspath(REPORTS_DIR), report_path))
+    if not abs_path.startswith(os.path.abspath(REPORTS_DIR) + os.sep):
+        return None  # stored path escaped the reports root — never serve it
+    if not os.path.isfile(abs_path):
+        return None
+    rel = os.path.relpath(abs_path, REPORTS_DIR)
+    return "/reports/" + "/".join(quote(part) for part in rel.split(os.sep))
+
+
+def _history_run_view(row: Dict[str, Any]) -> Dict[str, Any]:
+    """One run_history row plus the client-ready ``report_url`` (t_d34ced81)."""
+    run = dict(row)
+    run["report_url"] = _history_report_url(row.get("report_path"))
+    return run
+
+
+@app.get("/api/history", tags=["Simulation"])
+async def get_history(
+    request: Request,
+    limit: int = Query(50, ge=1, le=200),
+    current_user: str = Depends(require_session),
+):
+    """List the caller's stored runs, newest first (t_d34ced81).
+
+    Anonymous visitors (kill-switch mode, ``ip_*`` identities) get an empty
+    list: the write hook only records rows for registered users, so history
+    is the account feature's read side.
+    """
+    user_id = _resolved_user_id(request, current_user)
+    runs = [_history_run_view(r) for r in run_history_list(user_id, limit=limit)]
+    return {"status": "success", "runs": runs}
+
+
+@app.get("/api/history/{run_id}", tags=["Simulation"])
+async def get_history_run(
+    run_id: str,
+    request: Request,
+    current_user: str = Depends(require_session),
+):
+    """Per-run detail view data (t_d34ced81). Ownership is enforced in the
+    query, so another user's ``run_id`` is indistinguishable from a miss."""
+    user_id = _resolved_user_id(request, current_user)
+    row = run_history_get(run_id, user_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return {"status": "success", "run": _history_run_view(row)}
 
 
 @app.get("/inputs/{file_name}")
