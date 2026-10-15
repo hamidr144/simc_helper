@@ -20,6 +20,7 @@ server.log
 !src/web/static/app.html
 !src/web/static/login.html
 !src/web/static/index.html
+!tests/fixtures/*.html
 *.simc
 report_*
 char_simc_addon.txt
