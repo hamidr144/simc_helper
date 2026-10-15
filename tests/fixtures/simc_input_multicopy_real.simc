@@ -1,0 +1,62 @@
+# REAL addon export (SimC Addon 12.0.1-04, WoW 12.0.5.67602) for Hamidriel,
+# EU/Draenor Retribution Paladin, from data/master/inputs/fa2e86c3-c44.simc.
+# talents= line removed (stale hash rejected by 1210-01 nightly); copies
+# trimmed to the first 2 in the multi-copy variant. Gear is verbatim.
+# Hamidriel - Retribution - 2026-05-27 23:36 - EU/Draenor
+# SimC Addon 12.0.1-04
+# WoW 12.0.5.67602, TOC 120005
+# Requires SimulationCraft 1000-01 or newer
+paladin="Hamidriel"
+level=90
+race=blood_elf
+region=eu
+server=draenor
+role=attack
+professions=blacksmithing=100/mining=100
+spec=retribution
+# loot_spec=retribution
+# Saved Loadout: m+ low
+# talents=CYEAVg1HmQqr1Dwlv86ljju8vCAAAMAghZbbmZWGzYmBAAAAAYGMLGmZsNMbDzsNjxYMMjN2wAAAzM2mZ2mBAsBYAwYGGYGzYDLzghxwgB
+# Saved Loadout: raid
+# talents=CYEAVg1HmQqr1Dwlv86ljju8vCAAAMAghZbbmZWGmZAAAAAAYgZxwMjthZbYmtZMGzMMjN2GGAAYmx2Mz2MAgNADAGzwAzYMbYZGMMGGM
+# Saved Loadout: m+
+# talents=CYEAVg1HmQqr1Dwlv86ljju8vCAAAMAghZbbmZWGzYGAAAAAAzgZxwMjthZbYmtZMGjhZsxGGAAYmx2Mz2MAgNADAGzwAzYmZDLzghxwgB
+# Luminant Verdict's Unwavering Gaze (289)
+# Barbed Ymirheim Choker (289)
+# Luminant Verdict's Providence Watch (289)
+# Cloak of the Fallen Cardinal (282)
+# Luminant Verdict's Divine Warplate (289)
+# Spellbreaker's Bracers (285)
+# Spellbreaker's Resolve (285)
+# Luminant Verdict's Undaunted Emblem (289)
+# Luminant Verdict's Greaves (289)
+# Oathsworn Stompers (289)
+# Omission of Light (289)
+# Occlusion of Void (276)
+# Gaze of the Alnseer (285)
+# Algeth'ar Puzzle Box (298)
+# Whirling Voidcleaver (298)
+head=,id=249961,ilevel=289,enchant_id=8017,bonus_id=13338/13440/6652/12667/13575/12806
+neck=,id=50228,ilevel=289,gem_id=240983,bonus_id=13440/6652/13668/12699/12806
+shoulder=,id=249959,ilevel=289,enchant_id=8001,bonus_id=6652/13440/13340/13574/12806
+back=,id=49823,ilevel=282,bonus_id=13440/6652/13577/12699/12804
+chest=,id=249964,ilevel=289,enchant_id=7987,bonus_id=43/13440/13336/13575/12806
+wrist=,id=237834,bonus_id=12214/13667/12497/12066/8960/12384/8791/13622/12667,crafted_stats=36/32,crafting_quality=5
+hands=,id=237836,enchant_id=2841,bonus_id=12214/13667/12497/12066/8960/12384/8791/13622,crafted_stats=32/36,crafting_quality=5
+waist=,id=249958,ilevel=289,bonus_id=6652/12667/13440/12806
+legs=,id=249960,ilevel=289,enchant_id=8159,bonus_id=6652/13440/13339/13575/12806
+feet=,id=251107,ilevel=289,enchant_id=7963,bonus_id=13440/6652/13577/12699/12806
+finger1=,id=251093,ilevel=289,enchant_id=7967,gem_id=240908,bonus_id=13440/6652/13668/12699/12806
+finger2=,id=251217,ilevel=276,enchant_id=7967,gem_id=240908,bonus_id=13440/6652/13668/12699/12798
+trinket1=,id=249343,ilevel=285,bonus_id=6652/13334/13653
+trinket2=,id=193701,ilevel=298,bonus_id=13440/6652/12699/13654
+main_hand=,id=251117,ilevel=298,enchant_id=8039,bonus_id=13440/6652/12701/13654
+
+copy="Hamidriel_wrist_0,Hamidriel"
+wrist=,id=237834,bonus_id=12214/13667/12497/12066/8960/12384/8791/13622/12667,crafted_stats=36/32,crafting_quality=5
+
+
+copy="Hamidriel_neck_1,Hamidriel"
+neck=,id=50228,ilevel=289,gem_id=240912,bonus_id=13440/6652/13668/12699/12806
+
+

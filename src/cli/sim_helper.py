@@ -10,6 +10,10 @@ This script automates a 3-stage workflow for SimulationCraft:
 The script automatically detects the base character profile and ensures it is
 included at the top of the input for every stage.
 
+If the input contains no 'copy=' candidate profiles (e.g. the user selected no
+gear changes), the script runs a single baseline current-gear simulation and
+still produces the HTML report instead of failing.
+
 Usage:
     ./sim_helper simc_path=/path/to/simc input_file=your_input.simc [stage1_percent_best=25%] [stage2_percent_best=25%] [start_server=1]
 
@@ -406,8 +410,16 @@ def main():
     initial_combo_count = len(all_combos)
     print(f"Found {initial_combo_count} combinations.")
 
+    # Degenerate selection: every candidate equals equipped gear, so the input
+    # has no copy= blocks. The base actor is still a valid current-gear
+    # simulation — run it once at full precision and emit the HTML report
+    # instead of failing with "no combos to refine" (t_4485565b).
+    baseline_only = initial_combo_count == 0
+
     s1_filter = args.get("stage1_percent_best")
-    if not s1_filter:
+    if baseline_only:
+        s1_filter = s1_filter or "100%"  # unused in baseline mode
+    elif not s1_filter:
         s1_filter = get_default_filter(1, initial_combo_count)
         print(f"Using dynamic default for Stage 1: {s1_filter}")
 
@@ -429,82 +441,93 @@ def main():
 
     top_combos_s1 = []
 
-    # Stage 1: Fast Filtering
-    if initial_combo_count > BATCH_SIZE:
-        print(f"\n--- STAGE 1: Fast Filtering (iterations=100) using {s1_filter} [BATCHED, size={BATCH_SIZE}] ---")
-        chunks = [all_combos[i:i + BATCH_SIZE] for i in range(0, len(all_combos), BATCH_SIZE)]
-        all_batch_results = []
-        for idx, chunk in enumerate(chunks):
-            batch_prefix = f"[Batch {idx + 1}/{len(chunks)}] "
-            print(f"\n{batch_prefix}Processing {len(chunk)} combinations...")
-            chunk_simc = os.path.join(tmp_dir, f"stage1_batch{idx+1}.simc")
-            prepare_stage(input_file, chunk, chunk_simc, "iterations=100", current_name=char_name)
-
-            chunk_log = os.path.join(tmp_dir, f"stage1_batch{idx+1}.log")
-            exit_code = run_simc(simc_path, chunk_simc, "iterations=100 single_actor_batch=1", chunk_log, prefix=batch_prefix)
-            if exit_code != 0:
-                print(f"Error: simc failed on batch {idx+1} with exit code {exit_code}. It might have run out of memory.")
-                sys.exit(1)
-
-            batch_results = get_all_dps(chunk_log, current_name=char_name)
-            all_batch_results.extend(batch_results)
-            # print(f"Parsed {len(batch_results)} results from batch {idx+1}") # Quieter
-
-        # Global sorting and filtering
-        all_batch_results.sort(key=lambda x: x[1], reverse=True)
-
-        if s1_filter.endswith("%"):
-            percentage = float(s1_filter.replace("%", "")) / 100
-            target_n = max(1, math.ceil(initial_combo_count * percentage))
-        else:
-            target_n = int(s1_filter)
-
-        top_combos_s1 = [item[0] for item in all_batch_results[:target_n]]
-        print(f"\nAggregated {len(all_batch_results)} total profiles across all batches.")
-        print(f"Kept global top {target_n} profiles for Stage 2.")
-    else:
-        print(f"\n--- STAGE 1: Fast Filtering (iterations=100) using {s1_filter} ---")
-        stage1_log = os.path.join(tmp_dir, "stage1.log")
-        exit_code = run_simc(simc_path, input_file, "iterations=100 single_actor_batch=1", stage1_log)
+    if baseline_only:
+        # No copy= blocks to refine: simulate the base actor once at full
+        # precision and emit the HTML report (same report path the staged
+        # pipeline uses, so the worker picks it up unchanged).
+        print("\n--- BASELINE: no candidate combinations; simulating current gear only ---")
+        baseline_log = os.path.join(tmp_dir, "baseline.log")
+        exit_code = run_simc(simc_path, input_file, "single_actor_batch=1", baseline_log, html_report=report_name)
         if exit_code != 0:
-            print(f"Error: simc failed with exit code {exit_code}. It might have run out of memory.")
+            print(f"Error: simc failed on the baseline simulation with exit code {exit_code}.")
             sys.exit(1)
-        top_combos_s1 = filter_best(stage1_log, s1_filter, current_name=char_name)
+    else:
+        # Stage 1: Fast Filtering
+        if initial_combo_count > BATCH_SIZE:
+            print(f"\n--- STAGE 1: Fast Filtering (iterations=100) using {s1_filter} [BATCHED, size={BATCH_SIZE}] ---")
+            chunks = [all_combos[i:i + BATCH_SIZE] for i in range(0, len(all_combos), BATCH_SIZE)]
+            all_batch_results = []
+            for idx, chunk in enumerate(chunks):
+                batch_prefix = f"[Batch {idx + 1}/{len(chunks)}] "
+                print(f"\n{batch_prefix}Processing {len(chunk)} combinations...")
+                chunk_simc = os.path.join(tmp_dir, f"stage1_batch{idx+1}.simc")
+                prepare_stage(input_file, chunk, chunk_simc, "iterations=100", current_name=char_name)
 
-    if not top_combos_s1:
-        print("Error: No combos found to refine after Stage 1. Stopping.")
-        sys.exit(1)
+                chunk_log = os.path.join(tmp_dir, f"stage1_batch{idx+1}.log")
+                exit_code = run_simc(simc_path, chunk_simc, "iterations=100 single_actor_batch=1", chunk_log, prefix=batch_prefix)
+                if exit_code != 0:
+                    print(f"Error: simc failed on batch {idx+1} with exit code {exit_code}. It might have run out of memory.")
+                    sys.exit(1)
 
-    if not s2_filter:
-        s2_filter = get_default_filter(2, len(top_combos_s1))
-        print(f"Using dynamic default for Stage 2: {s2_filter}")
+                batch_results = get_all_dps(chunk_log, current_name=char_name)
+                all_batch_results.extend(batch_results)
+                # print(f"Parsed {len(batch_results)} results from batch {idx+1}") # Quieter
 
-    stage2_simc = os.path.join(tmp_dir, "stage2.simc")
-    prepare_stage(input_file, top_combos_s1, stage2_simc, "iterations=2000", current_name=char_name)
+            # Global sorting and filtering
+            all_batch_results.sort(key=lambda x: x[1], reverse=True)
 
-    # Stage 2: Refinement
-    print(f"\n--- STAGE 2: Refinement (iterations=2000) using {s2_filter} ---")
-    stage2_log = os.path.join(tmp_dir, "stage2.log")
-    exit_code = run_simc(simc_path, stage2_simc, "iterations=2000 single_actor_batch=1", stage2_log, prefix="[Stage 2] ")
-    if exit_code != 0:
-        print(f"Error: simc failed on stage 2 with exit code {exit_code}.")
-        sys.exit(1)
-    top_combos_s2 = filter_best(stage2_log, s2_filter, current_name=char_name)
+            if s1_filter.endswith("%"):
+                percentage = float(s1_filter.replace("%", "")) / 100
+                target_n = max(1, math.ceil(initial_combo_count * percentage))
+            else:
+                target_n = int(s1_filter)
 
-    if not top_combos_s2:
-        print("Error: No combos found to refine after Stage 2. Stopping.")
-        sys.exit(1)
+            top_combos_s1 = [item[0] for item in all_batch_results[:target_n]]
+            print(f"\nAggregated {len(all_batch_results)} total profiles across all batches.")
+            print(f"Kept global top {target_n} profiles for Stage 2.")
+        else:
+            print(f"\n--- STAGE 1: Fast Filtering (iterations=100) using {s1_filter} ---")
+            stage1_log = os.path.join(tmp_dir, "stage1.log")
+            exit_code = run_simc(simc_path, input_file, "iterations=100 single_actor_batch=1", stage1_log)
+            if exit_code != 0:
+                print(f"Error: simc failed with exit code {exit_code}. It might have run out of memory.")
+                sys.exit(1)
+            top_combos_s1 = filter_best(stage1_log, s1_filter, current_name=char_name)
 
-    stage3_simc = os.path.join(tmp_dir, "stage3.simc")
-    prepare_stage(input_file, top_combos_s2, stage3_simc, "", current_name=char_name)
+        if not top_combos_s1:
+            print("Error: No combos found to refine after Stage 1. Stopping.")
+            sys.exit(1)
 
-    # Stage 3: Final Selection
-    print("\n--- STAGE 3: Final Selection ---")
-    stage3_log = os.path.join(tmp_dir, "stage3.log")
-    exit_code = run_simc(simc_path, stage3_simc, "single_actor_batch=1", stage3_log, html_report=report_name, prefix="[Stage 3] ")
-    if exit_code != 0:
-        print(f"Error: simc failed on stage 3 with exit code {exit_code}.")
-        sys.exit(1)
+        if not s2_filter:
+            s2_filter = get_default_filter(2, len(top_combos_s1))
+            print(f"Using dynamic default for Stage 2: {s2_filter}")
+
+        stage2_simc = os.path.join(tmp_dir, "stage2.simc")
+        prepare_stage(input_file, top_combos_s1, stage2_simc, "iterations=2000", current_name=char_name)
+
+        # Stage 2: Refinement
+        print(f"\n--- STAGE 2: Refinement (iterations=2000) using {s2_filter} ---")
+        stage2_log = os.path.join(tmp_dir, "stage2.log")
+        exit_code = run_simc(simc_path, stage2_simc, "iterations=2000 single_actor_batch=1", stage2_log, prefix="[Stage 2] ")
+        if exit_code != 0:
+            print(f"Error: simc failed on stage 2 with exit code {exit_code}.")
+            sys.exit(1)
+        top_combos_s2 = filter_best(stage2_log, s2_filter, current_name=char_name)
+
+        if not top_combos_s2:
+            print("Error: No combos found to refine after Stage 2. Stopping.")
+            sys.exit(1)
+
+        stage3_simc = os.path.join(tmp_dir, "stage3.simc")
+        prepare_stage(input_file, top_combos_s2, stage3_simc, "", current_name=char_name)
+
+        # Stage 3: Final Selection
+        print("\n--- STAGE 3: Final Selection ---")
+        stage3_log = os.path.join(tmp_dir, "stage3.log")
+        exit_code = run_simc(simc_path, stage3_simc, "single_actor_batch=1", stage3_log, html_report=report_name, prefix="[Stage 3] ")
+        if exit_code != 0:
+            print(f"Error: simc failed on stage 3 with exit code {exit_code}.")
+            sys.exit(1)
 
     print(f"\nSimcraft Helper complete! Results in {report_name}")
     print(f"Temporary files are in {tmp_dir}")

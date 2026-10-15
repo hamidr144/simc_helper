@@ -178,6 +178,32 @@ def test_api_generate_simc():
     assert response.json()["status"] == "success"
 
 
+def test_generate_simc_default_selection_reports_zero_combinations():
+    """t_4485565b: selecting only equipped gear yields 0 candidate copies and an
+    honest combinations=0 (no max(1, ...) fudge) — the run becomes a baseline
+    current-gear report instead of a doomed comparison job."""
+    payload = {
+        "base_profile": "paladin=Test",
+        "char_class": "paladin",
+        "char_name": "Test",
+        "equipped_gear": {"head": "id=1"},
+        "selected_items": {"head": ["id=1"]},
+        "selected_enchants": {},
+        "selected_gems": [],
+    }
+    with patch(
+        "src.cli.generate_input.load_config",
+        return_value={"gems": {"meta": [], "standard": []}, "enchantments": {}},
+    ):
+        response = client.post("/api/generate-simc", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    assert response.json()["combinations"] == 0
+    with open("char_simc_addon.txt") as generated_file:
+        assert 'copy="' not in generated_file.read()
+
+
 def test_api_generate_simc_deduplicates_equivalent_item_field_order():
     payload = {
         "base_profile": "paladin=Test",
@@ -267,6 +293,113 @@ def test_api_generate_simc_applies_midnight_track_rank_upgrades():
     assert "head=,id=1,ilevel=220" not in generated
     assert "trinket1=,id=2,ilevel=298" in generated
     assert "trinket1=,id=20,ilevel=285" in generated
+
+
+def test_user_selected_upgrade_upgrades_candidate_but_not_baseline():
+    """t_ef33100b: a user-chosen rank must move the candidate copy only.
+
+    The baseline must stay the character's current gear, otherwise the
+    candidate equals the baseline, is filtered as an equipped variation,
+    and the upgrade UI can never produce a diff.
+    """
+    payload = {
+        "base_profile": "paladin=Test",
+        "char_class": "paladin",
+        "char_name": "Test",
+        "equipped_gear": {"back": "id=1,ilevel=291"},
+        "selected_items": {"back": ["id=1,ilevel=291"]},
+        "selected_enchants": {},
+        "selected_gems": [],
+        "upgrade_season": "midnight-s2",
+        "gear_upgrades": {
+            "back": {"id=1,ilevel=291": {"track": "myth", "rank": 6, "user_selected": True}},
+        },
+        "voidforged_items": {},
+    }
+
+    with patch(
+        "src.cli.generate_input.load_config",
+        return_value={"gems": {"meta": [], "standard": []}, "enchantments": {}},
+    ):
+        response = client.post("/api/generate-simc", json=payload)
+    assert response.status_code == 200
+
+    with open("char_simc_addon.txt") as f:
+        generated = f.read()
+
+    # Baseline keeps the current ilvl...
+    assert "back=,id=1,ilevel=291" in generated
+    # ...and the myth rank-6 upgrade (Season 2 ladder top = 334) lands in a
+    # copy block instead.
+    assert generated.count('copy="Test_back_') == 1
+    assert generated.count("back=,id=1,ilevel=334") == 1
+    assert response.json()["combinations"] >= 1
+
+
+def test_user_selected_upgrade_at_current_rank_produces_no_duplicate_copy():
+    payload = {
+        "base_profile": "paladin=Test",
+        "char_class": "paladin",
+        "char_name": "Test",
+        "equipped_gear": {"back": "id=1,ilevel=291"},
+        "selected_items": {"back": ["id=1,ilevel=291"]},
+        "selected_enchants": {},
+        "selected_gems": [],
+        "upgrade_season": "midnight-s2",
+        "gear_upgrades": {
+            "back": {
+                "id=1,ilevel=291": {
+                    "source": "export",
+                    "rank": 0,
+                    "item_level": 291,
+                    "user_selected": True,
+                }
+            },
+        },
+        "voidforged_items": {},
+    }
+
+    with patch(
+        "src.cli.generate_input.load_config",
+        return_value={"gems": {"meta": [], "standard": []}, "enchantments": {}},
+    ):
+        response = client.post("/api/generate-simc", json=payload)
+    assert response.status_code == 200
+
+    with open("char_simc_addon.txt") as f:
+        generated = f.read()
+
+    assert 'copy="' not in generated
+    assert generated.count("back=,id=1,ilevel=291") == 1
+
+
+def test_inferred_upgrade_entry_still_describes_the_baseline():
+    """Unmarked (inferred-current) entries keep applying to the baseline."""
+    payload = {
+        "base_profile": "paladin=Test",
+        "char_class": "paladin",
+        "char_name": "Test",
+        "equipped_gear": {"back": "id=1,ilevel=291"},
+        "selected_items": {"back": ["id=1,ilevel=291"]},
+        "selected_enchants": {},
+        "selected_gems": [],
+        "upgrade_season": "midnight-s2",
+        "gear_upgrades": {"back": {"id=1,ilevel=291": {"track": "myth", "rank": 6}}},
+        "voidforged_items": {},
+    }
+
+    with patch(
+        "src.cli.generate_input.load_config",
+        return_value={"gems": {"meta": [], "standard": []}, "enchantments": {}},
+    ):
+        response = client.post("/api/generate-simc", json=payload)
+    assert response.status_code == 200
+
+    with open("char_simc_addon.txt") as f:
+        generated = f.read()
+
+    assert "back=,id=1,ilevel=334" in generated
+    assert 'copy="' not in generated
 
 
 def test_api_generate_simc_applies_voidforge_only_to_selected_weapons_and_trinkets():
@@ -474,6 +607,36 @@ def test_api_get_results_complex_html(tmp_path):
     res = {r["name"]: r["dps"] for r in response.json()["results"]}
     assert res["A"] == 1234567
     assert res["B"] == 987654
+
+
+def test_api_get_results_nightly_report_format():
+    """Regression (t_fdd385ef): SimC nightly emits player headers as
+    <h2 id="player1toggle" class="toggle""> — with a stray double-quote
+    before '>' — which the old split regex never matched, so the results
+    page showed an empty list. Fixture is a trimmed snippet of the real
+    nightly report from task e4c3035c."""
+    import shutil
+
+    task_id = "test-nightly-fixture"
+    reports_dir = "/tmp/simc_reports"
+    os.makedirs(os.path.join(reports_dir, task_id), exist_ok=True)
+    fixture = os.path.join(os.path.dirname(__file__), "fixtures", "simc_report_nightly_snippet.html")
+    shutil.copy(fixture, os.path.join(reports_dir, task_id, "report_nightly.html"))
+
+    response = client.get(f"/api/get-results?task_id={task_id}")
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert len(results) == 3
+    by_name = {r["name"]: r for r in results}
+    assert by_name["Hamidriel"]["dps"] == 18820
+    assert by_name["Hamidriel_back_12"]["dps"] == 19872
+    assert by_name["Fluffy_Pillow"]["dps"] == 0
+    # Non-player headers (Table of Contents, apm-summary) are not results.
+    assert set(by_name) == {"Hamidriel", "Hamidriel_back_12", "Fluffy_Pillow"}
+    head = by_name["Hamidriel"]["gear"]["head"]
+    assert head.startswith("id=271465")
+    assert "enchant_id=8017" in head
+    assert "bonus_id=6652/12850" in head
 
 
 def test_input_serving_allows_generated_simc_file_only():
@@ -948,3 +1111,81 @@ def test_api_state_requires_session(monkeypatch):
     response = authed.get("/api/state")
     assert response.status_code == 200
     assert "workers" in response.json()
+
+
+# =========================================================================
+# t_ef8682a4: page auth must read the users table, not the purged
+# user_sessions cooldown table; login must not seed the sim-run cooldown.
+# =========================================================================
+
+from src.core.db import session_cleanup_older_than, session_get
+
+
+def _pages_under_auth(monkeypatch):
+    """Auth on, and hide pytest so the page gates' dev bypass is inactive."""
+    _auth_on(monkeypatch)
+    monkeypatch.delitem(sys.modules, "pytest", raising=False)
+
+
+def _login_client(username: str, password: str) -> TestClient:
+    c = TestClient(app)
+    resp = c.post(
+        "/login", data={"username": username, "password": password}, follow_redirects=False
+    )
+    assert resp.status_code == 303
+    master._login_failures.reset()
+    return c
+
+
+def test_dashboard_survives_cooldown_purge(monkeypatch):
+    """P0: users must not be logged out when the 300s cooldown purge runs."""
+    _pages_under_auth(monkeypatch)
+    username = f"purge-{uuid.uuid4().hex[:8]}"
+    user_create(username, security.hash_password("pw-123456"))
+    authed = _login_client(username, "pw-123456")
+
+    # The enforcer's periodic purge, forced to delete every cooldown row.
+    session_cleanup_older_than(0, time.time())
+
+    assert authed.get("/dashboard", follow_redirects=False).status_code == 200
+    assert authed.get("/results", follow_redirects=False).status_code == 200
+    root = authed.get("/", follow_redirects=False)
+    assert root.status_code == 303 and root.headers["location"] == "/dashboard"
+    login_page = authed.get("/login", follow_redirects=False)
+    assert login_page.status_code == 303 and login_page.headers["location"] == "/dashboard"
+
+
+def test_page_gates_reject_unknown_session_cookie(monkeypatch):
+    """The users-table check must still bounce forged/stale cookies."""
+    _pages_under_auth(monkeypatch)
+    anon = TestClient(app)
+    anon.cookies.set("session_id", "user-id-that-does-not-exist")
+    dash = anon.get("/dashboard", follow_redirects=False)
+    assert dash.status_code == 303 and dash.headers["location"] == "/login"
+    assert anon.get("/results", follow_redirects=False).status_code == 303
+    # Unauthenticated root serves the login page.
+    assert anon.get("/", follow_redirects=False).status_code == 200
+
+
+def test_login_does_not_seed_run_cooldown(monkeypatch):
+    """P0: login -> immediate run-simulation is 200, not a bogus 429."""
+    _auth_on(monkeypatch)
+    username = f"cool-{uuid.uuid4().hex[:8]}"
+    user_id = user_create(username, security.hash_password("pw-123456"))
+    authed = _login_client(username, "pw-123456")
+    # Login must not write cooldown state (user_create seeds 0.0 = ancient).
+    assert session_get(user_id) in (None, 0.0)
+
+    monkeypatch.setattr(master.manager, "get_idle_worker", lambda: "worker1")
+    monkeypatch.setattr(master.manager, "send_task", AsyncMock(return_value=None))
+    monkeypatch.setitem(master.manager.active_workers, "worker1", MagicMock(status="Idle"))
+    try:
+        first = authed.post("/api/run-simulation")
+        assert first.status_code == 200, first.text
+        task_id = first.json()["task_id"]
+        # The real cooldown still applies once a sim actually started.
+        second = authed.post("/api/run-simulation")
+        assert second.status_code == 429
+    finally:
+        master.manager.active_workers.pop("worker1", None)
+        master.manager.task_queues.pop(task_id, None)

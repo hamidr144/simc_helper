@@ -9,6 +9,7 @@ htmlcov/
 
 # Runtime logs and temporary files
 *.log
+!tests/fixtures/*.log
 *.tmp
 /tmp/
 master.log
@@ -20,7 +21,9 @@ server.log
 !src/web/static/app.html
 !src/web/static/login.html
 !src/web/static/index.html
+!tests/fixtures/*.html
 *.simc
+!tests/fixtures/*.simc
 report_*
 char_simc_addon.txt
 topgear.txt

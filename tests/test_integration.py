@@ -547,3 +547,305 @@ class TestWorkerFileUploadE2E:
             files={"file": ("evil.txt", b"bad", "text/plain")},
         )
         assert response.status_code in (400, 403)
+
+
+# ===================================================================
+# 7. Real nightly-SimC fixtures (t_1651ba9b)
+#
+# The fixtures under tests/fixtures/simc_nightly_* / simc_input_* are
+# verbatim SimulationCraft 1210-01 (WoW 12.1.0.69933 nightly) output
+# captured from the production worker container running the real
+# Hamidriel Retribution addon export. They certify the four P0 failure
+# classes (t_fdd385ef parser rot, t_ef33100b baseline upgrade bleed,
+# t_ef8682a4 cooldown-purge logouts, t_4485565b zero-combo crash)
+# against REAL engine output — not hand-written mocks.
+# ===================================================================
+
+import shutil
+import subprocess
+
+from src.web.main import parse_report_results
+
+FIXTURES = os.path.join(os.path.dirname(__file__), "fixtures")
+NIGHTLY_REPORT_MULTICOPY = os.path.join(FIXTURES, "simc_nightly_report_multicopy.html")
+NIGHTLY_REPORT_BASELINE_ONLY = os.path.join(FIXTURES, "simc_nightly_report_baseline_only.html")
+NIGHTLY_CONSOLE_LOG = os.path.join(FIXTURES, "simc_nightly_console_multicopy.log")
+INPUT_ZERO_COMBO = os.path.join(FIXTURES, "simc_input_zero_combo_real.simc")
+INPUT_MULTICOPY = os.path.join(FIXTURES, "simc_input_multicopy_real.simc")
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+
+def _install_report(task_id: str, fixture: str) -> str:
+    results_dir = f"/tmp/simc_reports/{task_id}"
+    os.makedirs(results_dir, exist_ok=True)
+    report = os.path.join(results_dir, "report_1.html")
+    shutil.copy(fixture, report)
+    return report
+
+
+class TestRealNightlyReportResultsE2E:
+    """P0-1 (t_fdd385ef): /api/get-results must parse REAL nightly markup.
+
+    The nightly engine emits player headers as <h2 id="playerNtoggle"
+    class="toggle""> (stray quote) and marks the first expanded section
+    class="toggle open"" — both variants occur in genuine reports. A
+    parser that silently matches neither returns results=[] and the
+    results page shows 'The report could not be loaded'.
+    """
+
+    def test_get_results_parses_real_multicopy_nightly_report(self, client):
+        task_id = f"nightly-multi-{uuid.uuid4().hex}"
+        _install_report(task_id, NIGHTLY_REPORT_MULTICOPY)
+        try:
+            data = client.get(f"/api/get-results?task_id={task_id}").json()
+            assert data["status"] == "success"
+            by_name = {r["name"]: r for r in data["results"]}
+            assert by_name["Hamidriel"]["dps"] == 7865
+            assert by_name["Hamidriel_wrist_0"]["dps"] == 7887
+            assert by_name["Hamidriel_neck_1"]["dps"] == 7822
+            assert by_name["Fluffy_Pillow"]["dps"] == 0
+            head = by_name["Hamidriel"]["gear"]["head"]
+            assert head.startswith("id=249961")
+            assert "enchant_id=8017" in head
+            assert "bonus_id=6652/12667/12806/13338/13440/13575" in head
+            neck = by_name["Hamidriel"]["gear"]["neck"]
+            assert "gem_id=240983" in neck
+        finally:
+            shutil.rmtree(f"/tmp/simc_reports/{task_id}", ignore_errors=True)
+
+    def test_get_results_parses_real_baseline_only_nightly_report(self, client):
+        """The zero-combo baseline report must not parse down to just the pet.
+
+        In a single-actor nightly report the ONLY player section carries
+        class="toggle open"" — if the parser misses that variant the
+        baseline run's results page shows Fluffy_Pillow (0 dps) and drops
+        the actual player.
+        """
+        task_id = f"nightly-base-{uuid.uuid4().hex}"
+        _install_report(task_id, NIGHTLY_REPORT_BASELINE_ONLY)
+        try:
+            data = client.get(f"/api/get-results?task_id={task_id}").json()
+            assert data["status"] == "success"
+            by_name = {r["name"]: r for r in data["results"]}
+            assert "Hamidriel" in by_name, (
+                "nightly 'toggle open' player header was not parsed — "
+                f"results: {sorted(by_name)}"
+            )
+            assert by_name["Hamidriel"]["dps"] == 7877
+            assert by_name["Hamidriel"]["gear"].get("head", "").startswith("id=249961")
+        finally:
+            shutil.rmtree(f"/tmp/simc_reports/{task_id}", ignore_errors=True)
+
+
+class TestGearUpgradeBaselineIsolationE2E:
+    """P0-2 (t_ef33100b): a user-chosen upgrade must move the CANDIDATE only.
+
+    Uses a real equipped item from the Hamidriel export (Cloak of the
+    Fallen Cardinal, id=49823 @282). With a user_selected myth/6 upgrade
+    the baseline line must stay at the current ilvl and exactly one copy
+    must carry the upgraded ilvl — otherwise no candidate diff can ever
+    be generated and the sim silently re-runs the same gear.
+    """
+
+    def test_user_selected_upgrade_keeps_baseline_at_current_gear(self, client):
+        payload = {
+            "char_class": "paladin",
+            "char_name": "Hamidriel",
+            "base_profile": 'paladin="Hamidriel"\nlevel=90\nspec=retribution',
+            "equipped_gear": {"back": "id=49823,ilevel=282"},
+            "selected_items": {"back": ["id=49823,ilevel=282", "id=49824,ilevel=282"]},
+            "selected_enchants": {},
+            "selected_gems": [],
+            "selected_meta_gems": [],
+            "item_levels": {},
+            "gear_upgrades": {
+                "back": {"id=49823,ilevel=282": {"track": "myth", "rank": 6, "user_selected": True}}
+            },
+            "voidforged_items": {},
+            "extra_sockets": {},
+        }
+        resp = client.post("/api/generate-simc", json=payload, headers={"X-User-ID": "p02-user"})
+        assert resp.status_code == 200
+        generated = open(resp.json()["file_path"], encoding="utf-8").read()
+
+        baseline_part = generated.split('copy=')[0]
+        assert "back=,id=49823,ilevel=282" in baseline_part, "baseline must keep current gear"
+        assert "ilevel=334" not in baseline_part, "user upgrade must not bleed into baseline"
+        copies = generated.split('copy=')[1:]
+        upgraded = [c for c in copies if "back=,id=49823,ilevel=334" in c]
+        assert len(upgraded) == 1, "exactly one candidate must carry the upgrade"
+        assert resp.json()["combinations"] >= 1
+
+
+class TestSessionPersistenceE2E:
+    """P0-3 (t_ef8682a4): cooldown purges must not log users out; login must
+    not seed the run cooldown."""
+
+    def _auth_on_pages(self, monkeypatch):
+        import src.web.main as master_mod
+        monkeypatch.setattr(master_mod, "authentication_enabled", lambda: True)
+        monkeypatch.delenv("SIMC_HELPER_DEV_MODE", raising=False)
+        monkeypatch.delitem(sys.modules, "pytest", raising=False)
+
+    def test_login_purge_pages_and_run_flow(self, monkeypatch):
+        from src.core import security
+        from src.core.db import session_cleanup_older_than, session_get, user_create
+
+        self._auth_on_pages(monkeypatch)
+        username = f"e2e-p03-{uuid.uuid4().hex[:8]}"
+        user_id = user_create(username, security.hash_password("pw-e2e-123"))
+
+        c = TestClient(app)
+        login = c.post("/login", data={"username": username, "password": "pw-e2e-123"},
+                       follow_redirects=False)
+        assert login.status_code == 303
+
+        # Login must not seed cooldown state (bogus-429 half of the bug).
+        assert session_get(user_id) in (None, 0.0)
+
+        # The enforcer's 300s purge, forced to wipe every cooldown row.
+        session_cleanup_older_than(0, time.time())
+
+        # Pages must still authorise against the users table.
+        assert c.get("/dashboard", follow_redirects=False).status_code == 200
+        assert c.get("/results", follow_redirects=False).status_code == 200
+
+        # Immediate run after login: real cooldown applies, but a user who
+        # never simulated must not get 429.
+        gen = c.post("/api/generate-simc", json={
+            "char_class": "paladin", "char_name": "E2eP03",
+            "base_profile": "paladin=E2eP03", "equipped_gear": {},
+            "selected_items": {}, "selected_enchants": {}, "selected_gems": [],
+            "selected_meta_gems": [], "item_levels": {}, "gear_upgrades": {},
+            "voidforged_items": {}, "extra_sockets": {},
+        })
+        assert gen.status_code == 200
+        with patch.object(manager, "get_idle_worker", return_value="worker-p03"), \
+             patch.object(manager, "send_task", return_value=MagicMock()):
+            manager.active_workers["worker-p03"] = MagicMock(status="Idle")
+            run = c.post("/api/run-simulation", json={"input_id": gen.json()["input_id"]})
+            assert run.status_code == 200, f"login-seeded cooldown: {run.json()}"
+            # The genuine cooldown still applies to the second run.
+            run2 = c.post("/api/run-simulation", json={"input_id": gen.json()["input_id"]})
+            assert run2.status_code == 429
+
+
+def _write_stub_engine(path: str, console_log: str, report_fixture: str) -> str:
+    """Engine stand-in that replays REAL nightly console output.
+
+    Writes the captured nightly log to stdout (sim_helper captures it via
+    PTY into its stage logs, exactly as with the real engine) and, when
+    invoked with html=..., materialises the REAL nightly report it produced.
+    """
+    stub = path + ".py"
+    with open(stub, "w") as f:
+        f.write(
+            "#!/usr/bin/env python3\n"
+            "import shutil, sys\n"
+            f"sys.stdout.write(open({console_log!r}).read())\n"
+            "sys.stdout.flush()\n"
+            "for a in sys.argv[1:]:\n"
+            "    if a.startswith('html='):\n"
+            f"        shutil.copy({report_fixture!r}, a[5:])\n"
+        )
+    os.chmod(stub, 0o755)
+    return stub
+
+
+def _run_sim_helper(tmp_path, input_file: str, report_fixture: str):
+    """Run the REAL sim_helper pipeline with the replay-stub engine."""
+    engine = _write_stub_engine(str(tmp_path / "stub_simc"), NIGHTLY_CONSOLE_LOG, report_fixture)
+    proc = subprocess.run(
+        [sys.executable, os.path.join(REPO_ROOT, "src", "cli", "sim_helper.py"),
+         f"simc_path={engine}", f"input_file={input_file}", "start_server=0"],
+        capture_output=True, text=True, timeout=120, cwd=REPO_ROOT,
+    )
+    return proc
+
+
+class TestRealPipelineZeroComboE2E:
+    """P0-4 (t_4485565b): the REAL zero-combo input must produce a report.
+
+    Input is the genuine addon export with every copy= block removed —
+    the exact selection shape that used to crash the pipeline with
+    'No combos found to refine after Stage 1' + exit 1.
+    """
+
+    def test_zero_combo_input_exits_zero_with_report(self, tmp_path):
+        proc = _run_sim_helper(tmp_path, INPUT_ZERO_COMBO, NIGHTLY_REPORT_BASELINE_ONLY)
+        assert proc.returncode == 0, f"pipeline failed: {proc.stdout[-2000:]}\n{proc.stderr[-500:]}"
+        assert "Found 0 combinations." in proc.stdout
+        assert "No combos found" not in proc.stdout
+
+        import re as _re
+        m = _re.search(r"Results in (/tmp/simc_reports/report_[^\s]+\.html)", proc.stdout)
+        assert m, f"no report announced in:\n{proc.stdout[-1500:]}"
+        report_path = m.group(1)
+        try:
+            assert os.path.isfile(report_path)
+            with open(report_path, encoding="utf-8") as f:
+                results = parse_report_results(f.read())
+            by_name = {r["name"]: r for r in results}
+            assert "Hamidriel" in by_name, (
+                "baseline report parsed back to just the pet: "
+                f"{sorted(by_name)}"
+            )
+            assert by_name["Hamidriel"]["dps"] == 7877
+        finally:
+            shutil.rmtree(os.path.dirname(report_path), ignore_errors=True)
+
+
+class TestRealPipelineMultiCopyE2E:
+    """Regression guard: the normal staged pipeline still works on real output."""
+
+    def test_multicopy_input_runs_stages_and_reports(self, tmp_path):
+        proc = _run_sim_helper(
+            tmp_path, INPUT_MULTICOPY, NIGHTLY_REPORT_MULTICOPY,
+        )
+        assert proc.returncode == 0, f"pipeline failed: {proc.stdout[-2000:]}\n{proc.stderr[-500:]}"
+        assert "Found 2 combinations." in proc.stdout
+        assert "STAGE 1" in proc.stdout and "STAGE 3" in proc.stdout
+
+        import re as _re
+        m = _re.search(r"Results in (/tmp/simc_reports/report_[^\s]+\.html)", proc.stdout)
+        assert m, f"no report announced in:\n{proc.stdout[-1500:]}"
+        report_path = m.group(1)
+        try:
+            with open(report_path, encoding="utf-8") as f:
+                results = parse_report_results(f.read())
+            names = {r["name"] for r in results}
+            assert {"Hamidriel", "Hamidriel_wrist_0", "Hamidriel_neck_1"} <= names
+        finally:
+            shutil.rmtree(os.path.dirname(report_path), ignore_errors=True)
+
+
+@pytest.mark.skipif(
+    not os.environ.get("SIMC_ENGINE_BIN"),
+    reason="set SIMC_ENGINE_BIN=/path/to/nightly/simc to certify against the real engine",
+)
+class TestRealNightlyEngineCertification:
+    """Opt-in: run the genuine nightly engine end-to-end (no stubs at all).
+
+    Skipped in CI (the engine is a linux nightly binary shipped in the
+    worker image); run it on a host with the nightly build to certify the
+    whole chain — engine → sim_helper → report → parser — on live output.
+    """
+
+    def test_zero_combo_real_engine_baseline_report(self, tmp_path):
+        engine = os.environ["SIMC_ENGINE_BIN"]
+        proc = subprocess.run(
+            [sys.executable, os.path.join(REPO_ROOT, "src", "cli", "sim_helper.py"),
+             f"simc_path={engine}", f"input_file={INPUT_ZERO_COMBO}", "start_server=0"],
+            capture_output=True, text=True, timeout=900, cwd=REPO_ROOT,
+        )
+        assert proc.returncode == 0, f"engine run failed: {proc.stdout[-2000:]}"
+        import re as _re
+        m = _re.search(r"Results in (/tmp/simc_reports/report_[^\s]+\.html)", proc.stdout)
+        assert m
+        report_path = m.group(1)
+        try:
+            with open(report_path, encoding="utf-8") as f:
+                results = parse_report_results(f.read())
+            assert any(r["name"] == "Hamidriel" and r["dps"] > 0 for r in results), results
+        finally:
+            shutil.rmtree(os.path.dirname(report_path), ignore_errors=True)

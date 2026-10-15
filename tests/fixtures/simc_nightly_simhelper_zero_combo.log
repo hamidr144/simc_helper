@@ -1,0 +1,20 @@
+# REAL SimC nightly output (SimulationCraft 1210-01, WoW 12.1.0.69933,
+# git build midnight eaf8c46), captured 2026-10-15 in the production worker
+# container running the real Hamidriel Retribution addon export.
+# Trimmed only for size (progress-bar carriage-return spam removed);
+# all ranking values are verbatim from the engine.
+Detected character name: Hamidriel
+Found 0 combinations.
+Dynamic batch size determined: 122 combinations (based on available RAM)
+
+--- BASELINE: no candidate combinations; simulating current gear only ---
+
+Progress: 100% (1/1 profiles)
+Progress: 100% (1/1 profiles)
+Progress: 100% (1/1 profiles)
+Progress: 100% (1/1 profiles)
+Progress: 100% (1/1 profiles)
+
+Simcraft Helper complete! Results in /tmp/simc_reports/report_20261015_020532.html
+Temporary files are in /tmp/simc_20261015_020532
+Total execution time: 1s

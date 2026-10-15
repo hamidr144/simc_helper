@@ -539,7 +539,8 @@ function estimateCombinations() {
       const equipped = normalizedEquippedItems(slot);
       const acceptsGem = item.includes('gem_id=') || extraSockets[slot];
       const gemCount = acceptsGem ? selectedGems.size : 0;
-      const hasVariation = !equipped.includes(item) || enchantCount > 0 || gemCount > 0 || extraSockets[slot];
+      const hasVariation = !equipped.includes(item) || enchantCount > 0 || gemCount > 0 ||
+        extraSockets[slot] || Boolean(gearUpgrades[slot]?.[item]?.user_selected);
       if (hasVariation) total += Math.max(1, enchantCount) * Math.max(1, gemCount);
     }
   }
@@ -557,7 +558,9 @@ function updateSummary() {
   const itemWord = document.getElementById('item-word');
   if (comboWord) comboWord.textContent = count === 1 ? 'combination' : 'combinations';
   if (itemWord) itemWord.textContent = selectedItemCount() === 1 ? 'item' : 'items';
-  if (runButton) runButton.disabled = !generatedInput;
+  // t_4485565b: once a character is loaded, Run is always meaningful — a
+  // 0-candidate selection runs the baseline current-gear report.
+  if (runButton) runButton.disabled = !(generatedInput || parsedData);
   updateRailState();
 }
 
@@ -565,7 +568,8 @@ function selectionChanged() {
   generatedInput = null;
   updateSummary();
   clearTimeout(generationTimer);
-  if (!estimateCombinations()) return;
+  // t_4485565b: regenerate even at an estimated 0 combinations so the status
+  // line reflects the honest baseline-only state instead of a stale count.
   const status = document.getElementById('workflow-status');
   if (status) status.textContent = 'Updating comparison…';
   generationTimer = setTimeout(() => generateInput(true), 250);
@@ -942,6 +946,7 @@ function renderGear() {
               { source: 'export', rank: 0, item_level: exportRanksFor(slot, item)[0].level };
             if (track === 'none') delete entry.track;
             else entry.track = track;
+            entry.user_selected = true;
             gearUpgrades[slot][item] = entry;
             rankSelect.disabled = false;
           } else if (track === 'none') {
@@ -949,7 +954,7 @@ function renderGear() {
             rankSelect.innerHTML = '';
             rankSelect.disabled = true;
           } else {
-            gearUpgrades[slot][item] = { track, rank: 1 };
+            gearUpgrades[slot][item] = { track, rank: 1, user_selected: true };
             rankSelect.innerHTML = (seasonTracks()[track] || []).map((level, index) =>
               `<option value="${index + 1}">Rank ${index + 1} · ${level}</option>`
             ).join('');
@@ -970,6 +975,11 @@ function renderGear() {
               const levels = seasonTracks()[entry.track] || [];
               entry.item_level = levels[entry.rank - 1] ?? null;
             }
+            // Export rank 0 is the item's current level again, so the entry
+            // stops being a user-chosen upgrade; anything else is a choice
+            // that belongs to the candidate copies only.
+            if (entry.rank === 0) delete entry.user_selected;
+            else entry.user_selected = true;
           }
           scheduleUpgradePreview(slot, item, card);
           selectionChanged();
@@ -980,6 +990,12 @@ function renderGear() {
       if (voidforgeInput) {
         voidforgeInput.addEventListener('change', event => {
           voidforgedItems[slot][item] = event.target.checked;
+          // Checking Ascension is a user choice: mark the grade entry so the
+          // backend keeps it off the baseline (only meaningful when a grade
+          // entry exists to carry the flag).
+          if (event.target.checked && gearUpgrades[slot]?.[item]) {
+            gearUpgrades[slot][item].user_selected = true;
+          }
           event.currentTarget.closest('.voidforge-field-container')?.classList.toggle('is-active', event.target.checked);
           scheduleUpgradePreview(slot, item, card);
           selectionChanged();
@@ -1098,6 +1114,9 @@ async function hydrateWowheadUpgrades(itemsBySlot) {
     for (const [slot, itemUpgrades] of Object.entries(data.gear_upgrades || {})) {
       for (const [item, upgrade] of Object.entries(itemUpgrades)) {
         if (parsedData?.item_upgrades?.[item]) continue;
+        // Never clobber a grade the user already picked while this lookup
+        // was in flight.
+        if (gearUpgrades[slot]?.[item]?.user_selected) continue;
         (gearUpgrades[slot] ||= {})[item] = upgrade;
       }
     }
@@ -1143,7 +1162,10 @@ async function generateInput(quiet = false) {
     if (!response.ok) throw new Error(data.detail || 'Generation failed');
     generatedInput = data;
     document.getElementById('combo-count').textContent = data.combinations.toLocaleString();
-    status.textContent = `Ready to run ${data.combinations.toLocaleString()} candidate ${data.combinations === 1 ? 'combination' : 'combinations'}.`;
+    // t_4485565b: 0 candidates is a valid baseline run, not a doomed job.
+    status.textContent = data.combinations === 0
+      ? 'Ready to run a baseline current-gear report. Select gear changes, gems, or enchants to compare candidates.'
+      : `Ready to run ${data.combinations.toLocaleString()} candidate ${data.combinations === 1 ? 'combination' : 'combinations'}.`;
   } catch (error) {
     generatedInput = null;
     status.textContent = `Could not generate input: ${error.message}`;
@@ -1153,7 +1175,9 @@ async function generateInput(quiet = false) {
 }
 
 async function runSimulation() {
-  if (!generatedInput && estimateCombinations()) await generateInput();
+  // t_4485565b: generate even when the client-side estimate is 0 — a
+  // 0-candidate input is a valid baseline current-gear run.
+  if (!generatedInput) await generateInput();
   if (!generatedInput) return;
   const status = document.getElementById('workflow-status');
   const log = document.getElementById('simulation-log');

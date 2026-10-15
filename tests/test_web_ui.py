@@ -154,6 +154,23 @@ def test_gear_selection_stacks_cards_vertically():
         )
 
 
+def test_zero_combination_run_is_labelled_baseline():
+    """t_4485565b: a 0-candidate selection must be offered as a baseline
+    current-gear run — never hidden behind a fake '1 combination' or a
+    silently-disabled Run button."""
+    response = client.get("/static/app.js")
+    assert response.status_code == 200
+    js = response.text
+
+    assert "Ready to run a baseline current-gear report." in js
+    # Run generates input even when the client-side estimate is 0.
+    assert "if (!generatedInput) await generateInput();" in js
+    # Run stays enabled once a character is loaded.
+    assert "runButton.disabled = !(generatedInput || parsedData);" in js
+    # The old early-return that froze generation at 0 combinations is gone.
+    assert "if (!estimateCombinations()) return;" not in js
+
+
 def test_gear_selection_allows_marking_voidforged_weapons_and_trinkets():
     response = client.get("/static/app.js")
     assert response.status_code == 200
@@ -281,6 +298,23 @@ def test_gear_selection_hydrates_exact_grades_from_wowhead():
     assert "fetch('/api/wowhead-upgrades'" in js
     assert "(gearUpgrades[slot] ||= {})[item] = upgrade;" in js
     assert "renderGear();" in js
+
+
+def test_user_chosen_upgrades_are_marked_user_selected():
+    """t_ef33100b: user-chosen grades carry user_selected so the backend
+    keeps them off the baseline; inferred-current entries stay unmarked."""
+    response = client.get("/static/app.js")
+    assert response.status_code == 200
+    js = response.text
+
+    # Track/rank picks mark the entry; export rank 0 ("Current") clears it.
+    assert "{ track, rank: 1, user_selected: true }" in js
+    assert "entry.user_selected = true;" in js
+    assert "if (entry.rank === 0) delete entry.user_selected;" in js
+    # Wowhead hydration must not clobber a pick the user already made.
+    assert "if (gearUpgrades[slot]?.[item]?.user_selected) continue;" in js
+    # The estimator counts a user-chosen upgrade as a real variation.
+    assert "Boolean(gearUpgrades[slot]?.[item]?.user_selected)" in js
 
 
 def test_item_icons_use_local_proxy_without_requiring_wowhead_javascript():
