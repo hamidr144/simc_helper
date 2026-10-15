@@ -12,6 +12,7 @@ Simcraft Helper Suite is a Python/FastAPI toolchain for parsing World of Warcraf
 *   [**Deployment Guide**](deployment.md) – CMake packaging targets and `utils/deploy.py` commands.
 *   [**TLS Fronting**](tls-fronting.md) – HTTPS reverse proxy, cert trust, router/user-action checklist.
 *   [**Configuration Reference**](configuration.md) – `config.json`, deployment JSON schema, and all environment variables.
+*   [**Deferred Work**](deferred_work.md) – Cancelled wish-list scope kept on record, with revival instructions.
 
 ---
 
