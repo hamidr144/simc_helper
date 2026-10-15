@@ -29,7 +29,8 @@ The current project favors a local web UI for day-to-day use, optional distribut
 Docker Compose is the supported local workflow. It starts the FastAPI master and a SimulationCraft worker together, so the browser can run comparisons without starting Python processes manually.
 
 ```bash
-cp .env.docker.example .env
+# .env is optional — compose ships working local defaults:
+# cp .env.docker.example .env
 docker build -t simc-helper:latest .
 # The SimC nightly engine is amd64-only, so the worker runs an amd64 image:
 docker build --platform linux/amd64 -t simc-helper:latest-amd64 .
@@ -97,7 +98,7 @@ docker compose up -d --scale simc-worker=3
 docker compose ps
 ```
 
-The web app binds to all container interfaces and is published on host port `8000` by default. Set `PORT` in `.env` to use another host port.
+The web app binds to all container interfaces and is published on host port `127.0.0.1:8000` (loopback only) by default. Set `PORT` in `.env` to use another host port, `MASTER_BIND=0.0.0.0` to publish to the network. TLS/domain routing is an external reverse proxy's concern — see [`docs/tls-fronting.md`](docs/tls-fronting.md).
 
 Useful environment variables are fully documented in `.env.example` (copy it to `.env` and fill in your values). A quick reference:
 
