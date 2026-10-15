@@ -577,7 +577,10 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 
 def _install_report(task_id: str, fixture: str) -> str:
-    results_dir = f"/tmp/simc_reports/{task_id}"
+    # t_c968bf8d moved report storage to $REPORTS_DIR/<user>/<task_id>/;
+    # get-results recovers the ownerless dir via the REPORTS_DIR/*/<task_id>
+    # glob, so a fixture-user dir is enough.
+    results_dir = f"{MASTER_REPORTS_DIR}/fixture-user/{task_id}"
     os.makedirs(results_dir, exist_ok=True)
     report = os.path.join(results_dir, "report_1.html")
     shutil.copy(fixture, report)
@@ -612,7 +615,7 @@ class TestRealNightlyReportResultsE2E:
             neck = by_name["Hamidriel"]["gear"]["neck"]
             assert "gem_id=240983" in neck
         finally:
-            shutil.rmtree(f"/tmp/simc_reports/{task_id}", ignore_errors=True)
+            shutil.rmtree(f"{MASTER_REPORTS_DIR}/fixture-user/{task_id}", ignore_errors=True)
 
     def test_get_results_parses_real_baseline_only_nightly_report(self, client):
         """The zero-combo baseline report must not parse down to just the pet.
@@ -635,7 +638,7 @@ class TestRealNightlyReportResultsE2E:
             assert by_name["Hamidriel"]["dps"] == 7877
             assert by_name["Hamidriel"]["gear"].get("head", "").startswith("id=249961")
         finally:
-            shutil.rmtree(f"/tmp/simc_reports/{task_id}", ignore_errors=True)
+            shutil.rmtree(f"{MASTER_REPORTS_DIR}/fixture-user/{task_id}", ignore_errors=True)
 
 
 class TestGearUpgradeBaselineIsolationE2E:

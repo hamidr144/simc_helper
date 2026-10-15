@@ -42,8 +42,9 @@ from web.main import REPORTS_DIR, app
 
 FIXTURES = os.path.join(os.path.dirname(__file__), "fixtures")
 # Real SimulationCraft 1210-01 nightly reports (t_1651ba9b). Certified parse
-# results (t_fdd385ef parser): multicopy -> top dps 7887; baseline-only -> one
-# row with dps 0.
+# results (after 60e8297 'toggle open' fix): multicopy -> top dps 7887;
+# baseline-only -> Hamidriel 7877 dps (the single real player's header
+# carries class="toggle open"").
 MULTICOPY_REPORT = os.path.join(FIXTURES, "simc_nightly_report_multicopy.html")
 BASELINE_ONLY_REPORT = os.path.join(FIXTURES, "simc_nightly_report_baseline_only.html")
 
@@ -167,7 +168,10 @@ def test_e2e_zero_combo_baseline_run_reaches_history(history_user, worker_ws):
 
     row = _history_row(client, task_id)
     assert row["status"] == "success"
-    assert row["top_dps"] == 0  # baseline-only fixture: single row, 0 dps
+    # t_1651ba9b (60e8297) taught the parser the nightly 'toggle open' player
+    # header, so the single real player (Hamidriel, 7877 dps) is now parsed
+    # out of the baseline-only fixture instead of the pet-only 0 dps.
+    assert row["top_dps"] == 7877
     served = TestClient(app).get(row["report_url"])
     assert served.status_code == 200
     assert served.content == _fixture_bytes(BASELINE_ONLY_REPORT)
@@ -411,24 +415,22 @@ def test_history_reads_work_without_cooldown_rows(history_user, monkeypatch):
     assert resp.json()["runs"] == []
 
 
-@pytest.mark.xfail(
-    reason="t_ef8682a4 unmerged: /login seeds the user_sessions cooldown row, "
-    "so run-simulation 429s for 30s after a fresh login. Canary — remove the "
-    "marker when the fix branch lands.",
-    strict=False,
-)
 def test_run_simulation_right_after_login_known_p0(monkeypatch):
-    """A fresh login must not lock the user out of run-simulation for 30s."""
+    """A fresh login must not lock the user out of run-simulation for 30s.
+
+    Canary retired: t_ef8682a4 landed on main (ed3498a), so the assertions
+    now pin the FIXED behaviour — login leaves no cooldown state.
+    """
     _auth_on(monkeypatch)
     password = "acceptance-pw"
     username = f"login-{uuid.uuid4().hex[:8]}"
     user_id = user_create(username, security.hash_password(password))
     try:
         client = TestClient(app)
-        r = client.post("/login", data={"username": username, "password": "***"},
+        r = client.post("/login", data={"username": username, "password": password},
                         follow_redirects=False)
         assert r.status_code == 303, r.text  # session cookie set
-        assert master.session_get(user_id) is not None  # login seeded the cooldown
+        assert master.session_get(user_id) in (None, 0.0)  # no cooldown seeded
         r = client.post("/api/run-simulation")
         assert r.status_code != 429, "login seeded the run cooldown (t_ef8682a4)"
     finally:
