@@ -88,6 +88,7 @@ from src.core.db import (
     input_set,
     load_inputs,
     load_sessions,
+    run_history_insert,
     session_cleanup_older_than,
     session_get,
     session_set,
@@ -404,6 +405,12 @@ generated_inputs_by_user["latest"] = None
 # restart fall back to the "anonymous" bucket (the durable run_history table
 # from t_b3b78acd supersedes this map).
 task_user_map: dict = {}
+# t_b3b78acd: per-user character metadata captured as the user walks the flow
+# (parse-addon / armory-load record the source; generate-simc records the
+# fight style, spec and name). run_simulation snapshots it per task so the
+# SSE done hook can write a run_history row.
+run_meta_by_user: Dict[str, Dict[str, Any]] = {}
+task_meta_map: Dict[str, Dict[str, Any]] = {}
 wowhead_upgrade_cache = {}
 wowhead_icon_cache: Dict[str, tuple[bytes, str]] = {}
 wowhead_tooltip_script_cache: Optional[bytes] = None
@@ -1628,7 +1635,7 @@ async def get_wowhead_upgrades(payload: WowheadUpgradesRequest):
     return {"status": "success", "gear_upgrades": results, "errors": errors}
 
 @app.post("/api/parse-addon", response_model=ParseAddonResponse, tags=["Addons"])
-async def parse_addon_text(payload: ParseAddonRequest, _: str = Depends(require_session)):
+async def parse_addon_text(request: Request, payload: ParseAddonRequest, current_user: str = Depends(require_session)):
     """Parse SimulationCraft addon text into structured character data.
 
     **Tags:** Addons
@@ -1648,6 +1655,11 @@ async def parse_addon_text(payload: ParseAddonRequest, _: str = Depends(require_
         raise HTTPException(status_code=400, detail=FOREVER_EXPORT_MESSAGE)
     warnings = forever_export_warnings(lines)
     base_profile, equipped_gear, items_by_slot, item_names, char_name, char_class, item_upgrades = parse_addon_lines(lines)
+    # t_b3b78acd: remember where this user's character came from so the
+    # eventual run_history row can say "addon".
+    run_meta_by_user.setdefault(_resolved_user_id(request, current_user), {}).update(
+        {"source": "addon", "char_name": char_name}
+    )
     return {
         "base_profile": base_profile.rstrip("\n"),
         "equipped_gear": equipped_gear,
@@ -1660,7 +1672,7 @@ async def parse_addon_text(payload: ParseAddonRequest, _: str = Depends(require_
     }
 
 @app.post("/api/armory-load", response_model=ArmoryLoadResponse, tags=["Addons"])
-async def armory_load_character(payload: ArmoryLoadRequest, _: str = Depends(require_session)):
+async def armory_load_character(request: Request, payload: ArmoryLoadRequest, current_user: str = Depends(require_session)):
     """Load a character + equipped gear from the WoW Armory (no addon export).
 
     **Tags:** Addons
@@ -1714,6 +1726,16 @@ async def armory_load_character(payload: ArmoryLoadRequest, _: str = Depends(req
         "Loaded %s from Armory %s/%s (%d slots)",
         parsed["char_name"], region, realm_slug, len(parsed["equipped_gear"]),
     )
+    # t_b3b78acd: Armory is the only source that knows region/realm/spec.
+    run_meta_by_user.setdefault(_resolved_user_id(request, current_user), {}).update(
+        {
+            "source": "armory",
+            "char_name": parsed["char_name"],
+            "region": region,
+            "realm_slug": realm_slug,
+            "spec": parsed.get("char_spec") or None,
+        }
+    )
     return parsed
 
 
@@ -1735,6 +1757,20 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
             status_code=422,
             detail=f"Unknown fight_style '{fight_style}'; expected one of {sorted(FIGHT_STYLE_DIRECTIVES)}",
         )
+    # t_b3b78acd: snapshot what this run is about for the run_history row.
+    # ``source`` keeps whatever the load step recorded (addon/armory); plain
+    # paste-in profiles with no load step default to "addon".
+    _gen_meta = run_meta_by_user.setdefault(
+        _resolved_user_id(request, current_user), {}
+    )
+    _gen_meta.update(
+        {
+            "fighting_style": fight_style,
+            "char_name": payload.char_name,
+            "spec": _extract_spec(payload.base_profile) or _gen_meta.get("spec"),
+        }
+    )
+    _gen_meta.setdefault("source", "addon")
     try:
         from src.cli.generate_input import (
             apply_gear_upgrade,
@@ -2017,6 +2053,9 @@ async def simulation_event_generator(task_id: str, worker_id: str):
                 elif data["type"] == "task_status_update":
                     yield f"data: {json.dumps({'type': 'task_status_update', 'task_id': data['task_id'], 'status': data['status']})}\n\n"
                 elif data["type"] == "done":
+                    # t_b3b78acd: durable results-history row at the task-done
+                    # point (best-effort; never breaks the stream).
+                    _record_run_history(task_id, "success" if data["code"] == 0 else "failed")
                     if data["code"] == 0:
                         yield f"data: {json.dumps({'type': 'done', 'text': 'Simulation finished successfully!', 'report_file': data.get('report_file'), 'task_id': task_id})}\n\n"
                     else:
@@ -2030,6 +2069,9 @@ async def simulation_event_generator(task_id: str, worker_id: str):
                 yield ": keep-alive\n\n"
     finally:
         if task_id in manager.task_queues: del manager.task_queues[task_id]
+        # t_b3b78acd: drop the metadata snapshot if the done event never
+        # reached the hook (worker dropped, stream cancelled).
+        task_meta_map.pop(task_id, None)
 
 @app.post("/api/run-simulation", response_model=RunSimulationResponse, tags=["Simulation"])
 async def run_simulation(request: Request, worker_id: Optional[str] = Query(None), input_id: Optional[str] = Query(None), current_user: str = Depends(require_session)):
@@ -2061,6 +2103,9 @@ async def run_simulation(request: Request, worker_id: Optional[str] = Query(None
     task_id = str(uuid.uuid4())[:8]
     manager.task_queues[task_id] = asyncio.Queue()
     task_user_map[task_id] = user_id  # t_c968bf8d: owner of the report directory
+    # t_b3b78acd: freeze the character metadata for this task; the SSE done
+    # hook consumes (and pops) it when writing the run_history row.
+    task_meta_map[task_id] = dict(run_meta_by_user.get(user_id) or {})
     try:
         input_record = None
         if input_id:
@@ -2225,6 +2270,86 @@ def _user_report_dir(user_id: str) -> str:
     unchanged; the ``ip_<host>`` fallback (dots!) is flattened to ``ip_..._...``.
     """
     return re.sub(r"[^A-Za-z0-9_-]", "_", user_id or "") or "anonymous"
+
+
+# ---------------------------------------------------------------------------
+# run_history recording (t_b3b78acd)
+# ---------------------------------------------------------------------------
+
+_REPORT_SPEC_RE = re.compile(r"^\s*spec\s*=\s*([A-Za-z0-9_]+)", re.MULTILINE)
+
+
+def _resolved_user_id(request: Request, current_user: Optional[str]) -> str:
+    """Same identity rule as run_simulation/generate_simc (t_b3b78acd)."""
+    if current_user and current_user != "anonymous":
+        return current_user
+    host = request.client.host if request.client else "unknown"
+    return request.cookies.get("user_id") or f"ip_{host}"
+
+
+def _extract_spec(base_profile: str) -> Optional[str]:
+    """Pull the SimC ``spec=`` directive out of a base profile, if present."""
+    m = _REPORT_SPEC_RE.search(base_profile or "")
+    return m.group(1) if m else None
+
+
+def _record_run_history(task_id: str, status: str) -> None:
+    """Insert a run_history row for a finished simulation (t_b3b78acd).
+
+    Called from the task-done SSE point. Best-effort by design: a missing
+    report, an FK violation (anonymous/ip user), or a read error must never
+    break the SSE stream — failures are logged and swallowed. ``top_dps``
+    reuses the t_fdd385ef report parser; ``report_path`` is stored relative
+    to REPORTS_DIR (``<user_dir>/<task_id>/report_*.html``).
+    """
+    try:
+        user_id = task_user_map.get(task_id)
+        if not user_id:
+            return
+        meta = task_meta_map.pop(task_id, {}) or {}
+        top_dps: Optional[int] = None
+        report_rel: Optional[str] = None
+        task_dir = _find_task_report_dir(task_id)
+        if task_dir and os.path.isdir(task_dir):
+            report_files = [
+                f for f in os.listdir(task_dir)
+                if f.startswith("report_") and f.endswith(".html")
+            ]
+            if report_files:
+                report_files.sort(
+                    key=lambda x: os.path.getmtime(os.path.join(task_dir, x)),
+                    reverse=True,
+                )
+                report_path = os.path.join(task_dir, report_files[0])
+                report_rel = os.path.relpath(report_path, REPORTS_DIR)
+                try:
+                    with open(report_path, encoding="utf-8", errors="replace") as f:
+                        parsed = parse_report_results(f.read())
+                    if parsed:
+                        top_dps = max(r["dps"] for r in parsed)
+                except OSError:
+                    pass
+        elif status == "success":
+            user_dir = _user_report_dir(user_id)
+            report_rel = os.path.join(user_dir, task_id, "report_<ts>.html")
+        run_history_insert(
+            {
+                "run_id": uuid.uuid4().hex[:12],
+                "user_id": user_id,
+                "created_at": time.time(),
+                "fighting_style": meta.get("fighting_style"),
+                "spec": meta.get("spec"),
+                "source": meta.get("source"),
+                "char_name": meta.get("char_name"),
+                "realm_slug": meta.get("realm_slug"),
+                "region": meta.get("region"),
+                "top_dps": top_dps,
+                "report_path": report_rel,
+                "status": status,
+            }
+        )
+    except Exception as exc:  # noqa: BLE001 — history must never sink the stream
+        logger.warning("run_history insert failed for task %s: %s", task_id, exc)
 
 
 def _task_report_dir(user_dir: str, task_id: str) -> str:

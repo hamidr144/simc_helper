@@ -31,6 +31,9 @@ def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(_DB_PATH, timeout=5)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
+    # t_b3b78acd: enforce FKs so run_history's ON DELETE CASCADE actually fires
+    # when a user is deleted (SQLite defaults this off per-connection).
+    conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 def init_db() -> None:
@@ -57,6 +60,24 @@ def init_db() -> None:
                 file_path   TEXT    NOT NULL,
                 input_url   TEXT    NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS run_history (
+                run_id         TEXT PRIMARY KEY,
+                user_id        TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                created_at     REAL NOT NULL,
+                fighting_style TEXT,
+                spec           TEXT,
+                source         TEXT,
+                char_name      TEXT,
+                realm_slug     TEXT,
+                region         TEXT,
+                top_dps        INTEGER,
+                report_path    TEXT,
+                status         TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_run_history_user_created
+                ON run_history (user_id, created_at DESC);
             """
         )
         conn.commit()
@@ -242,6 +263,67 @@ def input_delete(user_id: str) -> None:
     try:
         conn.execute("DELETE FROM user_inputs WHERE user_id = ?", (user_id,))
         conn.commit()
+    finally:
+        conn.close()
+
+# ---------------------------------------------------------------------------
+# run_history  (t_b3b78acd: durable per-user simulation results history)
+# ---------------------------------------------------------------------------
+
+def run_history_insert(record: Dict[str, Any]) -> str:
+    """Insert one run-history row and return its ``run_id``.
+
+    ``record`` keys: run_id, user_id, created_at, status (required);
+    fighting_style, spec, source, char_name, realm_slug, region, top_dps,
+    report_path (optional, None allowed). Raises sqlite3.IntegrityError when
+    *user_id* does not reference an existing user (FK) — callers that record
+    best-effort (e.g. the SSE done hook for anonymous users) should catch it.
+    """
+    conn = _connect()
+    try:
+        conn.execute(
+            """
+            INSERT INTO run_history (
+                run_id, user_id, created_at, fighting_style, spec, source,
+                char_name, realm_slug, region, top_dps, report_path, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                record["run_id"], record["user_id"], record["created_at"],
+                record.get("fighting_style"), record.get("spec"), record.get("source"),
+                record.get("char_name"), record.get("realm_slug"), record.get("region"),
+                record.get("top_dps"), record.get("report_path"), record["status"],
+            ),
+        )
+        conn.commit()
+        return record["run_id"]
+    finally:
+        conn.close()
+
+def run_history_list(user_id: str, limit: int = 50) -> list[Dict[str, Any]]:
+    """Return the newest *limit* runs for *user_id* (newest first)."""
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            """
+            SELECT run_id, user_id, created_at, fighting_style, spec, source,
+                   char_name, realm_slug, region, top_dps, report_path, status
+            FROM run_history
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (user_id, limit),
+        ).fetchall()
+        return [
+            {
+                "run_id": r[0], "user_id": r[1], "created_at": r[2],
+                "fighting_style": r[3], "spec": r[4], "source": r[5],
+                "char_name": r[6], "realm_slug": r[7], "region": r[8],
+                "top_dps": r[9], "report_path": r[10], "status": r[11],
+            }
+            for r in rows
+        ]
     finally:
         conn.close()
 
