@@ -948,3 +948,81 @@ def test_api_state_requires_session(monkeypatch):
     response = authed.get("/api/state")
     assert response.status_code == 200
     assert "workers" in response.json()
+
+
+# =========================================================================
+# t_ef8682a4: page auth must read the users table, not the purged
+# user_sessions cooldown table; login must not seed the sim-run cooldown.
+# =========================================================================
+
+from src.core.db import session_cleanup_older_than, session_get
+
+
+def _pages_under_auth(monkeypatch):
+    """Auth on, and hide pytest so the page gates' dev bypass is inactive."""
+    _auth_on(monkeypatch)
+    monkeypatch.delitem(sys.modules, "pytest", raising=False)
+
+
+def _login_client(username: str, password: str) -> TestClient:
+    c = TestClient(app)
+    resp = c.post(
+        "/login", data={"username": username, "password": password}, follow_redirects=False
+    )
+    assert resp.status_code == 303
+    master._login_failures.reset()
+    return c
+
+
+def test_dashboard_survives_cooldown_purge(monkeypatch):
+    """P0: users must not be logged out when the 300s cooldown purge runs."""
+    _pages_under_auth(monkeypatch)
+    username = f"purge-{uuid.uuid4().hex[:8]}"
+    user_create(username, security.hash_password("pw-123456"))
+    authed = _login_client(username, "pw-123456")
+
+    # The enforcer's periodic purge, forced to delete every cooldown row.
+    session_cleanup_older_than(0, time.time())
+
+    assert authed.get("/dashboard", follow_redirects=False).status_code == 200
+    assert authed.get("/results", follow_redirects=False).status_code == 200
+    root = authed.get("/", follow_redirects=False)
+    assert root.status_code == 303 and root.headers["location"] == "/dashboard"
+    login_page = authed.get("/login", follow_redirects=False)
+    assert login_page.status_code == 303 and login_page.headers["location"] == "/dashboard"
+
+
+def test_page_gates_reject_unknown_session_cookie(monkeypatch):
+    """The users-table check must still bounce forged/stale cookies."""
+    _pages_under_auth(monkeypatch)
+    anon = TestClient(app)
+    anon.cookies.set("session_id", "user-id-that-does-not-exist")
+    dash = anon.get("/dashboard", follow_redirects=False)
+    assert dash.status_code == 303 and dash.headers["location"] == "/login"
+    assert anon.get("/results", follow_redirects=False).status_code == 303
+    # Unauthenticated root serves the login page.
+    assert anon.get("/", follow_redirects=False).status_code == 200
+
+
+def test_login_does_not_seed_run_cooldown(monkeypatch):
+    """P0: login -> immediate run-simulation is 200, not a bogus 429."""
+    _auth_on(monkeypatch)
+    username = f"cool-{uuid.uuid4().hex[:8]}"
+    user_id = user_create(username, security.hash_password("pw-123456"))
+    authed = _login_client(username, "pw-123456")
+    # Login must not write cooldown state (user_create seeds 0.0 = ancient).
+    assert session_get(user_id) in (None, 0.0)
+
+    monkeypatch.setattr(master.manager, "get_idle_worker", lambda: "worker1")
+    monkeypatch.setattr(master.manager, "send_task", AsyncMock(return_value=None))
+    monkeypatch.setitem(master.manager.active_workers, "worker1", MagicMock(status="Idle"))
+    try:
+        first = authed.post("/api/run-simulation")
+        assert first.status_code == 200, first.text
+        task_id = first.json()["task_id"]
+        # The real cooldown still applies once a sim actually started.
+        second = authed.post("/api/run-simulation")
+        assert second.status_code == 429
+    finally:
+        master.manager.active_workers.pop("worker1", None)
+        master.manager.task_queues.pop(task_id, None)

@@ -711,6 +711,19 @@ def require_session(request: Request) -> str:
     return user["user_id"]
 
 
+def _page_session_valid(request: Request) -> bool:
+    """True when the request's ``session_id`` cookie names an existing user.
+
+    Page gates must validate against the ``users`` table, exactly like
+    ``require_session`` does for the API. The ``user_sessions`` table is
+    only sim-cooldown state and is purged every ``SIM_COOLDOWN_SECONDS``
+    (300s) — trusting it for page auth silently logged users out ~5
+    minutes after login (t_ef8682a4).
+    """
+    session_id = request.cookies.get("session_id")
+    return bool(session_id) and user_get_by_id(session_id) is not None
+
+
 def _dev_mode_enabled() -> bool:
     return os.environ.get("SIMC_HELPER_DEV_MODE") == "1"
 
@@ -798,8 +811,7 @@ async def root(request: Request):
     if not authentication_enabled() or "pytest" in sys.modules or os.environ.get("SIMC_HELPER_DEV_MODE") == "1":
         return app_response(request)
     
-    session_id = request.cookies.get("session_id")
-    if session_id and session_get(session_id) is not None:
+    if _page_session_valid(request):
         return RedirectResponse(url="/dashboard", status_code=303)
     return FileResponse(LOGIN_PAGE)
 
@@ -809,8 +821,7 @@ async def dashboard(request: Request):
     if not authentication_enabled() or "pytest" in sys.modules or os.environ.get("SIMC_HELPER_DEV_MODE") == "1":
         return app_response(request)
         
-    session_id = request.cookies.get("session_id")
-    if session_id and session_get(session_id) is not None:
+    if _page_session_valid(request):
         return FileResponse(APP_PAGE)
     return RedirectResponse(url="/login", status_code=303)
 
@@ -819,8 +830,7 @@ async def dashboard(request: Request):
 async def results_page(request: Request):
     if not authentication_enabled() or "pytest" in sys.modules or os.environ.get("SIMC_HELPER_DEV_MODE") == "1":
         return FileResponse(RESULTS_PAGE)
-    session_id = request.cookies.get("session_id")
-    if session_id and session_get(session_id) is not None:
+    if _page_session_valid(request):
         return FileResponse(RESULTS_PAGE)
     return RedirectResponse(url="/login", status_code=303)
 
@@ -829,8 +839,7 @@ async def results_page(request: Request):
 async def login_page(request: Request):
     if not authentication_enabled():
         return RedirectResponse(url="/dashboard", status_code=303)
-    session_id = request.cookies.get("session_id")
-    if session_id and session_get(session_id) is not None:
+    if _page_session_valid(request):
         return RedirectResponse(url="/dashboard", status_code=303)
     return FileResponse(LOGIN_PAGE)
 
@@ -874,9 +883,11 @@ async def login(request: Request, response: Response, username: str = Form(...),
         user_set_password_hash(user["user_id"], hash_password(password))
     _login_failures.reset(ip)
 
-    # Ensure session exists in DB
-    session_set(user["user_id"], time.time())
-    
+    # NOTE (t_ef8682a4): login must NOT touch ``user_sessions`` — that table
+    # is purely sim-run cooldown state (see run_simulation). Writing it here
+    # made every run started within the cooldown window after login return a
+    # bogus 429 for users who had never run a simulation.
+
     redirect_resp = RedirectResponse(url="/dashboard", status_code=303)
     redirect_resp.set_cookie(
         key="session_id", 
@@ -2023,6 +2034,10 @@ async def run_simulation(request: Request, worker_id: Optional[str] = Query(None
     """
     user_id = current_user if current_user != "anonymous" else (request.cookies.get("user_id") or f"ip_{request.client.host}")
     now = time.time()
+    # Cooldown state lives ONLY here (t_ef8682a4): ``user_sessions`` is set
+    # when a simulation actually starts and is purged after
+    # SIM_COOLDOWN_SECONDS by the enforcer. Login never writes it, so a
+    # freshly logged-in user is never rate-limited.
     db_time = session_get(user_id)
     if db_time is not None and now - db_time < 30:
          raise HTTPException(status_code=429, detail=f"Rate limit: wait {int(30 - (now - db_time))}s")
