@@ -2091,10 +2091,13 @@ async def stream_simulation(task_id: str, worker_id: str):
 # --- SimC HTML report parsing -------------------------------------------------
 # SimC nightly emits player headers as <h2 id="player1toggle" class="toggle"">
 # — note the stray double-quote before '>' — while older builds emit
-# <h2 class="toggle">. The split pattern tolerates both. Headers whose tag
-# continues after class="toggle" (e.g. id="apm-summary-toggle") are not
+# <h2 class="toggle">. The FIRST EXPANDED section additionally carries
+# class="toggle open"" (verified in a real single-actor nightly report: a
+# baseline-only run otherwise parses back to just the pet). The split
+# pattern tolerates all three. Headers whose tag continues after
+# class="toggle..." (e.g. id="apm-summary-toggle", style=...) are not
 # player sections and must not match.
-_REPORT_SECTION_RE = re.compile(r'<h2[^>]+class="toggle""?>')
+_REPORT_SECTION_RE = re.compile(r'<h2[^>]+class="toggle(?: open)?""?>')
 _REPORT_DPS_RE = re.compile(
     r'^\s*([^<]+?)\s*(?:&#160;|&nbsp;)?\s*:\s*(?:&#160;|&nbsp;)?\s*([\d,.]+)\s*dps',
     re.IGNORECASE,
