@@ -1,0 +1,118 @@
+# REAL SimC nightly output (SimulationCraft 1210-01, WoW 12.1.0.69933,
+# git build midnight eaf8c46), captured 2026-10-15 in the production worker
+# container running the real Hamidriel Retribution addon export.
+# Trimmed only for size (progress-bar carriage-return spam removed);
+# all ranking values are verbatim from the engine.
+Detected character name: Hamidriel
+Found 2 combinations.
+Dynamic batch size determined: 123 combinations (based on available RAM)
+
+--- STAGE 1: Fast Filtering (iterations=100) using 100% ---
+
+Progress: 33% (1/3 profiles)
+Progress: 33% (1/3 profiles)
+Progress: 66% (2/3 profiles)
+Progress: 66% (2/3 profiles)
+Progress: 100% (3/3 profiles)
+Progress: 100% (3/3 profiles)
+Progress: 100% (3/3 profiles)
+Progress: 100% (3/3 profiles)
+Created /tmp/simc_20261015_020435/stage2.simc with 2 profiles.
+
+--- STAGE 2: Refinement (iterations=2000) using 100% ---
+
+[Stage 2] Progress: 33% (1/3 profiles)
+[Stage 2] Progress: 33% (1/3 profiles)
+[Stage 2] Progress: 66% (2/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+[Stage 2] Progress: 100% (3/3 profiles)
+Created /tmp/simc_20261015_020435/stage3.simc with 2 profiles.
+
+--- STAGE 3: Final Selection ---
+
+[Stage 3] Progress: 33% (1/3 profiles)
+[Stage 3] Progress: 33% (1/3 profiles)
+[Stage 3] Progress: 66% (2/3 profiles)
+[Stage 3] Progress: 100% (3/3 profiles)
+[Stage 3] Progress: 100% (3/3 profiles)
+[Stage 3] Progress: 100% (3/3 profiles)
+[Stage 3] Progress: 100% (3/3 profiles)
+[Stage 3] Progress: 100% (3/3 profiles)
+
+Simcraft Helper complete! Results in /tmp/simc_reports/report_20261015_020435.html
+Temporary files are in /tmp/simc_20261015_020435
+Total execution time: 5s

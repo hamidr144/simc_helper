@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -401,3 +402,120 @@ def test_worker_source_mode_engine_path_unchanged(monkeypatch, tmp_path):
         assert worker_mod.should_update_simc(None, 10_000, 86400)
     finally:
         _restore_default_worker(monkeypatch)
+
+
+# =========================================================================
+# Real nightly-SimC-output fixtures (t_1651ba9b)
+#
+# Every fixture under tests/fixtures/simc_nightly_* / simc_input_* is
+# verbatim output of SimulationCraft 1210-01 (WoW 12.1.0.69933 nightly)
+# running the real Hamidriel addon export inside the production worker
+# container. These tests certify the worker against REAL engine output —
+# a green run here means the report-discovery and DPS-extraction paths
+# work on what the nightly engine actually emits, not on hand-written
+# mocks.
+# =========================================================================
+
+import shutil
+import zipfile
+from pathlib import Path
+
+FIXTURES = Path(__file__).parent / "fixtures"
+NIGHTLY_CONSOLE_LOG = FIXTURES / "simc_nightly_console_multicopy.log"
+NIGHTLY_SIMHELPER_ZERO_COMBO_LOG = FIXTURES / "simc_nightly_simhelper_zero_combo.log"
+NIGHTLY_SIMHELPER_MULTICOPY_LOG = FIXTURES / "simc_nightly_simhelper_multicopy.log"
+NIGHTLY_BASELINE_REPORT = FIXTURES / "simc_nightly_report_baseline_only.html"
+
+
+def test_get_all_dps_parses_real_nightly_console_log():
+    """P0 class: stage filtering must read the nightly engine's real ranking."""
+    from src.cli.sim_helper import get_all_dps
+
+    results = get_all_dps(str(NIGHTLY_CONSOLE_LOG), current_name="Hamidriel")
+    # Verbatim from the fixture's DPS Ranking block (Raid and the current
+    # actor are excluded by design).
+    assert results == [("Hamidriel_wrist_0", 7861), ("Hamidriel_neck_1", 7828)]
+
+    # Without a current_name the base actor is part of the ranking too.
+    all_results = get_all_dps(str(NIGHTLY_CONSOLE_LOG))
+    assert ("Hamidriel", 7894) in all_results
+
+
+def test_execute_task_report_regexes_match_real_simhelper_logs():
+    """P0 class: _execute_task must find the report in REAL sim_helper stdout.
+
+    Mirrors the exact regexes from worker._execute_task so any change there
+    without a fixture update here breaks the contract.
+    """
+    for log_path, expected_report, expected_tmp in (
+        (NIGHTLY_SIMHELPER_ZERO_COMBO_LOG, "report_20261015_020532.html", "/tmp/simc_20261015_020532"),
+        (NIGHTLY_SIMHELPER_MULTICOPY_LOG, "report_20261015_020435.html", "/tmp/simc_20261015_020435"),
+    ):
+        log_str = log_path.read_text(encoding="utf-8")
+        report_match = re.search(r"report_.*\.html", log_str)
+        assert report_match is not None, f"no report found in {log_path.name}"
+        assert report_match.group(0) == expected_report
+        tmp_match = re.search(r"Temporary files are in (\/tmp\/simc_[^\s\n]+)", log_str)
+        assert tmp_match is not None, f"no tmp dir found in {log_path.name}"
+        assert tmp_match.group(1) == expected_tmp
+
+
+@pytest.mark.asyncio
+async def test_execute_task_uploads_real_baseline_report(tmp_path, monkeypatch):
+    """P0-4 × worker: a zero-combo baseline run must flow through the worker.
+
+    The sim_helper invocation is replaced by a stub that replays the REAL
+    sim_helper stdout log from the production container (zero-combo
+    baseline run) and materialises the REAL nightly report it announces.
+    Everything after that — PTY capture, log streaming, report discovery,
+    artifact zipping, upload — is the genuine worker code path.
+    """
+    import worker as worker_mod
+
+    report_file = "report_20261015_020532.html"
+    stub = tmp_path / "stub_sim_helper.py"
+    stub.write_text(
+        "import os, shutil, sys, time\n"
+        f"sys.stdout.write(open({str(NIGHTLY_SIMHELPER_ZERO_COMBO_LOG)!r}).read())\n"
+        "sys.stdout.flush()\n"
+        "os.makedirs('/tmp/simc_reports', exist_ok=True)\n"
+        f"shutil.copy({str(NIGHTLY_BASELINE_REPORT)!r}, f'/tmp/simc_reports/{report_file}')\n"
+        "time.sleep(0.3)\n"
+    )
+
+    task_id = f"fixture-zero-{os.getpid()}"
+    os.makedirs(f"/tmp/worker_sim_{task_id}", exist_ok=True)
+    monkeypatch.setattr(worker_mod, "worker_subcommand", lambda sub: [sys.executable, str(stub)])
+
+    uploads = []
+
+    async def fake_upload(session, tid, path):
+        # Snapshot the artifact before test cleanup can race the assertion.
+        snapshot = tmp_path / "artifacts.zip"
+        shutil.copy(path, snapshot)
+        uploads.append((tid, str(snapshot)))
+        return {"status": "success"}
+
+    monkeypatch.setattr(worker_mod, "upload_file", fake_upload)
+
+    ws = AsyncMock()
+    ws.recv.side_effect = asyncio.TimeoutError
+    try:
+        exit_code, report, error = await worker_mod._execute_task(
+            MagicMock(), task_id, "/tmp/inputs/fixture.simc", ws
+        )
+    finally:
+        import shutil as _shutil
+        _shutil.rmtree(f"/tmp/worker_sim_{task_id}", ignore_errors=True)
+        try:
+            os.remove(f"/tmp/simc_reports/{report_file}")
+        except OSError:
+            pass
+
+    assert (exit_code, error) == (0, None)
+    assert report == report_file
+    assert uploads and uploads[0][0] == task_id
+    # The uploaded artifact must contain the genuine nightly report bytes.
+    with zipfile.ZipFile(uploads[0][1]) as zf:
+        assert report_file in zf.namelist()
+        assert zf.read(report_file) == NIGHTLY_BASELINE_REPORT.read_bytes()

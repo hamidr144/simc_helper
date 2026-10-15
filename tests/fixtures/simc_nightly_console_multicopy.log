@@ -1,0 +1,21 @@
+# REAL SimC nightly output (SimulationCraft 1210-01, WoW 12.1.0.69933,
+# git build midnight eaf8c46), captured 2026-10-15 in the production worker
+# container running the real Hamidriel Retribution addon export.
+# Trimmed only for size (progress-bar carriage-return spam removed);
+# all ranking values are verbatim from the engine.
+SimulationCraft 1210-01 for World of Warcraft 12.1.0.69933 Live (hotfix 2026-10-07/69933, git build midnight eaf8c46)
+Trivial: Player Hamidriel enchant '+$k1 Stamina' (id=2841) requires a maximum ilevel of 44, item 'spellbreakers_resolve' has 285
+Trivial: Player Hamidriel_wrist_0 enchant '+$k1 Stamina' (id=2841) requires a maximum ilevel of 44, item 'spellbreakers_resolve' has 285
+Trivial: Player Hamidriel_neck_1 enchant '+$k1 Stamina' (id=2841) requires a maximum ilevel of 44, item 'spellbreakers_resolve' has 285
+
+Simulating... ( iterations=1000, threads=14, target_error=0.000, max_time=300, vary_combat_length=0.20, optimal_raid=1, fight_style=None )
+DPS Ranking:
+   7861 100.0%  Raid
+   7894  100.4%  Hamidriel
+   7861  100.0%  Hamidriel_wrist_0
+   7828  99.6%  Hamidriel_neck_1
+
+HPS Ranking:
+      0 100.0%%  Raid
+
+Player: Hamidriel blood_elf paladin retribution 90
