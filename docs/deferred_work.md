@@ -54,7 +54,8 @@ Cancelled in the `t_4e4945ff` queue-surgery batch, 2026-10-14/15.
 - **Cancelled:** 2026-10-14, out of scope for the stop condition.
 - **Open design question at cancellation:** LAN-only admin port absent from
   the Caddyfile vs. Caddy `/admin` path gating with an IP allowlist.
-  Re-decide against the shipped TLS fronting (`docs/tls-fronting.md`).
+  Re-decide against the TLS fronting (`docs/tls-fronting.md`; since
+  `t_6da4607e` the front is host infra, outside this repo).
 
 ### Prod/test two-system rollout — `t_f7759d5c`
 
