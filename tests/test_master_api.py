@@ -269,6 +269,113 @@ def test_api_generate_simc_applies_midnight_track_rank_upgrades():
     assert "trinket1=,id=20,ilevel=285" in generated
 
 
+def test_user_selected_upgrade_upgrades_candidate_but_not_baseline():
+    """t_ef33100b: a user-chosen rank must move the candidate copy only.
+
+    The baseline must stay the character's current gear, otherwise the
+    candidate equals the baseline, is filtered as an equipped variation,
+    and the upgrade UI can never produce a diff.
+    """
+    payload = {
+        "base_profile": "paladin=Test",
+        "char_class": "paladin",
+        "char_name": "Test",
+        "equipped_gear": {"back": "id=1,ilevel=291"},
+        "selected_items": {"back": ["id=1,ilevel=291"]},
+        "selected_enchants": {},
+        "selected_gems": [],
+        "upgrade_season": "midnight-s2",
+        "gear_upgrades": {
+            "back": {"id=1,ilevel=291": {"track": "myth", "rank": 6, "user_selected": True}},
+        },
+        "voidforged_items": {},
+    }
+
+    with patch(
+        "src.cli.generate_input.load_config",
+        return_value={"gems": {"meta": [], "standard": []}, "enchantments": {}},
+    ):
+        response = client.post("/api/generate-simc", json=payload)
+    assert response.status_code == 200
+
+    with open("char_simc_addon.txt") as f:
+        generated = f.read()
+
+    # Baseline keeps the current ilvl...
+    assert "back=,id=1,ilevel=291" in generated
+    # ...and the myth rank-6 upgrade (Season 2 ladder top = 334) lands in a
+    # copy block instead.
+    assert generated.count('copy="Test_back_') == 1
+    assert generated.count("back=,id=1,ilevel=334") == 1
+    assert response.json()["combinations"] >= 1
+
+
+def test_user_selected_upgrade_at_current_rank_produces_no_duplicate_copy():
+    payload = {
+        "base_profile": "paladin=Test",
+        "char_class": "paladin",
+        "char_name": "Test",
+        "equipped_gear": {"back": "id=1,ilevel=291"},
+        "selected_items": {"back": ["id=1,ilevel=291"]},
+        "selected_enchants": {},
+        "selected_gems": [],
+        "upgrade_season": "midnight-s2",
+        "gear_upgrades": {
+            "back": {
+                "id=1,ilevel=291": {
+                    "source": "export",
+                    "rank": 0,
+                    "item_level": 291,
+                    "user_selected": True,
+                }
+            },
+        },
+        "voidforged_items": {},
+    }
+
+    with patch(
+        "src.cli.generate_input.load_config",
+        return_value={"gems": {"meta": [], "standard": []}, "enchantments": {}},
+    ):
+        response = client.post("/api/generate-simc", json=payload)
+    assert response.status_code == 200
+
+    with open("char_simc_addon.txt") as f:
+        generated = f.read()
+
+    assert 'copy="' not in generated
+    assert generated.count("back=,id=1,ilevel=291") == 1
+
+
+def test_inferred_upgrade_entry_still_describes_the_baseline():
+    """Unmarked (inferred-current) entries keep applying to the baseline."""
+    payload = {
+        "base_profile": "paladin=Test",
+        "char_class": "paladin",
+        "char_name": "Test",
+        "equipped_gear": {"back": "id=1,ilevel=291"},
+        "selected_items": {"back": ["id=1,ilevel=291"]},
+        "selected_enchants": {},
+        "selected_gems": [],
+        "upgrade_season": "midnight-s2",
+        "gear_upgrades": {"back": {"id=1,ilevel=291": {"track": "myth", "rank": 6}}},
+        "voidforged_items": {},
+    }
+
+    with patch(
+        "src.cli.generate_input.load_config",
+        return_value={"gems": {"meta": [], "standard": []}, "enchantments": {}},
+    ):
+        response = client.post("/api/generate-simc", json=payload)
+    assert response.status_code == 200
+
+    with open("char_simc_addon.txt") as f:
+        generated = f.read()
+
+    assert "back=,id=1,ilevel=334" in generated
+    assert 'copy="' not in generated
+
+
 def test_api_generate_simc_applies_voidforge_only_to_selected_weapons_and_trinkets():
     payload = {
         "base_profile": "paladin=Test",
@@ -474,6 +581,36 @@ def test_api_get_results_complex_html(tmp_path):
     res = {r["name"]: r["dps"] for r in response.json()["results"]}
     assert res["A"] == 1234567
     assert res["B"] == 987654
+
+
+def test_api_get_results_nightly_report_format():
+    """Regression (t_fdd385ef): SimC nightly emits player headers as
+    <h2 id="player1toggle" class="toggle""> — with a stray double-quote
+    before '>' — which the old split regex never matched, so the results
+    page showed an empty list. Fixture is a trimmed snippet of the real
+    nightly report from task e4c3035c."""
+    import shutil
+
+    task_id = "test-nightly-fixture"
+    reports_dir = "/tmp/simc_reports"
+    os.makedirs(os.path.join(reports_dir, task_id), exist_ok=True)
+    fixture = os.path.join(os.path.dirname(__file__), "fixtures", "simc_report_nightly_snippet.html")
+    shutil.copy(fixture, os.path.join(reports_dir, task_id, "report_nightly.html"))
+
+    response = client.get(f"/api/get-results?task_id={task_id}")
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert len(results) == 3
+    by_name = {r["name"]: r for r in results}
+    assert by_name["Hamidriel"]["dps"] == 18820
+    assert by_name["Hamidriel_back_12"]["dps"] == 19872
+    assert by_name["Fluffy_Pillow"]["dps"] == 0
+    # Non-player headers (Table of Contents, apm-summary) are not results.
+    assert set(by_name) == {"Hamidriel", "Hamidriel_back_12", "Fluffy_Pillow"}
+    head = by_name["Hamidriel"]["gear"]["head"]
+    assert head.startswith("id=271465")
+    assert "enchant_id=8017" in head
+    assert "bonus_id=6652/12850" in head
 
 
 def test_input_serving_allows_generated_simc_file_only():

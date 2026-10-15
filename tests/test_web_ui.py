@@ -283,6 +283,23 @@ def test_gear_selection_hydrates_exact_grades_from_wowhead():
     assert "renderGear();" in js
 
 
+def test_user_chosen_upgrades_are_marked_user_selected():
+    """t_ef33100b: user-chosen grades carry user_selected so the backend
+    keeps them off the baseline; inferred-current entries stay unmarked."""
+    response = client.get("/static/app.js")
+    assert response.status_code == 200
+    js = response.text
+
+    # Track/rank picks mark the entry; export rank 0 ("Current") clears it.
+    assert "{ track, rank: 1, user_selected: true }" in js
+    assert "entry.user_selected = true;" in js
+    assert "if (entry.rank === 0) delete entry.user_selected;" in js
+    # Wowhead hydration must not clobber a pick the user already made.
+    assert "if (gearUpgrades[slot]?.[item]?.user_selected) continue;" in js
+    # The estimator counts a user-chosen upgrade as a real variation.
+    assert "Boolean(gearUpgrades[slot]?.[item]?.user_selected)" in js
+
+
 def test_item_icons_use_local_proxy_without_requiring_wowhead_javascript():
     response = client.get("/static/app.js")
     assert response.status_code == 200

@@ -539,7 +539,8 @@ function estimateCombinations() {
       const equipped = normalizedEquippedItems(slot);
       const acceptsGem = item.includes('gem_id=') || extraSockets[slot];
       const gemCount = acceptsGem ? selectedGems.size : 0;
-      const hasVariation = !equipped.includes(item) || enchantCount > 0 || gemCount > 0 || extraSockets[slot];
+      const hasVariation = !equipped.includes(item) || enchantCount > 0 || gemCount > 0 ||
+        extraSockets[slot] || Boolean(gearUpgrades[slot]?.[item]?.user_selected);
       if (hasVariation) total += Math.max(1, enchantCount) * Math.max(1, gemCount);
     }
   }
@@ -942,6 +943,7 @@ function renderGear() {
               { source: 'export', rank: 0, item_level: exportRanksFor(slot, item)[0].level };
             if (track === 'none') delete entry.track;
             else entry.track = track;
+            entry.user_selected = true;
             gearUpgrades[slot][item] = entry;
             rankSelect.disabled = false;
           } else if (track === 'none') {
@@ -949,7 +951,7 @@ function renderGear() {
             rankSelect.innerHTML = '';
             rankSelect.disabled = true;
           } else {
-            gearUpgrades[slot][item] = { track, rank: 1 };
+            gearUpgrades[slot][item] = { track, rank: 1, user_selected: true };
             rankSelect.innerHTML = (seasonTracks()[track] || []).map((level, index) =>
               `<option value="${index + 1}">Rank ${index + 1} · ${level}</option>`
             ).join('');
@@ -970,6 +972,11 @@ function renderGear() {
               const levels = seasonTracks()[entry.track] || [];
               entry.item_level = levels[entry.rank - 1] ?? null;
             }
+            // Export rank 0 is the item's current level again, so the entry
+            // stops being a user-chosen upgrade; anything else is a choice
+            // that belongs to the candidate copies only.
+            if (entry.rank === 0) delete entry.user_selected;
+            else entry.user_selected = true;
           }
           scheduleUpgradePreview(slot, item, card);
           selectionChanged();
@@ -980,6 +987,12 @@ function renderGear() {
       if (voidforgeInput) {
         voidforgeInput.addEventListener('change', event => {
           voidforgedItems[slot][item] = event.target.checked;
+          // Checking Ascension is a user choice: mark the grade entry so the
+          // backend keeps it off the baseline (only meaningful when a grade
+          // entry exists to carry the flag).
+          if (event.target.checked && gearUpgrades[slot]?.[item]) {
+            gearUpgrades[slot][item].user_selected = true;
+          }
           event.currentTarget.closest('.voidforge-field-container')?.classList.toggle('is-active', event.target.checked);
           scheduleUpgradePreview(slot, item, card);
           selectionChanged();
@@ -1098,6 +1111,9 @@ async function hydrateWowheadUpgrades(itemsBySlot) {
     for (const [slot, itemUpgrades] of Object.entries(data.gear_upgrades || {})) {
       for (const [item, upgrade] of Object.entries(itemUpgrades)) {
         if (parsedData?.item_upgrades?.[item]) continue;
+        // Never clobber a grade the user already picked while this lookup
+        // was in flight.
+        if (gearUpgrades[slot]?.[item]?.user_selected) continue;
         (gearUpgrades[slot] ||= {})[item] = upgrade;
       }
     }

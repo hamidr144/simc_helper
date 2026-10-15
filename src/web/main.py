@@ -1775,7 +1775,7 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
         gear_upgrades = payload.gear_upgrades or {}
         voidforged_items = payload.voidforged_items or {}
 
-        def apply_level_override(slot, item):
+        def apply_level_override(slot, item, baseline=False):
             if not item:
                 return item
             slot_levels = item_levels.get(slot, {}) if isinstance(item_levels, dict) else {}
@@ -1789,6 +1789,16 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
                 slot_voidforged = {}
             voidforged = bool(slot_voidforged.get(item))
             upgrade = slot_upgrades.get(item)
+            # Entries the user explicitly chose (marked user_selected by the
+            # UI) belong to the candidate copies only; the baseline must stay
+            # the character's CURRENT gear, otherwise upgrading an item would
+            # move the baseline with it and no diff could ever be generated.
+            # Unmarked entries are inferred-current grades (name/level
+            # inference, export rank 0, Wowhead hydration) and legitimately
+            # describe the baseline too.
+            if baseline and isinstance(upgrade, dict) and upgrade.get("user_selected"):
+                upgrade = None
+                voidforged = False
             if upgrade:
                 return apply_gear_upgrade(item, upgrade, slot=slot, voidforged=voidforged, season=season)
             level = slot_levels.get(item)
@@ -1802,6 +1812,7 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
             slot: apply_level_override(
                 "finger" if slot.startswith("finger") else "trinket" if slot.startswith("trinket") else slot,
                 details,
+                baseline=True,
             )
             for slot, details in equipped_gear.items()
         }
@@ -2060,6 +2071,61 @@ async def stream_simulation(task_id: str, worker_id: str):
     if task_id not in manager.task_queues: raise HTTPException(status_code=404)
     return StreamingResponse(simulation_event_generator(task_id, worker_id), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"})
 
+# --- SimC HTML report parsing -------------------------------------------------
+# SimC nightly emits player headers as <h2 id="player1toggle" class="toggle"">
+# — note the stray double-quote before '>' — while older builds emit
+# <h2 class="toggle">. The split pattern tolerates both. Headers whose tag
+# continues after class="toggle" (e.g. id="apm-summary-toggle") are not
+# player sections and must not match.
+_REPORT_SECTION_RE = re.compile(r'<h2[^>]+class="toggle""?>')
+_REPORT_DPS_RE = re.compile(
+    r'^\s*([^<]+?)\s*(?:&#160;|&nbsp;)?\s*:\s*(?:&#160;|&nbsp;)?\s*([\d,.]+)\s*dps',
+    re.IGNORECASE,
+)
+_REPORT_NAME_TRAILER_RE = re.compile(r'(?:&#160;|&nbsp;|\s)+$')
+_REPORT_SLOT_MAP = {"Head": "head", "Neck": "neck", "Shoulders": "shoulder", "Back": "back", "Chest": "chest", "Wrists": "wrist", "Hands": "hands", "Waist": "waist", "Legs": "legs", "Feet": "feet", "Finger 1": "finger1", "Finger 2": "finger2", "Trinket 1": "trinket1", "Trinket 2": "trinket2", "Main Hand": "main_hand", "Off Hand": "off_hand"}
+
+
+def parse_report_results(html_content: str) -> list:
+    """Parse a SimC HTML report into [{name, dps, gear}] per player section.
+
+    Tolerant of both the classic (<h2 class="toggle">) and nightly
+    (<h2 id="playerNtoggle" class="toggle"">) header markup and of the
+    &#160;/&nbsp; separators SimC emits around the ':' in the DPS line.
+    Shared by /api/get-results and the run-history insert hook.
+    """
+    results = []
+    sections = _REPORT_SECTION_RE.split(html_content)
+    for section in sections[1:]:
+        m = _REPORT_DPS_RE.match(section)
+        if not m:
+            continue
+        name = _REPORT_NAME_TRAILER_RE.sub('', m.group(1)).strip()
+        if name == "Raid":
+            continue
+        dps = int(float(m.group(2).replace(',', '')))
+        gear = {}
+        gt_match = re.search(r'<div class="player-section gear">.*?<table[^>]*>(.*?)</table>', section, re.DOTALL)
+        if gt_match:
+            rows = re.finditer(r'<th[^>]*>\s*([^<]+)\s*</th>\s*<td[^>]*>\s*<a[^>]+href="([^"]+)"', gt_match.group(1), re.IGNORECASE)
+            for r in rows:
+                simc_slot = _REPORT_SLOT_MAP.get(r.group(1).strip())
+                if simc_slot:
+                    href = r.group(2)
+                    id_match = re.search(r'item=([0-9]+)', href)
+                    if id_match:
+                        simc_str = f"id={id_match.group(1)}"
+                        ench = re.search(r'ench=([0-9]+)', href)
+                        if ench: simc_str += f",enchant_id={ench.group(1)}"
+                        gems = re.search(r'gems=([0-9:]+)', href)
+                        if gems: simc_str += f",gem_id={gems.group(1).replace(':', '/')}"
+                        bonus = re.search(r'bonus=([0-9:]+)', href)
+                        if bonus: simc_str += f",bonus_id={bonus.group(1).replace(':', '/')}"
+                        gear[simc_slot] = simc_str
+        results.append({"name": name, "dps": dps, "gear": gear})
+    return results
+
+
 @app.get("/api/get-results", response_model=GetResultsResponse, tags=["Simulation"])
 async def get_results(task_id: str = Query(default="latest")):
     """Retrieve parsed simulation results (DPS per class, gear data) for a completed task.
@@ -2087,34 +2153,7 @@ async def get_results(task_id: str = Query(default="latest")):
             html_path = os.path.join(tmp_dir, report_files[0])
 
         with open(html_path, encoding='utf-8', errors='replace') as f: html_content = f.read()
-        results = []
-        sections = re.split(r'<h2[^>]+class="toggle">', html_content)
-        for section in sections[1:]:
-            m = re.match(r'^\s*([^<]+?)\s*(?:&#160;)?\s*:\s*(?:&#160;)?\s*([\d,.]+)\s*dps', section, re.IGNORECASE)
-            if m:
-                name, dps_str = m.group(1).strip(), m.group(2).replace(',', '')
-                if name == "Raid": continue
-                dps = int(float(dps_str))
-                gear = {}
-                gt_match = re.search(r'<div class="player-section gear">.*?<table[^>]*>(.*?)</table>', section, re.DOTALL)
-                if gt_match:
-                    slot_map = {"Head": "head", "Neck": "neck", "Shoulders": "shoulder", "Back": "back", "Chest": "chest", "Wrists": "wrist", "Hands": "hands", "Waist": "waist", "Legs": "legs", "Feet": "feet", "Finger 1": "finger1", "Finger 2": "finger2", "Trinket 1": "trinket1", "Trinket 2": "trinket2", "Main Hand": "main_hand", "Off Hand": "off_hand"}
-                    rows = re.finditer(r'<th[^>]*>\s*([^<]+)\s*</th>\s*<td[^>]*>\s*<a[^>]+href="([^"]+)"', gt_match.group(1), re.IGNORECASE)
-                    for r in rows:
-                        simc_slot = slot_map.get(r.group(1).strip())
-                        if simc_slot:
-                            href = r.group(2)
-                            id_match = re.search(r'item=([0-9]+)', href)
-                            if id_match:
-                                simc_str = f"id={id_match.group(1)}"
-                                ench = re.search(r'ench=([0-9]+)', href)
-                                if ench: simc_str += f",enchant_id={ench.group(1)}"
-                                gems = re.search(r'gems=([0-9:]+)', href)
-                                if gems: simc_str += f",gem_id={gems.group(1).replace(':', '/')}"
-                                bonus = re.search(r'bonus=([0-9:]+)', href)
-                                if bonus: simc_str += f",bonus_id={bonus.group(1).replace(':', '/')}"
-                                gear[simc_slot] = simc_str
-                results.append({"name": name, "dps": dps, "gear": gear})
+        results = parse_report_results(html_content)
         return {"status": "success", "results": results}
     except HTTPException:
         raise
