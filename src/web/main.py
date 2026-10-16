@@ -399,7 +399,7 @@ os.makedirs(INPUTS_DIR, exist_ok=True)
 from src.core.logging import setup_logging  # noqa: E402
 
 logger = setup_logging("master")
-SIM_COOLDOWN_SECONDS = 300 # 5 minutes
+SIM_COOLDOWN_SECONDS = int(os.environ.get("SIM_COOLDOWN_SECONDS", "300"))  # 5 minutes
 
 # Initialize DB (creates tables if not exist) – must happen before load_sessions/load_inputs
 init_db()
