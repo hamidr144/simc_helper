@@ -44,7 +44,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         )
         return response
 from typing import Any, Dict, List, Optional, Union
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from xml.etree import ElementTree
 
 import httpx
@@ -877,6 +877,16 @@ async def history_page(request: Request):
     return RedirectResponse(url="login", status_code=303)
 
 
+def _form_error(request: Request, page: str, status_code: int, detail: str):
+    """t_6f351b30: browser form errors 303 back to the page with the message
+    as ?error= (the page renders it in a styled box) instead of the raw JSON
+    document; API clients that explicitly ask for JSON keep the HTTPException
+    path and status codes."""
+    if "application/json" in request.headers.get("accept", ""):
+        raise HTTPException(status_code=status_code, detail=detail)
+    return RedirectResponse(url=f"{page}?error={quote(detail)}", status_code=303)
+
+
 @app.get("/login")
 async def login_page(request: Request):
     if not authentication_enabled():
@@ -901,13 +911,15 @@ async def register(request: Request, username: str = Form(...), password: str = 
         raise HTTPException(status_code=403, detail="User authentication is disabled")
     ip = client_ip(request)
     if _registrations.is_limited(ip):
-        raise HTTPException(
-            status_code=429,
-            detail=f"Too many registrations; retry in {_registrations.retry_after(ip)}s",
+        return _form_error(
+            request,
+            "register",
+            429,
+            f"Too many registrations; retry in {_registrations.retry_after(ip)}s",
         )
     _registrations.record(ip)
     if user_get(username):
-        raise HTTPException(status_code=400, detail="Username already exists")
+        return _form_error(request, "register", 400, "Username already exists")
 
     password_hash = hash_password(password)
     user_id = user_create(username, password_hash)
@@ -931,14 +943,16 @@ async def login(request: Request, response: Response, username: str = Form(...),
         raise HTTPException(status_code=403, detail="User authentication is disabled")
     ip = client_ip(request)
     if _login_failures.is_limited(ip):
-        raise HTTPException(
-            status_code=429,
-            detail=f"Too many failed login attempts; retry in {_login_failures.retry_after(ip)}s",
+        return _form_error(
+            request,
+            "login",
+            429,
+            f"Too many failed login attempts; retry in {_login_failures.retry_after(ip)}s",
         )
     user = user_get(username)
     if not user or not verify_password(password, user["password_hash"]):
         _login_failures.record(ip)
-        raise HTTPException(status_code=401, detail="Invalid username or password")
+        return _form_error(request, "login", 401, "Invalid username or password")
 
     # Transparent upgrade of legacy unsalted SHA-256 hashes to salted PBKDF2.
     if password_needs_rehash(user["password_hash"]):

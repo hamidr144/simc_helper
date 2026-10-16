@@ -1011,10 +1011,24 @@ def test_register_form_redirects_and_logs_in(monkeypatch):
     gated = anon.post("/api/parse-addon", json={"addon_text": "paladin=Test\nhead=id=123"})
     assert gated.status_code == 200
 
+    # t_6f351b30 regression: browser form error 303s back to the register
+    # page with the message as ?error= (styled error box), not raw JSON.
     dup = TestClient(app).post(
-        "/register", data={"username": username, "password": "pw-123456"}
+        "/register",
+        data={"username": username, "password": "pw-123456"},
+        follow_redirects=False,
     )
-    assert dup.status_code == 400
+    assert dup.status_code == 303
+    assert dup.headers["location"].startswith("register?error=")
+    assert "Username%20already%20exists" in dup.headers["location"]
+    assert "application/json" not in dup.headers.get("content-type", "")
+    # API clients that explicitly ask for JSON keep the 400 status code.
+    dup_api = TestClient(app).post(
+        "/register",
+        data={"username": username, "password": "pw-123456"},
+        headers={"Accept": "application/json"},
+    )
+    assert dup_api.status_code == 400
     master._registrations.reset()
 
 
@@ -1051,14 +1065,50 @@ def test_login_rate_limited_after_repeated_failures(monkeypatch):
     username = f"rl-{uuid.uuid4().hex[:8]}"
     user_create(username, security.hash_password("correct-horse-battery"))
     anon = TestClient(app)
+    json_headers = {"Accept": "application/json"}
     for _ in range(5):
-        bad = anon.post("/login", data={"username": username, "password": "wrong"})
+        bad = anon.post("/login", data={"username": username, "password": "wrong"},
+                        headers=json_headers)
         assert bad.status_code == 401
-    limited = anon.post("/login", data={"username": username, "password": "wrong"})
+    limited = anon.post("/login", data={"username": username, "password": "wrong"},
+                        headers=json_headers)
     assert limited.status_code == 429
     # While limited, even the correct password is refused (lockout by IP).
-    blocked = anon.post("/login", data={"username": username, "password": "correct-horse-battery"})
+    blocked = anon.post("/login", data={"username": username, "password": "correct-horse-battery"},
+                        headers=json_headers)
     assert blocked.status_code == 429
+    # t_6f351b30: the browser form path gets 303 -> login?error= instead of
+    # the raw JSON 429 document.
+    form = anon.post(
+        "/login", data={"username": username, "password": "wrong"}, follow_redirects=False
+    )
+    assert form.status_code == 303
+    assert form.headers["location"].startswith("login?error=")
+    master._login_failures.reset()
+
+
+def test_login_form_error_redirects_with_error_param(monkeypatch):
+    """t_6f351b30 regression: browser form login errors render as a styled
+    error box on the login page (303 + ?error=), not a raw JSON document;
+    JSON clients keep the 401 status code."""
+    _auth_on(monkeypatch)
+    master._login_failures.reset()
+    username = f"formerr-{uuid.uuid4().hex[:8]}"
+    user_create(username, security.hash_password("correct-horse-battery"))
+    anon = TestClient(app)
+    bad = anon.post(
+        "/login", data={"username": username, "password": "wrong"}, follow_redirects=False
+    )
+    assert bad.status_code == 303
+    assert bad.headers["location"].startswith("login?error=")
+    assert "Invalid%20username%20or%20password" in bad.headers["location"]
+    assert "application/json" not in bad.headers.get("content-type", "")
+    api = anon.post(
+        "/login",
+        data={"username": username, "password": "wrong"},
+        headers={"Accept": "application/json"},
+    )
+    assert api.status_code == 401
     master._login_failures.reset()
 
 
