@@ -1676,7 +1676,7 @@ async def health_check(request: Request):
 
 
 @app.get("/api/task-status", response_model=Union[TaskStatusResponse, TaskListResponse], tags=["Tasks"])
-async def get_task_status(task_id: Optional[str] = None):
+async def get_task_status(task_id: Optional[str] = None, _: str = Depends(require_session)):
     """Get task status for a specific task or list all tasks.
 
     **Tags:** Tasks
