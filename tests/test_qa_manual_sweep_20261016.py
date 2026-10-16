@@ -119,3 +119,61 @@ def test_sec7_logout_must_invalidate_session_server_side(auth_on):
     replay.cookies.set("session_id", stolen)
     r = replay.get("/api/state")
     assert r.status_code == 401, "copied cookie still valid after logout"
+
+# ---------------------------------------------------------------- LIFE family
+
+def test_life2_master_restart_keeps_run_attribution(auth_on):
+    """BUG LIFE-2 (t_2c718ca6): a master restart mid-run must not lose the
+    task->user attribution. The durable task->user map restores the owner
+    after the in-memory maps die, the artifacts upload lands in the owner's
+    report directory (not anonymous/), and the upload itself records the
+    run_history row because the worker's done event never reaches the
+    restarted master."""
+    import io
+    import os
+    import zipfile
+
+    from src.core.db import run_history_list, user_delete
+
+    c = _login(f"life2-{uuid.uuid4().hex[:6]}")
+    m1, m2 = _mock_idle_worker()
+    with m1, m2:
+        manager.active_workers["w-test"] = MagicMock(status="Idle")
+        # SEC-6: explicit input_id (the fake worker never fetches it)
+        r = c.post("/api/run-simulation", params={"input_id": "life2-drive"})
+        assert r.status_code == 200, r.text
+        task_id = r.json()["task_id"]
+    assert master.task_user_map.get(task_id) == c.user_id
+
+    try:
+        # Simulate the restart: in-memory maps die, sqlite + volumes survive.
+        master.task_user_map.clear()
+        master.task_meta_map.clear()
+        manager.task_queues.pop(task_id, None)
+        master._restore_task_owner_maps()
+        assert master.task_user_map.get(task_id) == c.user_id, \
+            "task->user attribution not durable across restart"
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("report_1.html",
+                        '<h2 class="toggle">Life2&#160;:&#160;1234 dps</h2>')
+        r = TestClient(app).post(
+            "/api/worker/upload-file",
+            params={"task_id": task_id, "file_name": "artifacts.zip"},
+            headers={"X-Cluster-Secret": master.CLUSTER_SECRET},
+            files={"file": ("artifacts.zip", buf.getvalue(), "application/zip")},
+        )
+        assert r.status_code == 200, r.text
+
+        user_dir = master._user_report_dir(c.user_id)
+        assert os.path.isdir(os.path.join(master.REPORTS_DIR, user_dir, task_id))
+        assert not os.path.isdir(os.path.join(master.REPORTS_DIR, "anonymous", task_id))
+        rows = run_history_list(c.user_id)
+        assert any(row["status"] == "success" and row["top_dps"] == 1234 for row in rows), \
+            f"no attributed history row in {rows}"
+    finally:
+        user_delete(c.user_id)  # FK CASCADE removes the run_history rows
+        master.task_user_map.pop(task_id, None)
+        master.task_meta_map.pop(task_id, None)
+        manager.active_workers.pop("w-test", None)
