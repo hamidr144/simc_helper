@@ -387,3 +387,85 @@ def test_e2e7_zero_dps_pet_profiles_excluded_from_results(auth_on):
     names = [r["name"] for r in results]
     assert "Fluffy_Pillow" not in names, (
         f"0-dps pet profile surfaced as alternative: {names}")
+
+# ---------------------------------------------------------------------------
+# t_acd39188 (LIFE-10): mid-run master restart — resume handler, SSE re-attach
+# ---------------------------------------------------------------------------
+
+def test_life10_resume_reattaches_task():
+    """BUG t_acd39188: master had no 'resume' handler, so the worker's
+    post-reconnect resume was ignored and the run died silently."""
+    task_id = f"l10{uuid.uuid4().hex[:6]}"
+    master.task_user_map[task_id] = "u-life10"
+    unknown = f"l10x{uuid.uuid4().hex[:6]}"
+    try:
+        with patch.object(master, "_cluster_secret_ok", return_value=True):
+            c = TestClient(app)
+            with c.websocket_connect("/ws/worker?name=W10") as ws:
+                ws.send_json({"type": "resume", "task_id": task_id})
+                ws.send_json({"type": "resume", "task_id": unknown})
+                for _ in range(50):  # handler runs on the portal loop
+                    if task_id in manager.task_queues:
+                        break
+                    time.sleep(0.05)
+                assert task_id in manager.task_queues, "resume must re-create the task queue"
+                busy = [w for w in manager.active_workers.values()
+                        if w.current_task == task_id]
+                assert busy and busy[0].status == "Busy"
+                assert busy[0].user_id == "u-life10"
+                time.sleep(0.2)
+                assert unknown not in manager.task_queues, "unknown task must be ignored"
+    finally:
+        manager.task_queues.pop(task_id, None)
+        master.task_user_map.pop(task_id, None)
+        for wid in [k for k, w in manager.active_workers.items()
+                    if w.current_task in (task_id, unknown)]:
+            manager.active_workers.pop(wid, None)
+
+
+def test_life10_sse_stream_survives_stale_worker_id():
+    """After a restart the browser's worker_id is stale; the stream must
+    stay alive while any current worker still runs the task."""
+    import asyncio as aio
+
+    class _StaleQueue:
+        def __init__(self):
+            self.calls = 0
+        async def get(self):
+            self.calls += 1
+            if self.calls < 3:
+                raise aio.TimeoutError
+            return {"type": "done", "task_id": "t-stale", "code": 0}
+
+    manager.task_queues["t-stale"] = _StaleQueue()
+    w = MagicMock()
+    w.current_task = "t-stale"
+    manager.active_workers["w-new"] = w
+
+    async def _drain():
+        return [e async for e in master.simulation_event_generator("t-stale", "w-old")]
+
+    try:
+        events = aio.run(_drain())
+        assert not any("connection lost" in e for e in events), events
+        assert any('"type": "done"' in e for e in events)
+    finally:
+        manager.task_queues.pop("t-stale", None)
+        manager.active_workers.pop("w-new", None)
+
+
+def test_life10_history_row_recorded_once():
+    """The replayed upload+done pair after reconnect must write exactly one
+    run_history row (LIFE-2's _history_recorded_tasks dedupe)."""
+    task_id = "l10dedupe"
+    master.task_user_map[task_id] = "u-dup"
+    master._history_recorded_tasks.discard(task_id)
+    try:
+        with patch.object(master, "run_history_insert") as ins, \
+             patch.object(master, "_find_task_report_dir", return_value=None):
+            master._record_run_history(task_id, "failed")   # upload fallback
+            master._record_run_history(task_id, "success")  # replayed done
+        ins.assert_called_once()
+    finally:
+        master._history_recorded_tasks.discard(task_id)
+        master.task_user_map.pop(task_id, None)

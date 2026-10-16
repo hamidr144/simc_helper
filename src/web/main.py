@@ -2261,7 +2261,12 @@ async def simulation_event_generator(task_id: str, worker_id: str, queue: Option
                     yield _done_event(task_id, data)
                     break
             except asyncio.TimeoutError:
-                if worker_id not in manager.active_workers:
+                # t_acd39188: after a master restart the browser's worker_id
+                # is stale — the task is alive if any current worker still
+                # runs it (the resume handler re-attached it to a new id).
+                if worker_id not in manager.active_workers and not any(
+                    w.current_task == task_id for w in manager.active_workers.values()
+                ):
                     yield f"data: {json.dumps({'type': 'error', 'text': 'Worker connection lost mid-simulation.'})}\n\n"
                     break
                 yield ": keep-alive\n\n"
@@ -2269,7 +2274,11 @@ async def simulation_event_generator(task_id: str, worker_id: str, queue: Option
         subs = manager.task_queues.get(task_id)
         if subs is not None:
             subs.discard(queue)
-            if not subs and worker_id not in manager.active_workers:
+            # t_acd39188: same stale-worker_id guard as the timeout branch —
+            # a stale viewer disconnecting after a resume must not pop the
+            # re-attached entry (the replayed done still has to land).
+            if (not subs and worker_id not in manager.active_workers
+                    and not any(w.current_task == task_id for w in manager.active_workers.values())):
                 manager.task_queues.pop(task_id, None)
 
 @app.post("/api/run-simulation", response_model=RunSimulationResponse, tags=["Simulation"])
@@ -2752,8 +2761,9 @@ async def worker_upload_file(
         # event is gone and this upload is the only completion signal left.
         # The live task queue is the discriminator: on the normal path it
         # still exists and the WS done handler records the row instead.
-        # shortcut: no dedupe marker — the worker never replays done after a
-        # reconnect today; add a recorded-task set if that ever changes.
+        # t_acd39188 (LIFE-10): the worker DOES replay done after a
+        # reconnect; _record_run_history dedupes via _history_recorded_tasks,
+        # so this fallback and the replayed done collapse to one row.
         if task_id not in manager.task_queues and task_id in task_user_map:
             has_report = any(
                 f.startswith("report_") and f.endswith(".html")
@@ -2795,6 +2805,20 @@ async def worker_websocket(websocket: WebSocket, name: str, secret: Optional[str
                                 await queue.put({"type": "task_status_update", "task_id": tid, "status": task})
                             except Exception:
                                 pass
+                elif data["type"] == "resume":
+                    # t_acd39188 (LIFE-10): worker reconnected mid-task
+                    # (master restart). Re-attach the task queue set so SSE
+                    # works and the worker's replayed upload/done land
+                    # attributed. Never overwrite an existing subscriber set
+                    # (LIFE-4: task_queues is Dict[str, Set[Queue]]). The
+                    # master never re-dispatches the sim — the worker replays
+                    # its on-disk artifacts or reports the loss.
+                    tid = data.get("task_id")
+                    if tid and tid in task_user_map:
+                        manager.task_queues.setdefault(tid, set())
+                        w = manager.active_workers[worker_id]
+                        w.status, w.current_task, w.user_id = "Busy", tid, task_user_map[tid]
+                        logger.info(f"Worker {name} ({worker_id}) resumed task {tid} after reconnect.")
                 elif data["type"] == "log" or data["type"] == "log_batch" or data["type"] == "done":
                     tid = data.get("task_id")
                     for queue in manager.task_queues.get(tid, ()): await queue.put(data)
