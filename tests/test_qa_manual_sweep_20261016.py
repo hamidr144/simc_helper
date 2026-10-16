@@ -201,3 +201,30 @@ def test_life2_master_restart_keeps_run_attribution(auth_on):
         master.task_user_map.pop(task_id, None)
         master.task_meta_map.pop(task_id, None)
         manager.active_workers.pop("w-test", None)
+
+def test_sec1b_get_results_latest_scoped_to_caller(auth_on, tmp_path, monkeypatch):
+    """BUG SEC-1b (t_a4ff7b5d): task_id=latest must resolve only the CALLER's
+    newest report. The old REPORTS_DIR/* glob served the globally newest
+    report to any logged-in user."""
+    import os
+
+    monkeypatch.setattr(master, "REPORTS_DIR", str(tmp_path))
+    victim_dir = tmp_path / "victim-user-uuid" / "task0001"
+    victim_dir.mkdir(parents=True)
+    victim_report = victim_dir / "report_20261016_000000.html"
+    victim_report.write_text(
+        '<h2 class="toggle">VictimChar : 9999 dps</h2>', encoding="utf-8")
+    c = _login(f"sec1b-{uuid.uuid4().hex[:6]}")
+    r = c.get("/api/get-results", params={"task_id": "latest"})
+    assert "VictimChar" not in r.text, (
+        f"get-results served ANOTHER user's report to a caller with no runs: "
+        f"{r.status_code} {r.text[:160]}")
+    # The fix must not over-block: the caller's own newest report is still
+    # served even when another user's report is newer on disk.
+    own_dir = tmp_path / master._user_report_dir(c.user_id) / "owntask"
+    own_dir.mkdir(parents=True)
+    (own_dir / "report_20261016_000001.html").write_text(
+        '<h2 class="toggle">OwnChar : 111 dps</h2>', encoding="utf-8")
+    os.utime(victim_report, (time.time() + 10, time.time() + 10))
+    r = c.get("/api/get-results", params={"task_id": "latest"})
+    assert "OwnChar" in r.text and "VictimChar" not in r.text, r.text[:160]
