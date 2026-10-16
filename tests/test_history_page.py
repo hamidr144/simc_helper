@@ -85,7 +85,7 @@ def test_history_page_redirects_to_login_when_auth_on(monkeypatch):
     monkeypatch.delitem(sys.modules, "pytest", raising=False)
     response = TestClient(app).get("/history", follow_redirects=False)
     assert response.status_code == 303
-    assert response.headers["location"] == "/login"
+    assert response.headers["location"] == "login"
 
 
 def test_history_page_rejects_stale_session_when_auth_on(monkeypatch):
@@ -173,9 +173,9 @@ def test_api_history_report_url_resolves_for_existing_report(history_user):
     try:
         runs = _authed_client(history_user).get("/api/history").json()["runs"]
         row = next(r for r in runs if r["run_id"] == run["run_id"])
-        assert row["report_url"] == f"/reports/{rel}"
+        assert row["report_url"] == f"reports/{rel}"
         # The link must actually serve the report through the static mount.
-        served = TestClient(app).get(row["report_url"])
+        served = TestClient(app).get("/" + row["report_url"])
         assert served.status_code == 200
         assert "report" in served.text
     finally:

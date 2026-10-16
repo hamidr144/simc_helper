@@ -67,7 +67,7 @@ function renderList(runs) {
   </section>`;
   contentEl.querySelectorAll('.history-row').forEach(row => {
     row.addEventListener('click', () => {
-      window.location.assign(`/history?run=${encodeURIComponent(row.dataset.run)}`);
+      window.location.assign(`history?run=${encodeURIComponent(row.dataset.run)}`);
     });
   });
 }
@@ -95,11 +95,11 @@ function renderDetail(run) {
 }
 
 async function load() {
-  const url = runId ? `/api/history/${encodeURIComponent(runId)}` : '/api/history?limit=50';
+  const url = runId ? `api/history/${encodeURIComponent(runId)}` : 'api/history?limit=50';
   try {
     const response = await fetch(url);
     if (response.status === 401) {
-      subtitleEl.innerHTML = '<a href="/login">Log in</a> to see your run history.';
+      subtitleEl.innerHTML = '<a href="login">Log in</a> to see your run history.';
       contentEl.innerHTML = '';
       return;
     }

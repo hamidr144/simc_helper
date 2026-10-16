@@ -265,7 +265,7 @@ def _static(name):
 
 def test_app_js_wires_debounced_preview():
     js = _static("app.js")
-    assert "/api/wowhead/tooltip" in js
+    assert "api/wowhead/tooltip" in js
     assert "UPGRADE_PREVIEW_DEBOUNCE_MS = 400" in js
     assert "scheduleUpgradePreview" in js
     assert "preview unavailable" in js

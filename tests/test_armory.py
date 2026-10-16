@@ -689,7 +689,7 @@ class TestArmoryUiWiring:
     def test_app_js_calls_armory_endpoint(self):
         with open("src/web/static/app.js", "r", encoding="utf-8") as handle:
             script = handle.read()
-        assert "/api/armory-load" in script
+        assert "api/armory-load" in script
         assert "applyParsedCharacter" in script
 
     def test_style_has_armory_classes(self):

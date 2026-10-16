@@ -200,7 +200,7 @@ def test_app_js_wires_sorting():
     assert "for (const item of sortItemsForSlot(slot, items))" in js
     assert "slotSorts[slot] = sortSelect.value;" in js
     assert "async function ensureStatScores(slot, items, selectEl)" in js
-    assert "/api/wowhead/tooltips/batch" in js
+    assert "api/wowhead/tooltips/batch" in js
     # Sort state resets with a fresh export (initializeSelections clears all three).
     init = js.split("function initializeSelections()")[1]
     for reset in ("slotSorts = {}", "statScores = {}", "addedItems = new Map()"):
@@ -213,7 +213,7 @@ def test_app_js_wires_add_item():
     assert "wireSlotAddForm(group, slot);" in js
     assert "function commitAddedItem(slot, itemId, preview)" in js
     assert "function removeAddedItem(slot, item)" in js
-    assert "/api/wowhead/tooltip?item=" in js
+    assert "api/wowhead/tooltip?item=" in js
     # Added items land in the same state generation reads from.
     assert "parsedData.items_by_slot[slot]" in js
     assert "selectedItems[slot].add(key)" in js

@@ -295,7 +295,7 @@ def test_gear_selection_hydrates_exact_grades_from_wowhead():
     js = response.text
 
     assert "hydrateWowheadUpgrades(parsedData.items_by_slot);" in js
-    assert "fetch('/api/wowhead-upgrades'" in js
+    assert "fetch('api/wowhead-upgrades'" in js
     assert "(gearUpgrades[slot] ||= {})[item] = upgrade;" in js
     assert "renderGear();" in js
 
@@ -322,7 +322,7 @@ def test_item_icons_use_local_proxy_without_requiring_wowhead_javascript():
     assert response.status_code == 200
     js = response.text
 
-    assert 'src="/api/item-icon/${safeId}"' in js
+    assert 'src="api/item-icon/${safeId}"' in js
     assert 'data-wowhead="${tooltipData}"' in js
     assert "domain=ptr" not in js
 
@@ -330,7 +330,7 @@ def test_item_icons_use_local_proxy_without_requiring_wowhead_javascript():
 def test_item_icons_and_names_use_default_wowhead_tooltips():
     page_response = client.get("/")
     assert page_response.status_code == 200
-    assert 'src="/api/wowhead-tooltips.js?v=20260718-proxy"' in page_response.text
+    assert 'src="api/wowhead-tooltips.js?v=20260718-proxy"' in page_response.text
     assert "power.js" not in page_response.text
 
     response = client.get("/static/app.js")
@@ -396,7 +396,7 @@ def test_report_separates_baseline_and_only_lists_combo_differences():
     assert "Baseline Gear" in js
     assert "selectedItems" in js
     assert "estimateCombinations" in js
-    assert "window.location.assign(`/results?task_id=" in js
+    assert "window.location.assign(`results?task_id=" in js
 
 
 def test_results_page_is_a_dedicated_user_friendly_view():
@@ -414,7 +414,7 @@ def test_successful_simulation_exposes_uploaded_report_link():
     assert "message.report_file && message.task_id" in js
     # t_c968bf8d: durable reports live under /reports/<user_id>/<task_id>/, so
     # the frontend resolves the URL via /api/report-url instead of building it.
-    assert "/api/report-url?task_id=" in js
+    assert "api/report-url?task_id=" in js
     assert '>Open report</a>' in js
 
 
@@ -449,7 +449,7 @@ def test_realm_dropdown_markup_starts_hidden_and_disabled():
 def test_app_fetches_static_realms_json_and_groups_by_region():
     js = client.get("/static/app.js").text
 
-    assert "fetch('/static/realms.json')" in js
+    assert "fetch('static/realms.json')" in js
     # EU/US optgroups, region-qualified keys (Kel'thuzad exists in both).
     assert "createElement('optgroup')" in js
     assert "const labels = { eu: 'EU', us: 'US' }" in js
@@ -479,3 +479,23 @@ def test_realm_dropdown_pick_feeds_armory_payload():
     assert "payload.realm = picked.slug" in build_payload
     assert "payload.region = picked.region" in build_payload
     assert "!/[,-]/.test(value)" in build_payload
+
+
+def test_static_browser_code_has_no_root_absolute_urls():
+    """t_62ff8faa: every browser-side URL must be page-relative.
+
+    Root-absolute paths (fetch('/api/...'), href="/static/...") break when
+    the app is served under a path prefix behind a prefix-stripping proxy
+    (Caddy handle_path /simc/*). Keep them relative to the page instead.
+    """
+    import pathlib
+    import re
+
+    static_dir = pathlib.Path(__file__).resolve().parent.parent / "src" / "web" / "static"
+    pattern = re.compile(r"""['"`(]/(?:api|static|reports|login|register|dashboard|history|results|logout)\b""")
+    offenders = [
+        f"{path.name}: {match.group(0)!r}"
+        for path in [*static_dir.glob("*.html"), *static_dir.glob("*.js")]
+        for match in pattern.finditer(path.read_text(encoding="utf-8"))
+    ]
+    assert offenders == []

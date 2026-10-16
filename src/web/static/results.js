@@ -56,7 +56,7 @@ async function fetchResults(attempt = 0) {
     return;
   }
   try {
-    const response = await fetch(`/api/get-results?task_id=${encodeURIComponent(taskId)}`);
+    const response = await fetch(`api/get-results?task_id=${encodeURIComponent(taskId)}`);
     const data = await response.json();
     if (response.ok && data.status === 'success' && data.results?.length) return renderResults(data.results);
     if (attempt < 5) return setTimeout(() => fetchResults(attempt + 1), 1200);

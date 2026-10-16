@@ -35,3 +35,24 @@ simc.example.com {
   uvicorn `--proxy-headers`/`--forwarded-allow-ips` *and* restrict the master
   to the proxy network first.
 - No HSTS until a real (non-self-signed) certificate is in place.
+
+## Serving under a path prefix (t_62ff8faa)
+
+All browser-side URLs are page-relative and page redirects are relative, so
+the app is prefix-agnostic — no base-path config needed. Caddy example
+(Hermes at `/`, simc_helper at `/simc/`):
+
+```caddy
+example.com {
+    # bare /simc has no trailing slash — relative asset URLs would
+    # resolve against / instead of /simc/
+    redir /simc /simc/ 308
+    handle_path /simc/* {
+        reverse_proxy 127.0.0.1:8000
+    }
+    # ... Hermes at / ...
+}
+```
+
+The `redir` line is required: the app cannot see the prefix (it is stripped
+before proxying), so it cannot self-redirect `/simc` → `/simc/`.
