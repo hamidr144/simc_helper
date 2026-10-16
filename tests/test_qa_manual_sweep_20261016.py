@@ -1,0 +1,68 @@
+"""Regression tests filed from manual test plan t_9e76ba93 (2026-10-16).
+
+Each test asserts the CORRECT behaviour from the manual test plan and is
+expected to FAIL (red) until the matching BUG card is fixed. One test per
+bug; the BUG card id is in the docstring.
+
+Run: .venv/bin/python -m pytest tests/test_qa_manual_sweep_20261016.py -v
+"""
+
+import sys
+import time
+import uuid
+from unittest.mock import MagicMock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+
+import src.web.main as master
+from src.core import security
+from src.core.db import user_create
+
+app = master.app
+manager = master.manager
+
+GEN_BODY = {
+    "char_class": "paladin", "char_name": "QASweep",
+    "base_profile": "paladin=QASweep", "equipped_gear": {},
+    "selected_items": {}, "selected_enchants": {}, "selected_gems": [],
+    "selected_meta_gems": [], "item_levels": {}, "gear_upgrades": {},
+    "voidforged_items": {}, "extra_sockets": {},
+}
+
+
+@pytest.fixture()
+def auth_on(monkeypatch):
+    """Enable the session gate, disable dev mode and the pytest kill-switch
+    exactly like production (pattern from test_integration.TestP03)."""
+    monkeypatch.setattr(master, "authentication_enabled", lambda: True)
+    monkeypatch.delenv("SIMC_HELPER_DEV_MODE", raising=False)
+    monkeypatch.delitem(sys.modules, "pytest", raising=False)
+    monkeypatch.setenv("ADMIN_TOKEN", "test-admin-token")
+
+
+def _login(username: str) -> TestClient:
+    user_id = user_create(username, security.hash_password("pw-qa-123"))
+    c = TestClient(app)
+    r = c.post("/login", data={"username": username, "password": "pw-qa-123"},
+               follow_redirects=False)
+    assert r.status_code == 303, f"login failed for {username}"
+    c.user_id = user_id
+    return c
+
+
+def _mock_idle_worker():
+    """Patch manager so run-simulation dispatches to a fake idle worker."""
+    mock = patch.object(manager, "get_idle_worker", return_value="w-test")
+    mock2 = patch.object(manager, "send_task")
+    return mock, mock2
+
+
+# ---------------------------------------------------------------- SEC family
+
+def test_sec1_get_results_requires_session(auth_on):
+    """BUG SEC-1: /api/get-results must not answer unauthenticated callers."""
+    c = TestClient(app)
+    r = c.get("/api/get-results", params={"task_id": "latest"})
+    assert r.status_code == 401, f"unauthenticated get-results returned {r.status_code}"
+

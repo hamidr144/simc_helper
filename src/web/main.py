@@ -2264,7 +2264,7 @@ def parse_report_results(html_content: str) -> list:
 
 
 @app.get("/api/get-results", response_model=GetResultsResponse, tags=["Simulation"])
-async def get_results(task_id: str = Query(default="latest")):
+async def get_results(task_id: str = Query(default="latest"), _: str = Depends(require_session)):
     """Retrieve parsed simulation results (DPS per class, gear data) for a completed task.
 
     **Tags:** Simulation
