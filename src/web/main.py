@@ -399,7 +399,7 @@ os.makedirs(INPUTS_DIR, exist_ok=True)
 from src.core.logging import setup_logging  # noqa: E402
 
 logger = setup_logging("master")
-SIM_COOLDOWN_SECONDS = 300 # 5 minutes
+SIM_COOLDOWN_SECONDS = int(os.environ.get("SIM_COOLDOWN_SECONDS", "300"))  # 5 minutes
 
 # Initialize DB (creates tables if not exist) – must happen before load_sessions/load_inputs
 init_db()
@@ -2285,7 +2285,8 @@ async def run_simulation(request: Request, worker_id: Optional[str] = Query(None
         latest generated input; HTTP 422 if the caller has none — never
         another user's input, SEC-6 t_2447fdbd)
 
-    **Rate Limiting:** 300-second cooldown per user.
+    **Rate Limiting:** per-user cooldown of ``sim_cooldown_seconds`` seconds
+    (default 300; runtime-configurable via ``POST /api/settings``).
 
     **Response Model:** ``RunSimulationResponse``
     """
@@ -2295,9 +2296,12 @@ async def run_simulation(request: Request, worker_id: Optional[str] = Query(None
     # when a simulation actually starts and is purged after
     # SIM_COOLDOWN_SECONDS by the enforcer. Login never writes it, so a
     # freshly logged-in user is never rate-limited.
+    # LIFE-5 (t_c610c962): enforce the configured value, not a hardcoded 30s.
+    # Read once so the check and the 429 message can't disagree mid-request.
+    cooldown = SIM_COOLDOWN_SECONDS
     db_time = session_get(user_id)
-    if db_time is not None and now - db_time < 30:
-         raise HTTPException(status_code=429, detail=f"Rate limit: wait {int(30 - (now - db_time))}s")
+    if db_time is not None and now - db_time < cooldown:
+         raise HTTPException(status_code=429, detail=f"Rate limit: wait {int(cooldown - (now - db_time))}s")
 
     target_worker = worker_id if worker_id and worker_id in manager.active_workers and manager.active_workers[worker_id].status == "Idle" else manager.get_idle_worker()
     if not target_worker: raise HTTPException(status_code=503, detail="No idle workers available")
