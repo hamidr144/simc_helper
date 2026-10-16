@@ -2122,7 +2122,7 @@ async def update_simc(request: Request, _: str = Depends(require_session)):
     return {"status": "success", "task_id": task_id}
 
 @app.get("/api/update-simc/stream/{task_id}", tags=["Admin"])
-async def stream_update_simc(task_id: str):
+async def stream_update_simc(task_id: str, _: str = Depends(require_session)):
     """Stream Server-Sent Events for the ``/api/update-simc`` task identified by *task_id*.
 
     **Tags:** Admin
@@ -2278,7 +2278,7 @@ async def run_simulation(request: Request, worker_id: Optional[str] = Query(None
     return {"status": "success", "task_id": task_id, "worker_id": target_worker}
 
 @app.get("/api/simulation/stream/{task_id}", tags=["Simulation"])
-async def stream_simulation(task_id: str, worker_id: str):
+async def stream_simulation(task_id: str, worker_id: str, _: str = Depends(require_session)):
     """Stream Server-Sent Events for the simulation identified by *task_id*.
 
     **Tags:** Simulation
