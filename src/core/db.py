@@ -88,6 +88,13 @@ def init_db() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_run_history_user_created
                 ON run_history (user_id, created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS task_owner (
+                task_id    TEXT PRIMARY KEY,
+                user_id    TEXT NOT NULL,
+                meta       TEXT,
+                created_at REAL NOT NULL
+            );
             """
         )
         conn.commit()
@@ -420,5 +427,44 @@ def load_inputs() -> Dict[str, Dict[str, Any]]:
             r[0]: {"input_id": r[1], "file_path": r[2], "input_url": r[3]}
             for r in rows
         }
+    finally:
+        conn.close()
+
+# ---------------------------------------------------------------------------
+# task_owner  (durable task_user_map / task_meta_map — LIFE-2, t_2c718ca6)
+# ---------------------------------------------------------------------------
+
+def task_owner_upsert(task_id: str, user_id: str, meta: Optional[str]) -> None:
+    """Record (or refresh) the owner + run metadata for *task_id*."""
+    conn = _connect()
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO task_owner (task_id, user_id, meta, created_at)"
+            " VALUES (?, ?, ?, ?)",
+            (task_id, user_id, meta, time.time()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+def task_owner_load() -> Dict[str, Dict[str, Any]]:
+    """Return all owner records as {task_id: {"user_id":…, "meta":…}}.
+    Called once at startup to restore in-memory state."""
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT task_id, user_id, meta FROM task_owner"
+        ).fetchall()
+        return {r[0]: {"user_id": r[1], "meta": r[2]} for r in rows}
+    finally:
+        conn.close()
+
+def task_owner_prune_older_than(cutoff: float) -> None:
+    """Delete owner rows created before *cutoff* (runs finish in minutes;
+    the row only needs to outlive a master restart, not a week)."""
+    conn = _connect()
+    try:
+        conn.execute("DELETE FROM task_owner WHERE created_at < ?", (cutoff,))
+        conn.commit()
     finally:
         conn.close()

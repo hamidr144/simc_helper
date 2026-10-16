@@ -98,6 +98,9 @@ from src.core.db import (
     session_cleanup_older_than,
     session_get,
     session_set,
+    task_owner_load,
+    task_owner_prune_older_than,
+    task_owner_upsert,
     user_create,
     user_get,
     user_set_password_hash,
@@ -406,16 +409,30 @@ user_last_sim_time = load_sessions()
 generated_inputs_by_user: dict = load_inputs()
 generated_inputs_by_user["latest"] = None
 # t_c968bf8d: task_id -> user_id so worker uploads land in the owner's report
-# directory. Ephemeral by design: uploads for tasks started before a master
-# restart fall back to the "anonymous" bucket (the durable run_history table
-# from t_b3b78acd supersedes this map).
+# directory. LIFE-2 (t_2c718ca6): durable in the sqlite task_owner table —
+# an in-memory-only map lost report attribution when the master restarted
+# mid-run. Hydrated at startup; rows pruned after 24h.
 task_user_map: dict = {}
 # t_b3b78acd: per-user character metadata captured as the user walks the flow
 # (parse-addon / armory-load record the source; generate-simc records the
-# fight style, spec and name). run_simulation snapshots it per task so the
-# SSE done hook can write a run_history row.
+# fight style, spec and name). run_simulation snapshots it per task (also in
+# task_owner.meta) so the done hook can write a complete run_history row.
 run_meta_by_user: Dict[str, Dict[str, Any]] = {}
 task_meta_map: Dict[str, Dict[str, Any]] = {}
+
+
+def _restore_task_owner_maps() -> None:
+    """Hydrate task_user_map / task_meta_map from sqlite (LIFE-2)."""
+    for _tid, _row in task_owner_load().items():
+        task_user_map[_tid] = _row["user_id"]
+        try:
+            task_meta_map[_tid] = json.loads(_row["meta"]) if _row["meta"] else {}
+        except ValueError:
+            task_meta_map[_tid] = {}
+
+
+task_owner_prune_older_than(time.time() - 86400)
+_restore_task_owner_maps()
 wowhead_upgrade_cache = {}
 wowhead_icon_cache: Dict[str, tuple[bytes, str]] = {}
 wowhead_tooltip_script_cache: Optional[bytes] = None
@@ -2174,12 +2191,11 @@ async def simulation_event_generator(task_id: str, worker_id: str):
                 elif data["type"] == "task_status_update":
                     yield f"data: {json.dumps({'type': 'task_status_update', 'task_id': data['task_id'], 'status': data['status']})}\n\n"
                 elif data["type"] == "done":
-                    # t_b3b78acd: durable results-history row at the task-done
-                    # point (best-effort; never breaks the stream).
-                    # t_a0bb3a07 (LIFE-1): a user Stop is reported as stopped,
-                    # not as a failed simulation.
+                    # LIFE-2 (t_2c718ca6): the run_history row is written by
+                    # the worker-WS done handler — this generator only exists
+                    # while a browser is watching the stream, so hooking here
+                    # lost the row when the master restarted mid-run.
                     stopped = bool(data.get("stopped"))
-                    _record_run_history(task_id, "stopped" if stopped else ("success" if data["code"] == 0 else "failed"))
                     if stopped:
                         yield f"data: {json.dumps({'type': 'error', 'text': 'Simulation stopped.'})}\n\n"
                     elif data["code"] == 0:
@@ -2247,9 +2263,12 @@ async def run_simulation(request: Request, worker_id: Optional[str] = Query(None
     task_id = str(uuid.uuid4())[:8]
     manager.task_queues[task_id] = asyncio.Queue()
     task_user_map[task_id] = user_id  # t_c968bf8d: owner of the report directory
-    # t_b3b78acd: freeze the character metadata for this task; the SSE done
-    # hook consumes (and pops) it when writing the run_history row.
+    # t_b3b78acd: freeze the character metadata for this task; the done hook
+    # consumes (and pops) it when writing the run_history row.
     task_meta_map[task_id] = dict(run_meta_by_user.get(user_id) or {})
+    # LIFE-2 (t_2c718ca6): persist owner + meta so attribution and the history
+    # row survive a master restart mid-run.
+    task_owner_upsert(task_id, user_id, json.dumps(task_meta_map[task_id]))
     try:
         await manager.send_task(target_worker, {"type": "start", "task_id": task_id, "input_url": input_url})
         manager.active_workers[target_worker].status, manager.active_workers[target_worker].current_task, manager.active_workers[target_worker].user_id = "Busy", task_id, user_id
@@ -2479,6 +2498,11 @@ def _user_report_dir(user_id: str) -> str:
 
 _REPORT_SPEC_RE = re.compile(r"^\s*spec\s*=\s*([A-Za-z0-9_]+)", re.MULTILINE)
 
+# LIFE-2 (t_2c718ca6): the row may now be offered twice for one task (the
+# upload fallback and the WS done handler); process-lifetime marker, same
+# lifetime as task_user_map.
+_history_recorded_tasks: set = set()
+
 
 def _resolved_user_id(request: Request, current_user: Optional[str]) -> str:
     """Same identity rule as run_simulation/generate_simc (t_b3b78acd)."""
@@ -2497,16 +2521,18 @@ def _extract_spec(base_profile: str) -> Optional[str]:
 def _record_run_history(task_id: str, status: str) -> None:
     """Insert a run_history row for a finished simulation (t_b3b78acd).
 
-    Called from the task-done SSE point. Best-effort by design: a missing
-    report, an FK violation (anonymous/ip user), or a read error must never
-    break the SSE stream — failures are logged and swallowed. ``top_dps``
-    reuses the t_fdd385ef report parser; ``report_path`` is stored relative
-    to REPORTS_DIR (``<user_dir>/<task_id>/report_*.html``).
+    Called from the worker-WS done handler and, after a master restart, from
+    the artifacts upload fallback (LIFE-2, t_2c718ca6). Best-effort by design:
+    a missing report, an FK violation (anonymous/ip user), or a read error
+    must never break the caller — failures are logged and swallowed.
+    ``top_dps`` reuses the t_fdd385ef report parser; ``report_path`` is stored
+    relative to REPORTS_DIR (``<user_dir>/<task_id>/report_*.html``).
     """
     try:
         user_id = task_user_map.get(task_id)
-        if not user_id:
+        if not user_id or task_id in _history_recorded_tasks:
             return
+        _history_recorded_tasks.add(task_id)
         meta = task_meta_map.pop(task_id, {}) or {}
         top_dps: Optional[int] = None
         report_rel: Optional[str] = None
@@ -2638,6 +2664,18 @@ async def worker_upload_file(
     with open(dest_path, "wb") as f: f.write(await file.read())
     if file_name == "artifacts.zip":
         _extract_zip_safely(dest_path, dest_dir)
+        # LIFE-2 (t_2c718ca6): master restarted mid-run — the worker's done
+        # event is gone and this upload is the only completion signal left.
+        # The live task queue is the discriminator: on the normal path it
+        # still exists and the WS done handler records the row instead.
+        # shortcut: no dedupe marker — the worker never replays done after a
+        # reconnect today; add a recorded-task set if that ever changes.
+        if task_id not in manager.task_queues and task_id in task_user_map:
+            has_report = any(
+                f.startswith("report_") and f.endswith(".html")
+                for f in os.listdir(dest_dir)
+            )
+            _record_run_history(task_id, "success" if has_report else "failed")
     # Retention cap (t_c968bf8d): prune this user's oldest runs beyond the cap.
     _prune_user_reports(user_dir)
     return {"status": "success"}
@@ -2675,7 +2713,15 @@ async def worker_websocket(websocket: WebSocket, name: str, secret: Optional[str
                 elif data["type"] == "log" or data["type"] == "log_batch" or data["type"] == "done":
                     tid = data.get("task_id")
                     if tid in manager.task_queues: await manager.task_queues[tid].put(data)
-                    if data["type"] == "done": manager.active_workers[worker_id].status = "Idle"
+                    if data["type"] == "done":
+                        manager.active_workers[worker_id].status = "Idle"
+                        # LIFE-2 (t_2c718ca6): history row recorded here, at the
+                        # one done writer that crosses the master/worker boundary
+                        # (t_14e40e6c) — works with no SSE consumer and after a
+                        # master restart. t_a0bb3a07 (LIFE-1): a user Stop is
+                        # reported as stopped, not as a failed simulation.
+                        stopped = bool(data.get("stopped"))
+                        _record_run_history(tid, "stopped" if stopped else ("success" if data.get("code") == 0 else "failed"))
     except WebSocketDisconnect: manager.disconnect(worker_id)
     except Exception as e: logger.error(f"WS error for {name}: {e}"); manager.disconnect(worker_id)
 
