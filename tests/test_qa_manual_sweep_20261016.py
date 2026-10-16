@@ -387,3 +387,36 @@ def test_e2e7_zero_dps_pet_profiles_excluded_from_results(auth_on):
     names = [r["name"] for r in results]
     assert "Fluffy_Pillow" not in names, (
         f"0-dps pet profile surfaced as alternative: {names}")
+
+# ---------------------------------------------------------------- LIFE-5
+
+def test_life5_cooldown_must_honor_settings_value(auth_on, monkeypatch):
+    """BUG LIFE-5: enforced cooldown is hardcoded 30s while docs and
+    POST /api/settings say sim_cooldown_seconds (here 600)."""
+    # Register the original for teardown restore: the POST below mutates the
+    # module global and must not leak 600s into later tests.
+    monkeypatch.setattr(master, "SIM_COOLDOWN_SECONDS", master.SIM_COOLDOWN_SECONDS)
+    c = _login(f"life5-{uuid.uuid4().hex[:6]}")
+    gen = c.post("/api/generate-simc", json=GEN_BODY)
+    input_id = gen.json()["input_id"]
+
+    # Full payload required since audit F2 made UpdateSettingsRequest fields
+    # mandatory (the tester's repro predates that; the bug is unchanged).
+    r = c.post("/api/settings", headers={"X-Admin-Token": "test-admin-token"},
+               json={"master_url": "", "log_level": "INFO",
+                     "sim_cooldown_seconds": 600, "cors_enabled": False,
+                     "cors_allowed_origins": "", "ws_max_size": 1048576})
+    assert r.status_code == 200
+
+    m1, m2 = _mock_idle_worker()
+    with m1, m2:
+        manager.active_workers["w-test"] = MagicMock(status="Idle")
+        first = c.post("/api/run-simulation", json=None,
+                       params={"input_id": input_id})
+        assert first.status_code == 200
+        real_time = time.time
+        monkeypatch.setattr(master.time, "time", lambda: real_time() + 61)
+        second = c.post("/api/run-simulation", params={"input_id": input_id})
+    assert second.status_code == 429, (
+        "run accepted 61s after previous sim although settings say "
+        f"sim_cooldown_seconds=600 (hardcoded 30s leak: {second.status_code})")
