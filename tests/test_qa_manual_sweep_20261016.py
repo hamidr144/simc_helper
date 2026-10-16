@@ -67,6 +67,13 @@ def test_sec1_get_results_requires_session(auth_on):
     assert r.status_code == 401, f"unauthenticated get-results returned {r.status_code}"
 
 
+def test_sec2_task_status_requires_session(auth_on):
+    """BUG SEC-2: /api/task-status must not answer unauthenticated callers."""
+    c = TestClient(app)
+    r = c.get("/api/task-status")
+    assert r.status_code == 401, f"unauthenticated task-status returned {r.status_code}"
+
+
 def test_sec5_sec14_static_mounts_require_session(auth_on):
     """BUG SEC-5/SEC-14: /reports/ and /inputs/ mounts must not serve files
     to unauthenticated callers (401/403, not 404/200)."""
