@@ -154,8 +154,8 @@ def test_e2e_run_records_history_row_with_real_nightly_report(history_user, work
     user_dir = master._user_report_dir(history_user)
     assert row["report_path"] == os.path.join(user_dir, task_id, "report_1.html")
 
-    assert row["report_url"] == f"/reports/{user_dir}/{task_id}/report_1.html"
-    served = TestClient(app).get(row["report_url"])
+    assert row["report_url"] == f"reports/{user_dir}/{task_id}/report_1.html"
+    served = TestClient(app).get("/" + row["report_url"])
     assert served.status_code == 200
     assert served.content == _fixture_bytes(MULTICOPY_REPORT)
 
@@ -172,7 +172,7 @@ def test_e2e_zero_combo_baseline_run_reaches_history(history_user, worker_ws):
     # header, so the single real player (Hamidriel, 7877 dps) is now parsed
     # out of the baseline-only fixture instead of the pet-only 0 dps.
     assert row["top_dps"] == 7877
-    served = TestClient(app).get(row["report_url"])
+    served = TestClient(app).get("/" + row["report_url"])
     assert served.status_code == 200
     assert served.content == _fixture_bytes(BASELINE_ONLY_REPORT)
 
@@ -210,7 +210,7 @@ def test_restart_in_memory_loss_keeps_history_link_serving(history_user, worker_
         assert after["run_id"] == before["run_id"]
         assert after["report_url"] == before["report_url"]
 
-        served = TestClient(app).get(after["report_url"])
+        served = TestClient(app).get("/" + after["report_url"])
         assert served.status_code == 200
         assert served.content == _fixture_bytes(MULTICOPY_REPORT)
 
@@ -359,7 +359,7 @@ def test_restart_persistence_two_process_history_link_serves_report(tmp_path):
         assert len(runs) == 1
         assert runs[0]["top_dps"] == 7887
         report_url = runs[0]["report_url"]
-        assert client.get(report_url).content == report
+        assert client.get("/" + report_url).content == report
 
         # ---- restart the process (same BASE_DIR volume) ----
         _stop_master(proc)
@@ -372,7 +372,7 @@ def test_restart_persistence_two_process_history_link_serves_report(tmp_path):
         assert runs[0]["report_url"] == report_url
 
         # the /history link still serves the exact report bytes
-        served = client.get(report_url)
+        served = client.get("/" + report_url)
         assert served.status_code == 200
         assert served.content == report
 
@@ -471,4 +471,4 @@ def test_retention_prune_keeps_row_and_nulls_its_link(history_user, worker_ws, m
     assert by_task[oldest]["report_url"] is None       # row survives, link dead
     assert by_task[middle]["report_url"] is not None
     assert by_task[newest]["report_url"] is not None
-    assert TestClient(app).get(by_task[newest]["report_url"]).status_code == 200
+    assert TestClient(app).get("/" + by_task[newest]["report_url"]).status_code == 200

@@ -35,7 +35,7 @@ function isElevatedLevel(level) {
 }
 async function loadUpgradeData() {
   try {
-    const response = await fetch('/api/upgrade-data');
+    const response = await fetch('api/upgrade-data');
     if (!response.ok) return;
     upgradeData = await response.json();
     activeSeason = (upgradeData.seasons || [])
@@ -183,7 +183,7 @@ async function pollWorkerStatus() {
   const text = document.getElementById('worker-status-text');
   if (!chip || !text) return;
   try {
-    const response = await fetch('/api/state');
+    const response = await fetch('api/state');
     const data = await response.json();
     const workers = data.workers || [];
     const idle = workers.filter(worker => /idle/i.test(worker.status || '')).length;
@@ -324,7 +324,7 @@ async function stopSimulation() {
   if (entered === null) return;
   token = entered.trim();
   try {
-    const response = await fetch('/api/stop-simulation', {
+    const response = await fetch('api/stop-simulation', {
       method: 'POST', headers: { 'X-Admin-Token': token }
     });
     if (response.status === 403) {
@@ -364,7 +364,7 @@ function createWowheadIconLink(itemId, bonusIds = '') {
   const safeBonus = String(bonusIds || '').split('/').filter(value => /^\d+$/.test(value)).join(':');
   const bonusQuery = safeBonus ? `?bonus=${encodeURIComponent(safeBonus)}` : '';
   const tooltipData = safeBonus ? `bonus=${safeBonus}&iconsize=large` : 'iconsize=large';
-  return `<a href="https://www.wowhead.com/item=${safeId}${bonusQuery}" class="item-icon-link wowhead-item-link" data-wowhead="${tooltipData}" data-wh-rename="false" target="_blank"><img src="/api/item-icon/${safeId}" alt="" loading="lazy" onerror="this.closest('.item-icon-link').classList.add('icon-missing')"></a>`;
+  return `<a href="https://www.wowhead.com/item=${safeId}${bonusQuery}" class="item-icon-link wowhead-item-link" data-wowhead="${tooltipData}" data-wh-rename="false" target="_blank"><img src="api/item-icon/${safeId}" alt="" loading="lazy" onerror="this.closest('.item-icon-link').classList.add('icon-missing')"></a>`;
 }
 
 function createEnhancementWowheadLink(enhancement, name) {
@@ -683,7 +683,7 @@ async function fetchUpgradePreview(slot, item, card) {
   const bonusIds = String(params.bonus_id || '').split('/')
     .filter(value => /^\d+$/.test(value)).join(':');
   if (bonusIds) query.set('bonus', bonusIds);
-  const url = `/api/wowhead/tooltip?${query}`;
+  const url = `api/wowhead/tooltip?${query}`;
   host.hidden = false;
   host.className = 'upgrade-preview is-loading';
   host.textContent = 'Previewing upgrade…';
@@ -734,7 +734,7 @@ async function ensureStatScores(slot, items, selectEl) {
   try {
     for (let start = 0; start < pending.length; start += STAT_SORT_BATCH) {
       const chunk = pending.slice(start, start + STAT_SORT_BATCH);
-      const response = await fetch('/api/wowhead/tooltips/batch', {
+      const response = await fetch('api/wowhead/tooltips/batch', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           char_class: parsedData.char_class,
@@ -811,7 +811,7 @@ function removeAddedItem(slot, item) {
 function renderSlotAddPreview(slot, itemId, preview, host, addInput) {
   host.className = 'slot-add-preview';
   host.innerHTML =
-    `<img src="/api/item-icon/${itemId}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` +
+    `<img src="api/item-icon/${itemId}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` +
     `<span class="slot-add-name"${preview.quality_color ? ` style="color:${escapeHtml(preview.quality_color)}"` : ''}>` +
       `${escapeHtml(preview.name || `Item ${itemId}`)}</span>` +
     `<span class="slot-add-meta">${preview.ilvl ? `ilvl ${preview.ilvl}` : 'ilvl unknown'}` +
@@ -837,7 +837,7 @@ function wireSlotAddForm(group, slot) {
     const itemId = Number(raw);
     showSlotAddMessage(addPreview, 'loading', `Resolving item ${itemId} on Wowhead…`);
     try {
-      const response = await fetch(`/api/wowhead/tooltip?item=${itemId}`);
+      const response = await fetch(`api/wowhead/tooltip?item=${itemId}`);
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.detail || `status ${response.status}`);
       renderSlotAddPreview(slot, itemId, data.preview || {}, addPreview, addInput);
@@ -1105,7 +1105,7 @@ async function hydrateWowheadUpgrades(itemsBySlot) {
       const rest = (items || []).filter(item => !parsedData?.item_upgrades?.[item]);
       if (rest.length) lookupItems[slot] = rest;
     }
-    const response = await fetch('/api/wowhead-upgrades', {
+    const response = await fetch('api/wowhead-upgrades', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ items_by_slot: lookupItems })
     });
@@ -1154,7 +1154,7 @@ async function generateInput(quiet = false) {
   const status = document.getElementById('workflow-status');
   if (!quiet) status.textContent = 'Preparing comparison…';
   try {
-    const response = await fetch('/api/generate-simc', {
+    const response = await fetch('api/generate-simc', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(buildPayload())
     });
@@ -1183,7 +1183,7 @@ async function runSimulation() {
   const log = document.getElementById('simulation-log');
   status.textContent = 'Looking for an idle worker…';
   try {
-    const response = await fetch(`/api/run-simulation?input_id=${encodeURIComponent(generatedInput.input_id)}`, { method: 'POST' });
+    const response = await fetch(`api/run-simulation?input_id=${encodeURIComponent(generatedInput.input_id)}`, { method: 'POST' });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || 'Simulation could not start');
     status.textContent = `Simulation ${data.task_id} is running on worker ${data.worker_id}.`;
@@ -1192,7 +1192,7 @@ async function runSimulation() {
     document.getElementById('log-toolbar').hidden = false;
     startRunProgress();
     updateRailState();
-    const events = new EventSource(`/api/simulation/stream/${data.task_id}?worker_id=${encodeURIComponent(data.worker_id)}`);
+    const events = new EventSource(`api/simulation/stream/${data.task_id}?worker_id=${encodeURIComponent(data.worker_id)}`);
     events.onmessage = async event => {
       const message = JSON.parse(event.data);
       if (message.type === 'log') {
@@ -1220,7 +1220,7 @@ async function runSimulation() {
           // which only the master can resolve — ask it for the URL.
           let reportLink = '';
           try {
-            const urlResp = await fetch(`/api/report-url?task_id=${encodeURIComponent(message.task_id)}`);
+            const urlResp = await fetch(`api/report-url?task_id=${encodeURIComponent(message.task_id)}`);
             if (urlResp.ok) {
               const urlData = await urlResp.json();
               if (urlData.url) reportLink = ` <a href="${urlData.url}" target="_blank">Open report</a>`;
@@ -1228,7 +1228,7 @@ async function runSimulation() {
           } catch (e) { /* report link is best-effort */ }
           status.innerHTML = `${escapeHtml(message.text)}${reportLink}`;
           const baseline = parsedData?.char_name || '';
-          window.location.assign(`/results?task_id=${encodeURIComponent(message.task_id)}&baseline=${encodeURIComponent(baseline)}`);
+          window.location.assign(`results?task_id=${encodeURIComponent(message.task_id)}&baseline=${encodeURIComponent(baseline)}`);
         } else {
           status.textContent = message.text || 'The simulation stopped unexpectedly — see the log above.';
           status.classList.add('error');
@@ -1270,8 +1270,8 @@ btnParseAddon.addEventListener('click', async () => {
   clearParseError();
   try {
     const [parseResponse, configResponse] = await Promise.all([
-      fetch('/api/parse-addon', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ addon_text: text }) }),
-      fetch('/api/config')
+      fetch('api/parse-addon', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ addon_text: text }) }),
+      fetch('api/config')
     ]);
     if (!parseResponse.ok) {
       const detail = await parseResponse.json().catch(() => ({}));
@@ -1331,7 +1331,7 @@ function populateRealmSelect(data) {
 async function loadRealms() {
   if (!armoryRealm) return;
   try {
-    const response = await fetch('/static/realms.json');
+    const response = await fetch('static/realms.json');
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     populateRealmSelect(await response.json());
   } catch (error) {
@@ -1387,11 +1387,11 @@ btnArmoryLoad?.addEventListener('click', async () => {
   try {
     const payload = buildArmoryPayload(value);
     const [armoryResponse, configResponse] = await Promise.all([
-      fetch('/api/armory-load', {
+      fetch('api/armory-load', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       }),
-      fetch('/api/config')
+      fetch('api/config')
     ]);
     if (!armoryResponse.ok) {
       const detail = await armoryResponse.json().catch(() => ({}));

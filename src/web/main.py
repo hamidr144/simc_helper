@@ -829,13 +829,15 @@ def app_response(request: Request) -> FileResponse:
         response.set_cookie(key="user_id", value=str(uuid.uuid4()), max_age=31536000, samesite="lax", secure=COOKIE_SECURE)
     return response
 
+# t_62ff8faa: page redirects are relative (no leading "/") so they resolve
+# correctly behind prefix-stripping reverse proxies (Caddy handle_path /simc/*).
 @app.get("/")
 async def root(request: Request):
     if not authentication_enabled() or "pytest" in sys.modules or os.environ.get("SIMC_HELPER_DEV_MODE") == "1":
         return app_response(request)
     
     if _page_session_valid(request):
-        return RedirectResponse(url="/dashboard", status_code=303)
+        return RedirectResponse(url="dashboard", status_code=303)
     return FileResponse(LOGIN_PAGE)
 
 
@@ -846,7 +848,7 @@ async def dashboard(request: Request):
         
     if _page_session_valid(request):
         return FileResponse(APP_PAGE)
-    return RedirectResponse(url="/login", status_code=303)
+    return RedirectResponse(url="login", status_code=303)
 
 
 @app.get("/results")
@@ -855,7 +857,7 @@ async def results_page(request: Request):
         return FileResponse(RESULTS_PAGE)
     if _page_session_valid(request):
         return FileResponse(RESULTS_PAGE)
-    return RedirectResponse(url="/login", status_code=303)
+    return RedirectResponse(url="login", status_code=303)
 
 
 @app.get("/history")
@@ -872,24 +874,24 @@ async def history_page(request: Request):
     session_id = request.cookies.get("session_id")
     if session_id and user_get_by_id(session_id) is not None:
         return FileResponse(HISTORY_PAGE)
-    return RedirectResponse(url="/login", status_code=303)
+    return RedirectResponse(url="login", status_code=303)
 
 
 @app.get("/login")
 async def login_page(request: Request):
     if not authentication_enabled():
-        return RedirectResponse(url="/dashboard", status_code=303)
+        return RedirectResponse(url="dashboard", status_code=303)
     if _page_session_valid(request):
-        return RedirectResponse(url="/dashboard", status_code=303)
+        return RedirectResponse(url="dashboard", status_code=303)
     return FileResponse(LOGIN_PAGE)
 
 
 @app.get("/register")
 async def register_page(request: Request):
     if not authentication_enabled():
-        return RedirectResponse(url="/dashboard", status_code=303)
+        return RedirectResponse(url="dashboard", status_code=303)
     if _page_session_valid(request):
-        return RedirectResponse(url="/dashboard", status_code=303)
+        return RedirectResponse(url="dashboard", status_code=303)
     return FileResponse(REGISTER_PAGE)
 
 
@@ -911,7 +913,7 @@ async def register(request: Request, username: str = Form(...), password: str = 
     user_id = user_create(username, password_hash)
     # Browser flow (t_e4d97db9): land on /dashboard logged in, exactly like
     # a successful /login, instead of dumping raw JSON on the user.
-    redirect_resp = RedirectResponse(url="/dashboard", status_code=303)
+    redirect_resp = RedirectResponse(url="dashboard", status_code=303)
     redirect_resp.set_cookie(
         key="session_id",
         value=user_id,
@@ -948,7 +950,7 @@ async def login(request: Request, response: Response, username: str = Form(...),
     # made every run started within the cooldown window after login return a
     # bogus 429 for users who had never run a simulation.
 
-    redirect_resp = RedirectResponse(url="/dashboard", status_code=303)
+    redirect_resp = RedirectResponse(url="dashboard", status_code=303)
     redirect_resp.set_cookie(
         key="session_id", 
         value=user["user_id"], 
@@ -962,7 +964,7 @@ async def login(request: Request, response: Response, username: str = Form(...),
 
 @app.get("/logout")
 async def logout():
-    redirect_resp = RedirectResponse(url="/", status_code=303)
+    redirect_resp = RedirectResponse(url="./", status_code=303)
     redirect_resp.delete_cookie("session_id")
     return redirect_resp
 
@@ -1107,7 +1109,9 @@ async def get_wowhead_tooltip_script():
             raise HTTPException(status_code=502, detail="Unexpected Wowhead tooltip script")
         script = script.replace(
             route_marker,
-            'function Se(e){if(e==="nether"){return location.origin+"/api/wowhead-nether"}',
+            # new URL(...) resolves against the page, keeping any proxy path
+            # prefix (t_62ff8faa); location.origin would drop it.
+            'function Se(e){if(e==="nether"){return new URL("api/wowhead-nether",location.href).href}',
             1,
         )
         wowhead_tooltip_script_cache = script.encode("utf-8")
@@ -2299,7 +2303,7 @@ async def get_report_url(task_id: str = Query(...)):
         raise HTTPException(status_code=404, detail="Report not found")
     report_files.sort(key=lambda x: os.path.getmtime(os.path.join(task_dir, x)), reverse=True)
     rel = os.path.relpath(os.path.join(task_dir, report_files[0]), REPORTS_DIR)
-    return {"status": "success", "url": "/reports/" + "/".join(quote(part) for part in rel.split(os.sep))}
+    return {"status": "success", "url": "reports/" + "/".join(quote(part) for part in rel.split(os.sep))}
 
 
 # ---------------------------------------------------------------------------
@@ -2320,7 +2324,8 @@ def _history_report_url(report_path: Optional[str]) -> Optional[str]:
     if not os.path.isfile(abs_path):
         return None
     rel = os.path.relpath(abs_path, REPORTS_DIR)
-    return "/reports/" + "/".join(quote(part) for part in rel.split(os.sep))
+    # Relative "reports/..." URL: resolves under any path prefix (t_62ff8faa).
+    return "reports/" + "/".join(quote(part) for part in rel.split(os.sep))
 
 
 def _history_run_view(row: Dict[str, Any]) -> Dict[str, Any]:

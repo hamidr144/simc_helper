@@ -34,7 +34,7 @@ def test_disabled_auth_serves_app_without_login(monkeypatch):
 
     login_page = client.get("/login", follow_redirects=False)
     assert login_page.status_code == 303
-    assert login_page.headers["location"] == "/dashboard"
+    assert login_page.headers["location"] == "dashboard"
 
     register = client.post("/register", data={"username": "unused", "password": "unused"})
     assert register.status_code == 403
@@ -625,7 +625,7 @@ def test_report_url_endpoint():
 
     response = client.get(f"/api/report-url?task_id={task_id}")
     assert response.status_code == 200
-    assert response.json()["url"] == f"/reports/u-url/{task_id}/report_5.html"
+    assert response.json()["url"] == f"reports/u-url/{task_id}/report_5.html"
 
     missing = client.get("/api/report-url?task_id=nope-missing")
     assert missing.status_code == 404
@@ -998,13 +998,13 @@ def test_register_form_redirects_and_logs_in(monkeypatch):
 
     page = anon.get("/register")
     assert page.status_code == 200
-    assert 'action="/register"' in page.text
+    assert 'action="register"' in page.text
 
     response = anon.post(
         "/register", data={"username": username, "password": "pw-123456"}, follow_redirects=False
     )
     assert response.status_code == 303
-    assert response.headers["location"] == "/dashboard"
+    assert response.headers["location"] == "dashboard"
     assert anon.cookies.get("session_id") == user_get(username)["user_id"]
     assert anon.get("/dashboard").status_code == 200
     # The issued session passes the API gate, same as login's does.
@@ -1288,9 +1288,9 @@ def test_dashboard_survives_cooldown_purge(monkeypatch):
     assert authed.get("/dashboard", follow_redirects=False).status_code == 200
     assert authed.get("/results", follow_redirects=False).status_code == 200
     root = authed.get("/", follow_redirects=False)
-    assert root.status_code == 303 and root.headers["location"] == "/dashboard"
+    assert root.status_code == 303 and root.headers["location"] == "dashboard"
     login_page = authed.get("/login", follow_redirects=False)
-    assert login_page.status_code == 303 and login_page.headers["location"] == "/dashboard"
+    assert login_page.status_code == 303 and login_page.headers["location"] == "dashboard"
 
 
 def test_page_gates_reject_unknown_session_cookie(monkeypatch):
@@ -1299,7 +1299,7 @@ def test_page_gates_reject_unknown_session_cookie(monkeypatch):
     anon = TestClient(app)
     anon.cookies.set("session_id", "user-id-that-does-not-exist")
     dash = anon.get("/dashboard", follow_redirects=False)
-    assert dash.status_code == 303 and dash.headers["location"] == "/login"
+    assert dash.status_code == 303 and dash.headers["location"] == "login"
     assert anon.get("/results", follow_redirects=False).status_code == 303
     # Unauthenticated root serves the login page.
     assert anon.get("/", follow_redirects=False).status_code == 200
