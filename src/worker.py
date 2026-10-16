@@ -171,17 +171,13 @@ UPLOAD_RETRY_ATTEMPTS = 3
 async def _upload_file_with_retry(session, task_id, file_path):
     """t_acd39188 (LIFE-10): bounded retry around upload_file so a master
     restart during the upload window does not lose the run's artifacts.
-    Final failure raises — never re-swallow (LIFE-9 composition: rebase
-    after t_a13e5be8 lands and upload_file itself raises; the None branch
-    below retires with it)."""
+    Final failure raises — never re-swallow (LIFE-9 t_a13e5be8: upload_file
+    itself raises on missing artifact or master non-200)."""
     last_exc = RuntimeError(
         f"Upload of {file_path} failed after {UPLOAD_RETRY_ATTEMPTS} attempts")
     for attempt in range(UPLOAD_RETRY_ATTEMPTS):
         try:
-            res = await upload_file(session, task_id, file_path)
-            if res is not None:
-                return res
-            last_exc = RuntimeError(f"Master accepted no upload for {file_path}")
+            return await upload_file(session, task_id, file_path)
         except FileNotFoundError:
             raise  # missing artifact: retrying cannot help
         except Exception as exc:
@@ -224,6 +220,8 @@ async def _recover_task_after_reconnect(session, websocket, task_id: str):
         "retry_count": task_status.retry_count,
         "max_retries": task_status.max_retries,
     }))
+    # Recovery reached terminal state — honour LIFE-10's cleanup contract.
+    shutil.rmtree(f"/tmp/worker_sim_{task_id}", ignore_errors=True)  # nosec B108
 
 async def download_input_file(session, url_path, dest_path):
     url = f"{MASTER_URL}{url_path}"

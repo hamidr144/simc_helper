@@ -409,6 +409,9 @@ def test_life10_resume_reattaches_task():
                         break
                     time.sleep(0.05)
                 assert task_id in manager.task_queues, "resume must re-create the task queue"
+                # LIFE-4: task_queues is Dict[str, Set[Queue]] — a bare Queue
+                # here TypeErrors the broadcast loops and kicks the worker.
+                assert isinstance(manager.task_queues[task_id], set)
                 busy = [w for w in manager.active_workers.values()
                         if w.current_task == task_id]
                 assert busy and busy[0].status == "Busy"
@@ -437,18 +440,24 @@ def test_life10_sse_stream_survives_stale_worker_id():
                 raise aio.TimeoutError
             return {"type": "done", "task_id": "t-stale", "code": 0}
 
-    manager.task_queues["t-stale"] = _StaleQueue()
+    q = _StaleQueue()
     w = MagicMock()
     w.current_task = "t-stale"
     manager.active_workers["w-new"] = w
 
     async def _drain():
-        return [e async for e in master.simulation_event_generator("t-stale", "w-old")]
+        # LIFE-4: the generator takes its subscriber queue as a parameter and
+        # registers it in the per-task subscriber SET.
+        return [e async for e in master.simulation_event_generator(
+            "t-stale", "w-old", queue=q)]
 
     try:
         events = aio.run(_drain())
         assert not any("connection lost" in e for e in events), events
         assert any('"type": "done"' in e for e in events)
+        # finally-guard: the stale viewer disconnected but w-new still runs
+        # the task — the re-attached entry must survive for the replayed done.
+        assert "t-stale" in manager.task_queues
     finally:
         manager.task_queues.pop("t-stale", None)
         manager.active_workers.pop("w-new", None)
