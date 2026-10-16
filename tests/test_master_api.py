@@ -141,7 +141,8 @@ def test_rate_limit():
         with patch.object(manager, "get_idle_worker", return_value="worker1"), \
              patch.object(manager, "send_task", return_value=None):
             manager.active_workers["worker1"] = MagicMock(status="Idle")
-            response = client.post("/api/run-simulation")
+            # SEC-6: explicit input_id (fake worker never fetches it)
+            response = client.post("/api/run-simulation", params={"input_id": "qa-ratelimit"})
             assert response.status_code == 200
             assert "task_id" in response.json()
             
@@ -157,7 +158,8 @@ def test_api_run_simulation_endpoint():
     with patch.object(manager, "get_idle_worker", return_value="worker1"), \
          patch.object(manager, "send_task", return_value=None):
         manager.active_workers["worker1"] = MagicMock(status="Idle")
-        response = client.post("/api/run-simulation")
+        # SEC-6: explicit input_id (fake worker never fetches it)
+        response = client.post("/api/run-simulation", params={"input_id": "qa-endpoint"})
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "success"
@@ -1404,7 +1406,8 @@ def test_login_does_not_seed_run_cooldown(monkeypatch):
     monkeypatch.setattr(master.manager, "send_task", AsyncMock(return_value=None))
     monkeypatch.setitem(master.manager.active_workers, "worker1", MagicMock(status="Idle"))
     try:
-        first = authed.post("/api/run-simulation")
+        # SEC-6: explicit input_id (fake worker never fetches it)
+        first = authed.post("/api/run-simulation", params={"input_id": "qa-cooldown"})
         assert first.status_code == 200, first.text
         task_id = first.json()["task_id"]
         # The real cooldown still applies once a sim actually started.
@@ -1617,7 +1620,8 @@ def test_run_simulation_snapshots_task_metadata(monkeypatch):
              patch.object(manager, "send_task", return_value=None):
             manager.active_workers["worker-snap"] = MagicMock(status="Idle")
             authed = _authed_client(uid)
-            response = authed.post("/api/run-simulation")
+            # SEC-6: explicit input_id (fake worker never fetches it)
+            response = authed.post("/api/run-simulation", params={"input_id": "qa-snap"})
             assert response.status_code == 200
             task_id = response.json()["task_id"]
         assert m.task_meta_map[task_id] == {"source": "armory", "char_name": "Snap"}

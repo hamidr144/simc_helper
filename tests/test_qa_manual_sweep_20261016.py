@@ -66,3 +66,20 @@ def test_sec1_get_results_requires_session(auth_on):
     r = c.get("/api/get-results", params={"task_id": "latest"})
     assert r.status_code == 401, f"unauthenticated get-results returned {r.status_code}"
 
+
+def test_sec6_run_without_input_id_must_not_use_global_latest(auth_on):
+    """BUG SEC-6: user B who never generated anything must not be able to run
+    user A's latest input via the global 'latest' fallback."""
+    a = _login(f"sec6-a-{uuid.uuid4().hex[:6]}")
+    gen = a.post("/api/generate-simc", json=GEN_BODY)
+    assert gen.status_code == 200
+    a_input = gen.json()["input_id"]
+
+    b = _login(f"sec6-b-{uuid.uuid4().hex[:6]}")
+    m1, m2 = _mock_idle_worker()
+    with m1, m2 as send_task:
+        manager.active_workers["w-test"] = MagicMock(status="Idle")
+        r = b.post("/api/run-simulation")
+    dispatched = send_task.call_args[0][1]["input_url"] if send_task.called else ""
+    assert r.status_code in (401, 422) or a_input not in dispatched, (
+        f"B ran A's input {a_input} via global latest fallback ({dispatched})")
