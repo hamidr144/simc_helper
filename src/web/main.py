@@ -2381,7 +2381,7 @@ async def get_results(task_id: str = Query(default="latest"), _: str = Depends(r
         return {"status": "error", "message": str(e)}
 
 @app.get("/api/report-url", tags=["Simulation"])
-async def get_report_url(task_id: str = Query(...)):
+async def get_report_url(task_id: str = Query(...), _: str = Depends(require_session)):
     """Resolve the static URL of a run's HTML report (t_c968bf8d).
 
     Durable reports live under the owner's user directory
