@@ -820,6 +820,42 @@ def test_api_task_status_not_found():
     assert data["status"] == "not_found"
 
 
+def test_task_status_populated_by_worker_ws_push():
+    """t_14e40e6c regression: /api/task-status must reflect statuses the
+    worker pushes over /ws/worker (the only cross-process writer), not just
+    in-process writes to task_status_store. Red before the fix: the WS
+    handler forwarded to SSE queues but never stored, so master always
+    returned not_found mid-run."""
+    from src.worker import task_status_store
+    task_status_store.pop("ws-push-t1", None)
+    ws_client = TestClient(app, client=("203.0.113.9", 1))
+    with ws_client.websocket_connect(
+        "/ws/worker?name=push-ws-worker",
+        headers={"X-Cluster-Secret": master.CLUSTER_SECRET},
+    ) as ws:
+        ws.send_json({"type": "task_status_update", "task_id": "ws-push-t1",
+                      "status": {"task_id": "ws-push-t1", "status": "running",
+                                 "retry_count": 0, "max_retries": 3,
+                                 "exit_code": None, "error": None,
+                                 "updated_at": 1.0}})
+        # Second push exercises the upsert (update, not create) path.
+        ws.send_json({"type": "task_status_update", "task_id": "ws-push-t1",
+                      "status": {"task_id": "ws-push-t1", "status": "done",
+                                 "retry_count": 1, "max_retries": 3,
+                                 "exit_code": 0, "error": None,
+                                 "updated_at": 2.0}})
+    try:
+        data = client.get("/api/task-status?task_id=ws-push-t1").json()
+        assert data["status"] == "ok"
+        assert data["task"]["status"] == "done"
+        assert data["task"]["exit_code"] == 0
+        assert data["task"]["retry_count"] == 1
+        listing = client.get("/api/task-status").json()
+        assert "ws-push-t1" in listing["tasks"]
+    finally:
+        task_status_store.pop("ws-push-t1", None)
+
+
 # =========================================================================
 # P0 security gate (audit t_0fef205c): session auth on state-changing APIs,
 # settings admin-token auth, PBKDF2 hashing with legacy upgrade, rate limits.
