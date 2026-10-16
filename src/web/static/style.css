@@ -108,7 +108,7 @@ body {
    in the left (primary) column. */
 #addon-input-card { grid-column: 1 / -1; }
 
-@media (min-width: 1201px) {
+@media (min-width: 1200px) {
   #addon-input-card {
     display: grid;
     grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.85fr);
@@ -315,25 +315,29 @@ button:not(:disabled):active {
   display: none !important;
 }
 
-/* --- Responsive Adjustments --- */
-@media (max-width: 900px) {
+/* --- Responsive Adjustments (t_2ab8f3be doc 6: 480 / 760 / 1200) --- */
+@media (max-width: 1199px) {
   .app-shell {
     flex-direction: column;
   }
   .workflow-rail.tabs {
     width: 100%;
-    height: 60px;
+    height: auto;
+    min-height: 60px;
     flex-direction: row;
-    padding: 0 20px;
+    align-items: center;
+    padding: 8px 20px;
     justify-content: space-between;
+    position: static;
+    border-right: none;
+    border-bottom: 1px solid var(--border-hairline);
   }
   .workflow-rail.tabs::before {
     margin-bottom: 0;
   }
-  .workspace-grid.setup-layout {
-    grid-template-columns: 1fr;
-    padding: 20px;
-  }
+  .rail-steps { flex-direction: row; flex-wrap: wrap; gap: 4px; }
+  .rail-step { min-height: 44px; }
+  .rail-footer { margin-top: 0; }
 }
 
 /* --- Smart Reworked Layout & Badges --- */
@@ -1586,28 +1590,173 @@ html { scroll-padding-top: 80px; }
   }
 }
 
-/* --- Responsive --- */
-@media (max-width: 1200px) {
-  .workflow-rail.tabs { width: 80px; align-items: center; }
-  .rail-step { justify-content: center; padding: 8px; }
+/* --- Responsive (t_2ab8f3be doc 6) --- */
+@media (max-width: 760px) {
+  .workspace-grid.setup-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    padding: 16px 16px 280px;
+  }
+  .panel { padding: 16px; }
+  .panel h2 { font-size: 15px; }
+  .panel-toolbar { flex-wrap: wrap; }
   .rail-step-label { display: none; }
-}
-
-@media (max-width: 900px) {
-  .rail-steps { flex-direction: row; }
-  .rail-footer { margin-top: 0; }
-  .rail-step { min-height: 44px; }
+  /* Run bar becomes a true bottom sheet (doc 6). */
   .run-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
     flex-direction: column;
     align-items: stretch;
     gap: 10px;
-    bottom: 0;
     border-radius: var(--radius-card) var(--radius-card) 0 0;
+    border-left: 1px solid var(--border-hairline);
+    border-right: 1px solid var(--border-hairline);
+    border-bottom: none;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
+    z-index: 30;
   }
   .run-bar button { width: 100%; }
+  .run-review-host .popover {
+    top: auto;
+    bottom: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    min-width: 0;
+    max-width: none;
+    max-height: 50vh;
+    overflow: auto;
+  }
   .paste-footer .paste-actions { width: 100%; }
   .paste-footer .paste-actions button { flex: 1; min-height: 44px; }
+  /* Results table: horizontal scroll with sticky # + Candidate columns. */
+  .results-table th:first-child, .results-table td:first-child { position: sticky; left: 0; background: var(--surface-panel); z-index: 1; }
+  .results-table th:nth-child(2), .results-table td:nth-child(2) { position: sticky; left: 40px; background: var(--surface-panel); z-index: 1; }
 }
+
+@media (max-width: 480px) {
+  /* History rows become stacked cards (doc 6); labels come from data-label. */
+  .history-table thead { display: none; }
+  .history-table, .history-table tbody, .history-table tr, .history-table td { display: block; width: auto; }
+  .history-table tr {
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-control);
+    background: var(--surface-raised);
+    margin-bottom: 10px;
+    padding: 6px 12px;
+  }
+  .history-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: none;
+    padding: 5px 0;
+  }
+  .history-table td::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  td.history-dps { text-align: right; }
+}
+
+/* --- Popovers (t_2ab8f3be doc 5): gear upgrade + pre-run diff --- */
+.popover-host { position: relative; }
+.popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  min-width: 240px;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-control);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  padding: 12px;
+}
+.popover[hidden] { display: none; }
+.popover select { width: 100%; height: 34px; }
+.popover button { margin-top: 0; }
+.popover .voidforge-field-container { margin-top: 0; }
+.upgrade-state { font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); }
+button.upgrade-trigger { margin-top: 0; padding: 6px 10px; font-size: 12px; }
+.run-review-host .popover {
+  top: auto;
+  bottom: calc(100% + 8px);
+  left: auto;
+  right: 0;
+  min-width: 340px;
+  max-width: 520px;
+  max-height: 60vh;
+  overflow: auto;
+}
+.diff-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.diff-table th, .diff-table td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border-hairline); }
+.diff-table th { color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+/* --- Slot collapse + add-by-id collapse (t_2ab8f3be doc 4.2) --- */
+.gear-card.is-collapsed { display: none; }
+.slot-items.is-expanded .gear-card.is-collapsed,
+.gear-card.is-collapsed.is-selected { display: block; }
+button.slot-show-all { margin-top: 8px; padding: 8px 12px; font-size: 12px; }
+button.slot-add-toggle { margin-top: 0; padding: 5px 10px; font-size: 11px; }
+
+/* --- Enhancements: search + details sections (t_2ab8f3be doc 4.3) --- */
+.enh-search { width: 100%; max-width: 360px; margin-bottom: 12px; }
+.enh-section {
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-control);
+  padding: 0 12px 10px;
+  margin-bottom: 10px;
+}
+.enh-section summary {
+  cursor: pointer;
+  padding: 10px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.enh-section summary::-webkit-details-marker { display: none; }
+.enh-section summary::before { content: '\25b8'; color: var(--text-muted); transition: transform var(--motion-fast) ease; }
+.enh-section[open] summary::before { transform: rotate(90deg); }
+.enh-section .enhancement-group { border: none; padding: 0; margin: 0; min-width: 0; }
+.equipped-badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-text);
+  border: 1px solid rgba(157, 156, 255, 0.35);
+  border-radius: 999px;
+  padding: 1px 6px;
+  margin-left: 6px;
+}
+
+/* --- Results table (t_2ab8f3be doc 4.5) --- */
+.results-table-card { overflow-x: auto; }
+.results-table { border-collapse: collapse; width: 100%; min-width: 560px; }
+.results-table th, .results-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-hairline);
+  text-align: left;
+  vertical-align: top;
+}
+.results-table th { color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+.results-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.results-changes { min-width: 220px; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* --- Icon fallback + run-bar pluralization polish --- */
 .item-icon-link.icon-missing img { display: none; }

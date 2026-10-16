@@ -67,7 +67,11 @@ def test_web_ui_styles_include_responsive_dense_layout():
 
     assert "grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr)" in css
     assert "position: sticky" in css
-    assert "@media (max-width: 900px)" in css
+    assert "@media (max-width: 760px)" in css  # t_2ab8f3be: 480/760/1200 scale
+    assert "@media (max-width: 480px)" in css
+    assert "@media (min-width: 1200px)" in css
+    assert "@media (max-width: 900px)" not in css
+    assert "@media (max-width: 1200px)" not in css
     assert "--accent: #5d5bf0" in css  # t_2ab8f3be: fill/text accent split
 
 

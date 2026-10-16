@@ -979,7 +979,8 @@ function renderGear() {
       `title="Sort candidates. 'Stat priority' is a heuristic class weight order, not a sim result.">` +
       `<option value="ilvl">ilvl ↓</option><option value="name">Name</option>` +
       `<option value="priority">Stat priority*</option></select>` +
-      `<button type="button" class="slot-toggle-all">Select none</button></div>` +
+      `<button type="button" class="slot-toggle-all">Select none</button>` +
+      `<button type="button" class="btn-ghost slot-add-toggle" aria-expanded="false">Add by ID</button></div>` +
       `<div class="slot-add-form">` +
       `<input type="text" class="slot-add-input" inputmode="numeric" autocomplete="off" ` +
       `placeholder="Own it but not in the export? Add by Wowhead item id…" ` +
@@ -1001,6 +1002,16 @@ function renderGear() {
       }
     });
     wireSlotAddForm(group, slot);
+    // t_2ab8f3be: add-by-id is a power feature — collapsed until asked for.
+    const addToggle = group.querySelector('.slot-add-toggle');
+    const addForm = group.querySelector('.slot-add-form');
+    addForm.hidden = true;
+    addToggle.addEventListener('click', () => {
+      const open = addForm.hidden;
+      addForm.hidden = !open;
+      addToggle.setAttribute('aria-expanded', String(open));
+      if (open) addForm.querySelector('.slot-add-input').focus();
+    });
     const syncSlotHeader = () => {
       slotCountEl.textContent = `${selectedItems[slot].size}/${items.length} selected`;
       slotToggleAll.textContent = items.length && selectedItems[slot].size === items.length
@@ -1028,10 +1039,8 @@ function renderGear() {
           <input type="checkbox" class="item-select-input" ${selectedItems[slot].has(item) ? 'checked' : ''}>
           <span class="gear-card-info">${createWowheadIconLink(params.id, params.bonus_id, `<span class="item-option-name gear-card-name">${escapeHtml(label.replace(/\s*\(\d+\)/, ''))}</span>`)}${addedItems.has(item) ? '<span class="added-badge">Added</span>' : ''}<span class="gear-card-slot"><span>Item level</span><span class="gear-card-slot-ilvl">${level ? level : '—'}</span></span></span>
         </label>
-        <div class="gear-card-controls">${renderTrackControls(slot, item)}</div>
         ${cardBadges(slot, item)}
-        ${isVoidforgeEligibleSlot(slot) ? `<label class="voidforge-field-container"><input type="checkbox" class="voidforge-input" ${voidforgedItems[slot][item] ? 'checked' : ''}> ${seasonAscension().name || 'Ascendant'} ×${seasonAscension().cost ?? ''}</label>` : ''}
-        <div class="upgrade-preview" hidden></div>
+        ${upgradePopoverMarkup(slot, item)}
         ${addedItems.has(item) ? `<button type="button" class="slot-remove-added" title="Remove this added item from the candidates"><span class="sr-only">Remove ${escapeHtml(label.replace(/\s*\(\d+\)/, ''))} from candidates</span>×</button>` : ''}
       `;
 
@@ -1114,7 +1123,40 @@ function renderGear() {
           selectionChanged();
         });
       }
+      const upgradeTrigger = card.querySelector('.upgrade-trigger');
+      if (upgradeTrigger) {
+        const pop = card.querySelector('.popover');
+        wirePopover(upgradeTrigger, pop);
+        pop.addEventListener('change', () => {
+          card.querySelector('.upgrade-state').textContent = upgradeStateText(slot, item);
+        });
+      }
       itemGrid.appendChild(card);
+    }
+
+    // t_2ab8f3be: slot collapse (doc 4.2) — selected + top 3 visible, rest
+    // behind a toggle so 42-card slots stop dominating the tab order.
+    const cards = [...itemGrid.children];
+    let collapsedCount = 0;
+    cards.forEach((card, index) => {
+      if (index >= 3 && !card.classList.contains('is-selected')) {
+        card.classList.add('is-collapsed');
+        collapsedCount += 1;
+      }
+    });
+    if (collapsedCount) {
+      const showAll = document.createElement('button');
+      showAll.type = 'button';
+      showAll.className = 'btn-ghost slot-show-all';
+      showAll.setAttribute('aria-expanded', 'false');
+      const label = `Show all ${cards.length} items (${collapsedCount} hidden)`;
+      showAll.textContent = label;
+      showAll.addEventListener('click', () => {
+        const open = itemGrid.classList.toggle('is-expanded');
+        showAll.setAttribute('aria-expanded', String(open));
+        showAll.textContent = open ? 'Show fewer' : label;
+      });
+      itemGrid.after(showAll);
     }
 
     if ((appConfig.gems?.standard || []).length) {
@@ -1132,6 +1174,84 @@ function renderGear() {
   refreshWowheadLinks();
 }
 
+// t_2ab8f3be: shared popover behavior (gear upgrade + pre-run diff, doc 5):
+// aria-expanded, Esc, outside-click, focus return, Tab trap.
+function wirePopover(trigger, popover, onOpen) {
+  const focusables = () => [...popover.querySelectorAll('button, select, input, a[href]')]
+    .filter(el => !el.disabled && el.offsetParent !== null);
+  function onKey(event) {
+    if (event.key === 'Escape') { event.preventDefault(); close(); return; }
+    if (event.key !== 'Tab') return;
+    const els = focusables();
+    if (!els.length) return;
+    const first = els[0];
+    const last = els[els.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  }
+  function onDoc(event) {
+    if (!popover.contains(event.target) && event.target !== trigger) close(false);
+  }
+  function open() {
+    popover.hidden = false;
+    trigger.setAttribute('aria-expanded', 'true');
+    if (onOpen) onOpen();
+    focusables()[0]?.focus();
+    document.addEventListener('keydown', onKey, true);
+    document.addEventListener('click', onDoc, true);
+  }
+  function close(focusBack = true) {
+    if (popover.hidden) return;
+    popover.hidden = true;
+    trigger.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('keydown', onKey, true);
+    document.removeEventListener('click', onDoc, true);
+    if (focusBack) trigger.focus();
+  }
+  trigger.setAttribute('aria-expanded', 'false');
+  trigger.addEventListener('click', () => { if (popover.hidden) open(); else close(); });
+}
+
+function upgradeStateText(slot, item) {
+  const upgrade = gearUpgrades[slot]?.[item];
+  const level = targetUpgradeLevel(slot, item);
+  const bits = [];
+  if (upgrade?.track) bits.push(upgrade.track[0].toUpperCase() + upgrade.track.slice(1) + (upgrade.rank ? ` ${upgrade.rank}` : ''));
+  else if (upgrade?.source === 'export') bits.push('Export ladder');
+  else bits.push('No grade');
+  if (level != null) bits.push(`ilvl ${level}`);
+  return bits.join(' \u00b7 ');
+}
+
+function upgradePopoverMarkup(slot, item) {
+  const controls = renderTrackControls(slot, item);
+  const voidforge = isVoidforgeEligibleSlot(slot)
+    ? `<label class="voidforge-field-container"><input type="checkbox" class="voidforge-input" ${voidforgedItems[slot][item] ? 'checked' : ''}> ${seasonAscension().name || 'Ascendant'} \u00d7${seasonAscension().cost ?? ''}</label>`
+    : '';
+  if (!controls && !voidforge) return '';
+  return `<div class="gear-card-controls popover-host">` +
+    `<span class="upgrade-state">${escapeHtml(upgradeStateText(slot, item))}</span>` +
+    `<button type="button" class="btn-ghost upgrade-trigger" aria-expanded="false" aria-haspopup="dialog">Upgrade\u2026</button>` +
+    `<div class="popover" hidden>${controls}${voidforge}<div class="upgrade-preview" hidden></div></div></div>`;
+}
+
+// Pre-run diff (doc 5): client-side summary only; the server combo count in
+// the run bar stays authoritative.
+function renderReviewPopover() {
+  const pop = document.getElementById('review-popover');
+  if (!pop) return;
+  const rows = [];
+  for (const [slot, items] of Object.entries(selectedItems)) {
+    for (const item of items) {
+      const name = parsedData.item_names[item] || item;
+      rows.push(`<tr><td>${escapeHtml(slot.replace('_', ' '))}</td><td>${escapeHtml(String(name).replace(/\s*\(\d+\)/, ''))}</td><td>${escapeHtml(upgradeStateText(slot, item))}</td></tr>`);
+    }
+  }
+  pop.innerHTML = rows.length
+    ? `<table class="diff-table"><thead><tr><th scope="col">Slot</th><th scope="col">Item</th><th scope="col">Grade</th></tr></thead><tbody>${rows.join('')}</tbody></table>`
+    : '<small>No items selected yet.</small>';
+}
+
 // shortcut: PVP meta gems are excluded by name substring; upgrade to item-id
 // filtering when the backend exposes gem ids.
 const PVP_META_NAME_MATCH = /heliotrope/i;
@@ -1139,59 +1259,96 @@ const PVP_META_NAME_MATCH = /heliotrope/i;
 function renderEnhancements() {
   const container = document.getElementById('enhancement-options');
   container.innerHTML = '';
-  for (const [slot, enchants] of Object.entries(appConfig.enchantments || {})) {
-    if (!enchants.length || !parsedData.items_by_slot[slot]) continue;
+  // t_2ab8f3be (doc 4.3): 68 flat checkboxes -> searchable, grouped <details>
+  // sections; a group opens automatically when it holds a checked candidate.
+  const search = document.createElement('input');
+  search.type = 'search';
+  search.className = 'enh-search';
+  search.placeholder = 'Search enchantments and gems\u2026';
+  search.setAttribute('aria-label', 'Search enchantments and gems');
+  container.appendChild(search);
+
+  const addSection = (title, build) => {
+    const section = document.createElement('details');
+    section.className = 'enh-section';
+    const summary = document.createElement('summary');
     const group = document.createElement('fieldset');
     group.className = 'enhancement-group';
-    group.innerHTML = `<legend>${escapeHtml(slot.replace('_', ' '))} enchants</legend>`;
-    for (const enchant of enchants) {
-      const id = String(typeof enchant === 'object' ? enchant.id : enchant);
-      const name = typeof enchant === 'object' ? enchant.name : `Enchant ${id}`;
-      const label = document.createElement('label');
-      label.className = 'choice-chip';
-      label.innerHTML = `<input type="checkbox">${createEnhancementWowheadLink(enchant, name)}`;
-      const input = label.querySelector('input');
-      input.checked = selectedEnchants[slot].has(id) || equippedEnchants[slot].has(id);
-      input.addEventListener('change', event => {
-        if (event.target.checked) selectedEnchants[slot].add(id);
-        else {
-          selectedEnchants[slot].delete(id);
-          equippedEnchants[slot].delete(id);
-        }
-        selectionChanged();
-      });
-      group.appendChild(label);
-    }
-    container.appendChild(group);
+    build(group);
+    summary.textContent = `${title} (${group.querySelectorAll('input').length})`;
+    section.append(summary, group);
+    section.open = Boolean(group.querySelector('input:checked'));
+    container.appendChild(section);
+  };
+
+  for (const [slot, enchants] of Object.entries(appConfig.enchantments || {})) {
+    if (!enchants.length || !parsedData.items_by_slot[slot]) continue;
+    addSection(`${slot.replace('_', ' ')} enchants`, group => {
+      for (const enchant of enchants) {
+        const id = String(typeof enchant === 'object' ? enchant.id : enchant);
+        const name = typeof enchant === 'object' ? enchant.name : `Enchant ${id}`;
+        const equipped = equippedEnchants[slot].has(id);
+        const label = document.createElement('label');
+        label.className = 'choice-chip';
+        label.innerHTML = `<input type="checkbox">${createEnhancementWowheadLink(enchant, name)}` +
+          (equipped ? '<span class="equipped-badge">equipped</span>' : '');
+        const input = label.querySelector('input');
+        input.checked = selectedEnchants[slot].has(id) || equipped;
+        input.addEventListener('change', event => {
+          if (event.target.checked) selectedEnchants[slot].add(id);
+          else {
+            selectedEnchants[slot].delete(id);
+            equippedEnchants[slot].delete(id);
+          }
+          selectionChanged();
+        });
+        group.appendChild(label);
+      }
+    });
   }
 
   const gems = (appConfig.gems?.standard || []).filter(gem =>
     !PVP_META_NAME_MATCH.test(String(gem.name || ''))
   );
   if (gems.length) {
-    const group = document.createElement('fieldset');
-    group.className = 'enhancement-group gems-group';
-    group.innerHTML = '<legend>Flawless gems</legend>';
-    for (const gem of gems) {
-      const id = String(typeof gem === 'object' ? gem.id : gem);
-      const name = typeof gem === 'object' ? gem.name : `Gem ${id}`;
-      const label = document.createElement('label');
-      label.className = 'choice-chip';
-      label.innerHTML = `<input type="checkbox">${createEnhancementWowheadLink(gem, name)}`;
-      const input = label.querySelector('input');
-      input.checked = selectedGems.has(id) || equippedGems.has(id);
-      input.addEventListener('change', event => {
-        if (event.target.checked) selectedGems.add(id);
-        else {
-          selectedGems.delete(id);
-          equippedGems.delete(id);
-        }
-        selectionChanged();
-      });
-      group.appendChild(label);
-    }
-    container.appendChild(group);
+    addSection('Flawless gems', group => {
+      group.className = 'enhancement-group gems-group';
+      for (const gem of gems) {
+        const id = String(typeof gem === 'object' ? gem.id : gem);
+        const name = typeof gem === 'object' ? gem.name : `Gem ${id}`;
+        const equipped = equippedGems.has(id);
+        const label = document.createElement('label');
+        label.className = 'choice-chip';
+        label.innerHTML = `<input type="checkbox">${createEnhancementWowheadLink(gem, name)}` +
+          (equipped ? '<span class="equipped-badge">equipped</span>' : '');
+        const input = label.querySelector('input');
+        input.checked = selectedGems.has(id) || equipped;
+        input.addEventListener('change', event => {
+          if (event.target.checked) selectedGems.add(id);
+          else {
+            selectedGems.delete(id);
+            equippedGems.delete(id);
+          }
+          selectionChanged();
+        });
+        group.appendChild(label);
+      }
+    });
   }
+
+  search.addEventListener('input', () => {
+    const needle = search.value.trim().toLowerCase();
+    container.querySelectorAll('.enh-section').forEach(section => {
+      let visible = 0;
+      section.querySelectorAll('.choice-chip').forEach(chip => {
+        const hit = !needle || chip.textContent.toLowerCase().includes(needle);
+        chip.hidden = !hit;
+        if (hit) visible += 1;
+      });
+      section.hidden = Boolean(needle) && visible === 0;
+      if (needle && visible) section.open = true;
+    });
+  });
   refreshWowheadLinks();
 }
 
@@ -1209,6 +1366,8 @@ function renderWorkflow() {
   document.getElementById('fight-style').addEventListener('change', selectionChanged);
   document.getElementById('btn-stop').addEventListener('click', stopSimulation);
   document.getElementById('btn-log-download').addEventListener('click', downloadLog);
+  wirePopover(document.getElementById('btn-review'),
+    document.getElementById('review-popover'), renderReviewPopover);
   observeWorkflowSteps();
   updateSummary();
   void generateInput(true);
