@@ -2346,22 +2346,26 @@ def parse_report_results(html_content: str) -> list:
 
 
 @app.get("/api/get-results", response_model=GetResultsResponse, tags=["Simulation"])
-async def get_results(task_id: str = Query(default="latest"), _: str = Depends(require_session)):
+async def get_results(task_id: str = Query(default="latest"), user_id: str = Depends(require_session)):
     """Retrieve parsed simulation results (DPS per class, gear data) for a completed task.
 
     **Tags:** Simulation
     **Query Parameters:**
-      - ``task_id``: Task ID, or ``"latest"`` for the most recent report. Defaults to "latest".
+      - ``task_id``: Task ID, or ``"latest"`` for the caller's own most recent
+        report (SEC-1b, t_a4ff7b5d). Defaults to "latest".
 
     **Response Model:** ``GetResultsResponse``
     """
     try:
         html_path = None
         if task_id == "latest":
-             all_reports = glob.glob(os.path.join(REPORTS_DIR, "*", "*", "report_*.html"))
-             if not all_reports: return {"status": "error", "message": "No reports found"}
-             all_reports.sort(key=os.path.getmtime, reverse=True)
-             html_path = all_reports[0]
+            # SEC-1b (t_a4ff7b5d): the old REPORTS_DIR/* glob served the
+            # globally newest report to any logged-in user — cross-user leak.
+            own_reports = glob.glob(os.path.join(
+                REPORTS_DIR, _user_report_dir(user_id), "*", "report_*.html"))
+            if not own_reports: return {"status": "error", "message": "No reports found"}
+            own_reports.sort(key=os.path.getmtime, reverse=True)
+            html_path = own_reports[0]
         else:
             tmp_dir = _find_task_report_dir(task_id)
             if not tmp_dir or not os.path.exists(tmp_dir):
@@ -2584,15 +2588,34 @@ def _task_report_dir(user_dir: str, task_id: str) -> str:
     return safe_task_dir(os.path.join(REPORTS_DIR, user_dir), task_id)
 
 
+def _task_owner(task_id: str) -> Optional[str]:
+    """Owner user_id of *task_id*, or None when unresolvable.
+
+    Shared ownership-resolution helper (t_a4ff7b5d ownership family): checks
+    the durable task map first, then falls back to the REPORTS_DIR path
+    segment (``REPORTS_DIR/<owner>/<task_id>/``) for uploads whose owner was
+    lost across a master restart. Callers compare against their own id
+    (``_user_report_dir``-sanitized) and reject non-owners with 403/404.
+    """
+    owner = task_user_map.get(task_id)
+    if owner:
+        return owner
+    for match in glob.glob(os.path.join(REPORTS_DIR, "*", task_id)):
+        if os.path.isdir(match):
+            return os.path.basename(os.path.dirname(match))
+    return None
+
+
 def _find_task_report_dir(task_id: str) -> Optional[str]:
     """Locate the report directory for *task_id* across user directories.
 
-    Checks the owner's directory first via the in-memory task map, then scans
-    ``REPORTS_DIR/*/<task_id>`` — covers uploads whose owner was lost across a
-    master restart. Returns None when the task has no directory yet.
+    Checks the owner's directory first via the shared ``_task_owner``
+    resolution, then scans ``REPORTS_DIR/*/<task_id>`` — covers uploads whose
+    owner was lost across a master restart. Returns None when the task has no
+    directory yet.
     """
     validate_safe_id(task_id, "task id")
-    owner = task_user_map.get(task_id)
+    owner = _task_owner(task_id)
     if owner:
         candidate = os.path.join(REPORTS_DIR, _user_report_dir(owner), task_id)
         if os.path.isdir(candidate):

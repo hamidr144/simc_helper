@@ -633,9 +633,11 @@ def test_report_url_endpoint():
     assert missing.status_code == 404
 
 
-def test_get_results_latest_spans_user_directories():
-    """t_c968bf8d: task_id=latest globs the new <user>/<task> layout."""
-    task_dir = os.path.join(MASTER_REPORTS_DIR, "u-latest", "latest-task")
+def test_get_results_latest_scoped_to_caller_dir():
+    """t_c968bf8d + t_a4ff7b5d: task_id=latest resolves the <user>/<task>
+    layout but only within the CALLER's own user directory (auth-disabled
+    test client -> "anonymous"); it no longer globs across users."""
+    task_dir = os.path.join(MASTER_REPORTS_DIR, "anonymous", "latest-task")
     os.makedirs(task_dir, exist_ok=True)
     with open(os.path.join(task_dir, "report_latest.html"), "w") as f:
         f.write('<h2 class="toggle">Latest&#160;:&#160;4242 dps</h2>')
