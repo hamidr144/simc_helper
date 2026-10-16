@@ -693,6 +693,7 @@ if not os.path.exists(static_dir):
 
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 LOGIN_PAGE = os.path.abspath(os.path.join(static_dir, "login.html"))
+REGISTER_PAGE = os.path.abspath(os.path.join(static_dir, "register.html"))
 APP_PAGE = os.path.abspath(os.path.join(static_dir, "app.html"))
 RESULTS_PAGE = os.path.abspath(os.path.join(static_dir, "results.html"))
 HISTORY_PAGE = os.path.abspath(os.path.join(static_dir, "history.html"))
@@ -883,6 +884,15 @@ async def login_page(request: Request):
     return FileResponse(LOGIN_PAGE)
 
 
+@app.get("/register")
+async def register_page(request: Request):
+    if not authentication_enabled():
+        return RedirectResponse(url="/dashboard", status_code=303)
+    if _page_session_valid(request):
+        return RedirectResponse(url="/dashboard", status_code=303)
+    return FileResponse(REGISTER_PAGE)
+
+
 @app.post("/register")
 async def register(request: Request, username: str = Form(...), password: str = Form(...)):
     if not authentication_enabled():
@@ -899,7 +909,18 @@ async def register(request: Request, username: str = Form(...), password: str = 
 
     password_hash = hash_password(password)
     user_id = user_create(username, password_hash)
-    return {"status": "success", "user_id": user_id, "username": username}
+    # Browser flow (t_e4d97db9): land on /dashboard logged in, exactly like
+    # a successful /login, instead of dumping raw JSON on the user.
+    redirect_resp = RedirectResponse(url="/dashboard", status_code=303)
+    redirect_resp.set_cookie(
+        key="session_id",
+        value=user_id,
+        httponly=True,
+        max_age=3600 * 24 * 7,
+        samesite="lax",
+        secure=COOKIE_SECURE,
+    )
+    return redirect_resp
 
 
 @app.post("/login")

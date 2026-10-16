@@ -307,10 +307,14 @@ def test_restart_persistence_two_process_history_link_serves_report(tmp_path):
         client = httpx.Client(base_url=url, timeout=15)
 
         # register + login for real (auth is on by default in the subprocess)
+        # t_e4d97db9: register now redirects like login; user_id rides in the
+        # session_id cookie.
         username = f"restart-{uuid.uuid4().hex[:8]}"
-        r = client.post("/register", data={"username": username, "password": "***"})
-        assert r.status_code == 200, r.text
-        user_id = r.json()["user_id"]
+        r = client.post("/register", data={"username": username, "password": "***"},
+                        follow_redirects=False)
+        assert r.status_code == 303, r.text
+        user_id = client.cookies.get("session_id")
+        assert user_id
         r = client.post("/login", data={"username": username, "password": "***"},
                         follow_redirects=False)
         assert r.status_code == 303

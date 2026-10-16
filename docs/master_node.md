@@ -10,8 +10,10 @@ The Master Node is the FastAPI controller served by `src/web/main.py` (packaged 
 | :--- | :--- | :--- | :--- |
 | `/` | `GET` | Session | Returns `login.html` (or `app.html` in dev/pytest). |
 | `/dashboard` | `GET` | Session | Serves the main simulation dashboard (`app.html`). |
+| `/login` | `GET` | — | Serves the login form (`login.html`). |
 | `/login` | `POST` | — | Validates username/password and sets `session_id` cookie. |
-| `/register` | `POST` | — | Registers a new user. |
+| `/register` | `GET` | — | Serves the registration form (`register.html`). |
+| `/register` | `POST` | — | Registers a new user, sets `session_id` cookie and redirects to `/dashboard`. |
 | `/logout` | `GET` | Session | Deletes the user session cookie. |
 | `/health` | `GET` | — | Reports worker connectivity, SimC binary presence, and disk space. |
 | `/api/state` | `GET` | — | Returns active workers and currently generating inputs. |
