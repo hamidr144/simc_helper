@@ -76,6 +76,11 @@ RETRY_BACKOFF_BASE = float(os.environ.get("RETRY_BACKOFF_BASE", str(DEFAULT_RETR
 DEFAULT_RETRY_BACKOFF_MAX = 60.0  # max backoff in seconds
 RETRY_BACKOFF_MAX = float(os.environ.get("RETRY_BACKOFF_MAX", str(DEFAULT_RETRY_BACKOFF_MAX)))
 
+# t_a0bb3a07 (LIFE-1): sentinel exit code meaning "user pressed Stop". The
+# retry loop must treat it as terminal, never as a failure to retry. Safe:
+# outside real exit codes and signal deaths (wait() returns -1..-64).
+STOPPED_EXIT_CODE = -100
+
 # Task status tracking (in-memory, shared with main.py via sync)
 # (defined after TaskStatus class)
 
@@ -355,7 +360,12 @@ async def _execute_task(session, task_id: str, input_file: str, websocket) -> tu
         if res == "reconnect":
             return 1, None, "Worker connection lost during execution"
         if res == "stopped":
-            return 1, None, "Task was stopped by user"
+            # Reap the SIGTERM'd process group so a stopped task leaves no zombie.
+            try:
+                active_process.wait(timeout=5)
+            except Exception:
+                pass
+            return STOPPED_EXIT_CODE, None, "Task was stopped by user"
 
         exit_code = active_process.wait()
         logger.info(f"[{task_id}] Process finished with code {exit_code}")
@@ -545,6 +555,19 @@ async def run_worker():
                                                     final_error = "Connection lost"
                                                     break
 
+                                                if exit_code == STOPPED_EXIT_CODE:
+                                                    # t_a0bb3a07 (LIFE-1): user Stop is terminal —
+                                                    # retrying here used to restart the stopped sim.
+                                                    logger.info(f"[{task_id}] Stopped by user — not retrying.")
+                                                    task_status.status = "stopped"
+                                                    task_status.exit_code = exit_code
+                                                    task_status.error = error
+                                                    task_status.updated_at = time.time()
+                                                    await _push_task_status(websocket, task_id, task_status)
+                                                    final_exit_code = exit_code
+                                                    final_error = error
+                                                    break
+
                                                 if exit_code == 0:
                                                     task_status.status = "done"
                                                     task_status.exit_code = exit_code
@@ -599,6 +622,7 @@ async def run_worker():
                                                 "code": final_exit_code,
                                                 "report_file": final_report_file,
                                                 "error": final_error,
+                                                "stopped": final_exit_code == STOPPED_EXIT_CODE,
                                                 "retry_count": task_status.retry_count,
                                                 "max_retries": task_status.max_retries,
                                             }))
