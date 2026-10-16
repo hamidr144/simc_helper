@@ -54,6 +54,16 @@ def init_db() -> None:
                 last_sim_time REAL NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS auth_sessions (
+                token      TEXT PRIMARY KEY,
+                user_id    TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                created_at REAL NOT NULL,
+                expires_at REAL NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires
+                ON auth_sessions (expires_at);
+
             CREATE TABLE IF NOT EXISTS user_inputs (
                 user_id     TEXT PRIMARY KEY,
                 input_id    TEXT    NOT NULL,
@@ -106,17 +116,31 @@ def user_get(username: str) -> Optional[Dict[str, Any]]:
     finally:
         conn.close()
 
-def user_get_by_id(user_id: str) -> Optional[Dict[str, Any]]:
-    """Return the user record for *user_id*, or None if not found.
+# ---------------------------------------------------------------------------
+# auth_sessions  (SEC-7 t_0e328148: opaque server-side session tokens)
+# ---------------------------------------------------------------------------
 
-    Used by the API session gate: a ``session_id`` cookie is valid only while
-    it names an existing user (the ``user_sessions`` table is a cooldown
-    tracker that is purged regularly and must not back auth decisions).
-    """
+def auth_session_create(token: str, user_id: str, expires_at: float) -> None:
+    """Register an issued session token for *user_id*."""
+    conn = _connect()
+    try:
+        conn.execute(
+            "INSERT INTO auth_sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+            (token, user_id, time.time(), expires_at),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+def auth_session_user(token: str, now: float) -> Optional[Dict[str, Any]]:
+    """Return the user record owning a valid (unexpired) session token."""
     conn = _connect()
     try:
         row = conn.execute(
-            "SELECT user_id, username, password_hash, created_at FROM users WHERE user_id = ?", (user_id,)
+            "SELECT u.user_id, u.username, u.password_hash, u.created_at "
+            "FROM auth_sessions s JOIN users u ON u.user_id = s.user_id "
+            "WHERE s.token = ? AND s.expires_at > ?",
+            (token, now),
         ).fetchone()
         if row is None:
             return None
@@ -126,6 +150,24 @@ def user_get_by_id(user_id: str) -> Optional[Dict[str, Any]]:
             "password_hash": row[2],
             "created_at": row[3],
         }
+    finally:
+        conn.close()
+
+def auth_session_delete(token: str) -> None:
+    """Revoke one session token (logout); other devices keep their sessions."""
+    conn = _connect()
+    try:
+        conn.execute("DELETE FROM auth_sessions WHERE token = ?", (token,))
+        conn.commit()
+    finally:
+        conn.close()
+
+def auth_session_purge_expired(now: float) -> None:
+    """Drop expired session rows (housekeeping, called on login)."""
+    conn = _connect()
+    try:
+        conn.execute("DELETE FROM auth_sessions WHERE expires_at <= ?", (now,))
+        conn.commit()
     finally:
         conn.close()
 

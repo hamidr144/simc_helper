@@ -36,7 +36,7 @@ def _authed_client(user_id):
     client = TestClient(app)
     # session_id drives the real auth path; user_id is the kill-switch-mode
     # fallback identity in _resolved_user_id.
-    client.cookies.set("session_id", user_id)
+    client.cookies.set("session_id", master._issue_session(user_id))
     client.cookies.set("user_id", user_id)
     return client
 

@@ -100,6 +100,22 @@ def test_sec6_run_without_input_id_must_not_use_global_latest(auth_on):
     with m1, m2 as send_task:
         manager.active_workers["w-test"] = MagicMock(status="Idle")
         r = b.post("/api/run-simulation")
+    manager.active_workers.pop("w-test", None)  # MagicMock leaks into /api/state otherwise
     dispatched = send_task.call_args[0][1]["input_url"] if send_task.called else ""
     assert r.status_code in (401, 422) or a_input not in dispatched, (
         f"B ran A's input {a_input} via global latest fallback ({dispatched})")
+
+def test_sec7_logout_must_invalidate_session_server_side(auth_on):
+    """BUG SEC-7: after /logout the same session cookie must stop working."""
+    c = _login(f"sec7-{uuid.uuid4().hex[:6]}")
+    assert c.get("/api/state").status_code == 200
+    stolen = c.cookies.get("session_id")
+    assert stolen
+    c.get("/logout", follow_redirects=False)
+    r = c.get("/api/state")
+    assert r.status_code == 401, "session cookie still valid after logout"
+    # The card's repro: replay the captured cookie in a fresh client.
+    replay = TestClient(app)
+    replay.cookies.set("session_id", stolen)
+    r = replay.get("/api/state")
+    assert r.status_code == 401, "copied cookie still valid after logout"
