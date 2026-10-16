@@ -16,7 +16,7 @@ Version format is [Semantic Versioning](https://semver.org):
 - **PATCH** — hotfix on prod, or fix before next milestone
 - **`-dev.N`** — SemVer prerelease; the dev line advances N with each deploy to the test system. When dev merges to prod, the version drops the suffix (`1.2.0-dev.7` → `v1.2.0`).
 
-The current release version lives in `pyproject.toml` (`version = ...`) and is bumped in the same merge commit that goes to the target branch.
+The current release version lives in `pyproject.toml` (`version = ...`) and is bumped in the same merge commit that goes to the target branch. The dev line's baseline is `1.0.0-dev.0` (the `0.1.x` releases predate this scheme): the next dev deploy is `1.0.0-dev.1`, and the first milestone merged from this line ships prod as `v1.0.0`.
 
 ## Day-to-day: change → dev
 
@@ -25,7 +25,7 @@ The current release version lives in `pyproject.toml` (`version = ...`) and is b
 3. Implement, add/adjust tests.
 4. Test on the **dev system** (see below). Never test on prod.
 5. Open PR `feature/... → dev`. Reviewer approval + tests green required (author never approves own work).
-6. Merge to `dev` → deploy to dev system → tester verifies acceptance criteria on the running system.
+6. Merge to `dev` — the merge commit bumps `pyproject.toml` to the next dev version `X.Y.Z-dev.N` (N increments once per dev deploy) and is tagged `vX.Y.Z-dev.N`; push with `git push origin dev --follow-tags`. Then deploy to the dev system (below) → tester verifies acceptance criteria on the running system.
 7. Delete the feature branch.
 
 ## Milestone: dev → prod
@@ -50,13 +50,15 @@ Every merged milestone bumps the prod version (MINOR for features, MAJOR for bre
 | URL | http://127.0.0.1:8000 (TLS front is host infra, outside this repo) | http://127.0.0.1:8001 |
 | Image tags | `simc-helper:latest` / `:latest-amd64` | `simc-helper:dev` / `:dev-amd64` (`IMAGE_TAG=dev` in `.env`) |
 
+Always pass `-p` explicitly on deploy commands. The main checkout's directory name (`simc_helper`) equals the prod compose project name, so an unqualified `docker compose` command run there targets the **prod** volumes whenever `.env` is missing or stale. `-p` overrides `COMPOSE_PROJECT_NAME` from `.env`; the `.env` values (`simc-dev` / `simc_helper`) stay as the safety net for interactive commands.
+
 ### Deploy dev system (after merge to `dev`)
 
 ```bash
 cd ~/Hermes-work/simc_helper
 git pull
 docker build -t simc-helper:dev . && docker build --platform linux/amd64 -t simc-helper:dev-amd64 .
-docker compose up -d --force-recreate simc-master simc-worker   # .env: IMAGE_TAG=dev, PORT=8001
+docker compose -p simc-dev up -d --force-recreate simc-master simc-worker
 curl -s http://127.0.0.1:8001/health
 ```
 
@@ -66,11 +68,11 @@ curl -s http://127.0.0.1:8001/health
 cd ~/Hermes-work/simc_helper-prod
 git pull
 docker build -t simc-helper:latest . && docker build --platform linux/amd64 -t simc-helper:latest-amd64 .
-docker compose up -d --force-recreate simc-master simc-worker
+docker compose -p simc_helper up -d --force-recreate simc-master simc-worker
 curl -s http://127.0.0.1:8000/health
 ```
 
-Rollback: `git checkout <last-good-tag>` in the prod worktree, rebuild, `up -d --force-recreate`. Data lives in named volumes and survives either way.
+Rollback: `git checkout <last-good-tag>` in the prod worktree, rebuild, `docker compose -p simc_helper up -d --force-recreate`. `git checkout <tag>` detaches HEAD, so re-attach before the next deploy: `git checkout prod && git pull`. Data lives in named volumes and survives either way.
 
 ## Quick rules
 
