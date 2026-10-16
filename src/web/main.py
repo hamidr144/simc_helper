@@ -407,7 +407,12 @@ init_db()
 # In-memory storage (backed by SQLite)
 user_last_sim_time = load_sessions()
 generated_inputs_by_user: dict = load_inputs()
-generated_inputs_by_user["latest"] = None
+# t_2f386596: the global "latest" input used to live inside this map under a
+# magic key that collided with real buckets (the client-controlled user_id
+# cookie fallback when auth is disabled, and legacy user_inputs rows loaded
+# above). Namespace it as its own variable instead.
+generated_inputs_by_user.pop("latest", None)
+latest_input: Optional[Dict[str, Any]] = None
 # t_c968bf8d: task_id -> user_id so worker uploads land in the owner's report
 # directory. LIFE-2 (t_2c718ca6): durable in the sqlite task_owner table —
 # an in-memory-only map lost report attribution when the master restarted
@@ -1598,7 +1603,7 @@ async def get_api_state(_: str = Depends(require_session)):
     """
     return {
         "status": "ready",
-        "active_input": generated_inputs_by_user.get("latest", {}).get("input_id") if generated_inputs_by_user.get("latest") else None,
+        "active_input": latest_input.get("input_id") if latest_input else None,
         "workers": [
             {"id": w.id, "name": w.name, "status": w.status}
             for w in manager.active_workers.values()
@@ -2120,10 +2125,13 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
 
         user_id = current_user if current_user != "anonymous" else (request.cookies.get("user_id") or f"ip_{request.client.host}")
         record = {"input_id": input_id, "file_path": file_path, "input_url": f"/inputs/{input_id}.simc"}
+        # t_2f386596: global latest is a namespaced variable now, not a magic
+        # "latest" key inside the per-user map (and no longer persisted under
+        # a fake "latest" user_id row).
+        global latest_input
         generated_inputs_by_user[user_id] = record
-        generated_inputs_by_user["latest"] = record
+        latest_input = record
         input_set(user_id, record)
-        input_set("latest", record)
 
         # The base actor is always a valid current-gear simulation, even if no
         # alternate item profiles were generated. Report the true candidate
@@ -2151,13 +2159,20 @@ async def update_simc(request: Request, _: str = Depends(require_session)):
     return {"status": "success", "task_id": task_id}
 
 @app.get("/api/update-simc/stream/{task_id}", tags=["Admin"])
-async def stream_update_simc(task_id: str, _: str = Depends(require_session)):
+async def stream_update_simc(task_id: str, user_id: str = Depends(require_session)):
     """Stream Server-Sent Events for the ``/api/update-simc`` task identified by *task_id*.
 
     **Tags:** Admin
     **Response Type:** ``text/event-stream``
     """
     if task_id not in manager.task_queues:
+        raise HTTPException(status_code=404, detail="Task not found")
+    # t_2f386596 (LIFE-4 scope add): same ownership gate as the sim stream.
+    # shortcut: update tasks carry no owner record (recording one would make
+    # the done handler write a run_history row for an engine update), so this
+    # passes until update tasks get attribution; ids are unguessable and the
+    # log holds no user data.
+    if not _task_access_ok(task_id, user_id):
         raise HTTPException(status_code=404, detail="Task not found")
 
     async def update_event_generator():
@@ -2281,9 +2296,10 @@ async def run_simulation(request: Request, worker_id: Optional[str] = Query(None
     unauthenticated callers get HTTP 401 — dev mode never bypasses this.
     **Query Parameters:**
       - ``worker_id``: Optional worker ID to target (auto-selected if omitted)
-      - ``input_id``: Optional input file ID (defaults to the caller's own
-        latest generated input; HTTP 422 if the caller has none — never
-        another user's input, SEC-6 t_2447fdbd)
+      - ``input_id``: Optional input file ID — must be the caller's own
+        generated input (HTTP 403 otherwise, t_2f386596). Defaults to the
+        caller's own latest generated input; HTTP 422 if the caller has none
+        — never another user's input, SEC-6 t_2447fdbd)
 
     **Rate Limiting:** 300-second cooldown per user.
 
@@ -2307,6 +2323,15 @@ async def run_simulation(request: Request, worker_id: Optional[str] = Query(None
     # one user run another user's generated profile.
     if input_id:
         validate_safe_id(input_id, "input id")
+        # t_2f386596: an explicit input_id must be the caller's own generated
+        # input. user_inputs keeps only the latest record per user, so "own"
+        # means "matches the caller's record". Skipped when auth is disabled
+        # (the kill switch is single-operator mode; legacy CLI/test flows pass
+        # orphan ids nobody owns).
+        if authentication_enabled():
+            own = generated_inputs_by_user.get(user_id)
+            if not own or own.get("input_id") != input_id:
+                raise HTTPException(status_code=403, detail="Input does not belong to user")
         input_record = {"input_url": f"/inputs/{input_id}.simc"}
     else:
         input_record = generated_inputs_by_user.get(user_id)
@@ -2335,13 +2360,16 @@ async def run_simulation(request: Request, worker_id: Optional[str] = Query(None
     return {"status": "success", "task_id": task_id, "worker_id": target_worker}
 
 @app.get("/api/simulation/stream/{task_id}", tags=["Simulation"])
-async def stream_simulation(task_id: str, worker_id: str, _: str = Depends(require_session)):
+async def stream_simulation(task_id: str, worker_id: str, user_id: str = Depends(require_session)):
     """Stream Server-Sent Events for the simulation identified by *task_id*.
 
     **Tags:** Simulation
     **Response Type:** ``text/event-stream``
     """
     if task_id not in manager.task_queues and task_id not in task_done_map: raise HTTPException(status_code=404)
+    # t_2f386596 (LIFE-4 scope add): per-viewer queues are keyed by task_id
+    # only — without this check any session could watch another user's run.
+    if not _task_access_ok(task_id, user_id): raise HTTPException(status_code=404)
     return StreamingResponse(simulation_event_generator(task_id, worker_id), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"})
 
 # --- SimC HTML report parsing -------------------------------------------------
@@ -2431,6 +2459,10 @@ async def get_results(task_id: str = Query(default="latest"), user_id: str = Dep
             tmp_dir = _find_task_report_dir(task_id)
             if not tmp_dir or not os.path.exists(tmp_dir):
                 return {"status": "error", "message": f"Task {task_id} results not found"}
+            # t_2f386596: explicit task_id must belong to the caller (same
+            # error shape as not-found — no existence oracle).
+            if not _task_access_ok(task_id, user_id):
+                return {"status": "error", "message": f"Task {task_id} results not found"}
             report_files = [f for f in os.listdir(tmp_dir) if f.startswith("report_") and f.endswith(".html")]
             if not report_files: return {"status": "error", "message": "No reports found"}
             report_files.sort(key=lambda x: os.path.getmtime(os.path.join(tmp_dir, x)), reverse=True)
@@ -2446,18 +2478,20 @@ async def get_results(task_id: str = Query(default="latest"), user_id: str = Dep
         return {"status": "error", "message": str(e)}
 
 @app.get("/api/report-url", tags=["Simulation"])
-async def get_report_url(task_id: str = Query(...), _: str = Depends(require_session)):
+async def get_report_url(task_id: str = Query(...), user_id: str = Depends(require_session)):
     """Resolve the static URL of a run's HTML report (t_c968bf8d).
 
     Durable reports live under the owner's user directory
     (``/reports/<user_id>/<task_id>/report_*.html``), which the frontend
-    cannot derive from ``task_id`` alone. Exposure is equivalent to the
-    ``/reports`` static mount itself — no new access surface.
+    cannot derive from ``task_id`` alone. Explicit task ids are ownership-
+    checked (t_2f386596): a non-owner gets the same 404 as not-found.
     """
     from urllib.parse import quote
 
     task_dir = _find_task_report_dir(task_id)
     if not task_dir or not os.path.isdir(task_dir):
+        raise HTTPException(status_code=404, detail="Report not found")
+    if not _task_access_ok(task_id, user_id):
         raise HTTPException(status_code=404, detail="Report not found")
     report_files = [f for f in os.listdir(task_dir) if f.startswith("report_") and f.endswith(".html")]
     if not report_files:
@@ -2665,6 +2699,20 @@ def _task_owner(task_id: str) -> Optional[str]:
         if os.path.isdir(match):
             return os.path.basename(os.path.dirname(match))
     return None
+
+
+def _task_access_ok(task_id: str, claimant: str) -> bool:
+    """True when *claimant* may read *task_id* (t_2f386596 ownership pass).
+
+    Ownership is only meaningful when authentication is enabled — the
+    AUTHENTICATION_ENABLED=false kill switch is single-operator mode. An
+    unresolvable owner (update-simc tasks, attribution lost before LIFE-2)
+    passes through; the caller's own existence gate still applies.
+    """
+    if not authentication_enabled():
+        return True
+    owner = _task_owner(task_id)
+    return owner is None or _user_report_dir(owner) == _user_report_dir(claimant)
 
 
 def _find_task_report_dir(task_id: str) -> Optional[str]:

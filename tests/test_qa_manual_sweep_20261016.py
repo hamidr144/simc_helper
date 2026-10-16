@@ -160,6 +160,8 @@ def test_life2_master_restart_keeps_run_attribution(auth_on):
     from src.core.db import run_history_list, user_delete
 
     c = _login(f"life2-{uuid.uuid4().hex[:6]}")
+    # t_2f386596: explicit input_id must match the caller's own record.
+    master.generated_inputs_by_user[c.user_id] = {"input_id": "life2-drive"}
     m1, m2 = _mock_idle_worker()
     with m1, m2:
         manager.active_workers["w-test"] = MagicMock(status="Idle")
@@ -321,6 +323,8 @@ def test_life4_run_completes_without_viewer_records_history_row(auth_on):
     freed at run end, not on viewer presence."""
     from src.core.db import run_history_list, user_delete
     c = _login(f"life4-{uuid.uuid4().hex[:8]}")
+    # t_2f386596: explicit input_id must match the caller's own record.
+    master.generated_inputs_by_user[c.user_id] = {"input_id": "life4-drive"}
     task_id = None
     try:
         with TestClient(app) as admin:
@@ -387,3 +391,120 @@ def test_e2e7_zero_dps_pet_profiles_excluded_from_results(auth_on):
     names = [r["name"] for r in results]
     assert "Fluffy_Pillow" not in names, (
         f"0-dps pet profile surfaced as alternative: {names}")
+# ------------------------------------------------- ownership family (t_2f386596)
+
+def test_own_run_simulation_explicit_input_id_must_be_callers(auth_on):
+    """BUG t_2f386596: user B passing A's input_id to /api/run-simulation
+    must get 403/404 with no send_task dispatch; A must still run own input."""
+    a = _login(f"own-a-{uuid.uuid4().hex[:6]}")
+    gen = a.post("/api/generate-simc", json=GEN_BODY)
+    assert gen.status_code == 200
+    a_input = gen.json()["input_id"]
+
+    b = _login(f"own-b-{uuid.uuid4().hex[:6]}")
+    m1, m2 = _mock_idle_worker()
+    with m1, m2 as send_task:
+        manager.active_workers["w-test"] = MagicMock(status="Idle")
+        r = b.post("/api/run-simulation", params={"input_id": a_input})
+    manager.active_workers.pop("w-test", None)
+    assert r.status_code in (403, 404), f"cross-user run returned {r.status_code}: {r.text[:120]}"
+    send_task.assert_not_called()
+
+    # The fix must not over-block: A's own input still dispatches.
+    with m1, m2 as send_task2:
+        manager.active_workers["w-test"] = MagicMock(status="Idle")
+        r2 = a.post("/api/run-simulation", params={"input_id": a_input})
+    manager.active_workers.pop("w-test", None)
+    assert r2.status_code == 200, f"own input blocked: {r2.status_code} {r2.text[:120]}"
+    assert send_task2.called
+    tid = r2.json()["task_id"]
+    master.task_user_map.pop(tid, None)
+    master.task_meta_map.pop(tid, None)
+    manager.task_queues.pop(tid, None)
+
+
+def test_own_cookie_latest_bucket_must_not_get_global_record():
+    """BUG t_2f386596: the global 'latest' input lived inside
+    generated_inputs_by_user under a magic key — a client whose bucket id
+    was 'latest' (the auth-disabled user_id cookie fallback) ran another
+    user's profile. The map must never hold a 'latest' key."""
+    victim = TestClient(app)
+    victim.cookies.set("user_id", f"own-victim-{uuid.uuid4().hex[:8]}")
+    gen = victim.post("/api/generate-simc", json=GEN_BODY)
+    assert gen.status_code == 200
+    attacker = TestClient(app)
+    attacker.cookies.set("user_id", "latest")
+    m1, m2 = _mock_idle_worker()
+    try:
+        with m1, m2 as send_task:
+            manager.active_workers["w-test"] = MagicMock(status="Idle")
+            r = attacker.post("/api/run-simulation")
+    finally:
+        manager.active_workers.pop("w-test", None)
+        master.generated_inputs_by_user.pop(victim.cookies.get("user_id"), None)
+        master.generated_inputs_by_user.pop("latest", None)  # red-run residue
+    assert r.status_code in (403, 422), f"cookie-latest bucket got a run: {r.status_code} {r.text[:120]}"
+    send_task.assert_not_called()
+
+
+def test_own_registered_latest_username_cannot_reach_global(auth_on):
+    """BUG t_2f386596 (card probe): registering username 'latest' must not
+    grant the global latest input — user_id is a uuid and the map holds no
+    'latest' key anymore."""
+    from src.core.db import user_delete, user_get
+    stale = user_get("latest")
+    if stale:
+        user_delete(stale["user_id"])
+    v = _login(f"own-v-{uuid.uuid4().hex[:6]}")
+    gen = v.post("/api/generate-simc", json=GEN_BODY)
+    assert gen.status_code == 200
+    v_input = gen.json()["input_id"]
+    late = _login("latest")
+    m1, m2 = _mock_idle_worker()
+    try:
+        with m1, m2 as send_task:
+            manager.active_workers["w-test"] = MagicMock(status="Idle")
+            r = late.post("/api/run-simulation")  # no own record -> 422, never global
+            r2 = late.post("/api/run-simulation", params={"input_id": v_input})
+    finally:
+        manager.active_workers.pop("w-test", None)
+        user_delete(late.user_id)
+    assert r.status_code == 422, f"latest-username run: {r.status_code} {r.text[:120]}"
+    assert r2.status_code in (403, 404), f"latest-username ran {v_input}: {r2.status_code}"
+    send_task.assert_not_called()
+
+
+def test_own_read_endpoints_reject_foreign_task(auth_on, tmp_path, monkeypatch):
+    """BUG t_2f386596 (tester + leader scope adds): report-url, get-results
+    (explicit task_id) and the simulation SSE stream must not resolve
+    another user's task for a logged-in non-owner — and must not over-block
+    the owner."""
+    monkeypatch.setattr(master, "REPORTS_DIR", str(tmp_path))
+    v = _login(f"own-rv-{uuid.uuid4().hex[:6]}")
+    b = _login(f"own-rb-{uuid.uuid4().hex[:6]}")
+    task_id = uuid.uuid4().hex[:8]
+    master.task_user_map[task_id] = v.user_id
+    run_dir = tmp_path / master._user_report_dir(v.user_id) / task_id
+    run_dir.mkdir(parents=True)
+    (run_dir / "report_20261016_000000.html").write_text(
+        '<h2 class="toggle">VictimChar : 9999 dps</h2>', encoding="utf-8")
+    # done_map entry: the stream gate passes and the LIFE-4 replay path
+    # terminates immediately instead of hanging the test client.
+    master.task_done_map[task_id] = {"type": "done", "code": 0, "_at": time.time()}
+    try:
+        r = b.get("/api/report-url", params={"task_id": task_id})
+        assert r.status_code == 404, f"non-owner resolved report-url: {r.status_code} {r.text[:120]}"
+        r = b.get("/api/get-results", params={"task_id": task_id})
+        assert "VictimChar" not in r.text, f"non-owner got results: {r.text[:160]}"
+        r = b.get(f"/api/simulation/stream/{task_id}", params={"worker_id": "w1"})
+        assert r.status_code == 404, f"non-owner subscribed: {r.status_code}"
+        # The owner must not be over-blocked.
+        r = v.get("/api/report-url", params={"task_id": task_id})
+        assert r.status_code == 200, f"owner blocked from report-url: {r.status_code} {r.text[:120]}"
+        r = v.get("/api/get-results", params={"task_id": task_id})
+        assert "VictimChar" in r.text, f"owner blocked from get-results: {r.text[:160]}"
+        r = v.get(f"/api/simulation/stream/{task_id}", params={"worker_id": "w1"})
+        assert r.status_code == 200 and '"done"' in r.text, f"owner stream: {r.status_code} {r.text[:120]}"
+    finally:
+        master.task_user_map.pop(task_id, None)
+        master.task_done_map.pop(task_id, None)

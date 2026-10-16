@@ -1415,6 +1415,8 @@ def test_login_does_not_seed_run_cooldown(monkeypatch):
     monkeypatch.setitem(master.manager.active_workers, "worker1", MagicMock(status="Idle"))
     try:
         # SEC-6: explicit input_id (fake worker never fetches it)
+        # t_2f386596: explicit input_id must match the caller's own record.
+        master.generated_inputs_by_user[user_id] = {"input_id": "qa-cooldown"}
         first = authed.post("/api/run-simulation", params={"input_id": "qa-cooldown"})
         assert first.status_code == 200, first.text
         task_id = first.json()["task_id"]
@@ -1620,6 +1622,8 @@ def test_run_simulation_snapshots_task_metadata(monkeypatch):
     _auth_on(monkeypatch)  # real session -> current_user is the created user
     uid = _rh_user("snap")
     m.run_meta_by_user[uid] = {"source": "armory", "char_name": "Snap"}
+    # t_2f386596: explicit input_id must match the caller's own record.
+    m.generated_inputs_by_user[uid] = {"input_id": "qa-snap"}
     m.user_last_sim_time.pop(uid, None)
     session_cleanup_older_than(0, time.time())
     task_id = None
