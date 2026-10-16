@@ -1256,6 +1256,7 @@ button.btn-ghost:not(:disabled):hover {
 /* --- Slot group headers with counts + bulk toggle --- */
 .slot-group-header {
   display: flex;
+  flex-wrap: wrap; /* t_ab5b5f2e: controls wrap below 396px min-content; keeps 390px viewport overflow-free */
   align-items: center;
   gap: 12px;
   margin-bottom: 10px;
