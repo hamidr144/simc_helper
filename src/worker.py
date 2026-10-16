@@ -4,6 +4,7 @@ import os
 import pty
 import re
 import select
+import shutil
 import signal
 import ssl
 import subprocess  # nosec B404
@@ -333,6 +334,27 @@ async def _push_task_status(websocket, task_id: str, status: TaskStatus):
         pass
 
 
+def _sweep_stale_tmp_dirs(root: str = "/tmp") -> int:
+    """LIFE-10 (t_3075ffff): killed runs leak per-task temp dirs because no
+    finally runs on SIGKILL; sweep leftovers at worker startup. Safe here:
+    /tmp is container-local and nothing runs yet. simc_reports is the report
+    staging dir (re-populated per run), kept."""
+    removed = 0
+    try:
+        names = os.listdir(root)
+    except OSError:
+        return 0
+    for name in names:
+        if name == "simc_reports":
+            continue
+        if name.startswith("worker_sim_") or name.startswith("simc_"):
+            path = os.path.join(root, name)
+            if os.path.isdir(path):
+                shutil.rmtree(path, ignore_errors=True)
+                removed += 1
+    return removed
+
+
 async def _execute_task(session, task_id: str, input_file: str, websocket) -> tuple:
     """Execute a single task attempt. Returns (exit_code, report_file, error)."""
     simc_engine = engine_path()
@@ -372,7 +394,9 @@ async def _execute_task(session, task_id: str, input_file: str, websocket) -> tu
         log_str = "\n".join(active_process.full_log_buffer)
         report_match = re.search(r"report_.*\.html", log_str)
         report_file = report_match.group(0) if report_match else None
-        tmp_match = re.search(r"Temporary files are in (\/tmp\/simc_[^\s\n]+)", log_str)
+        # Character class (not [^\s\n]+): tmp_dir is rmtree'd below, so a
+        # spoofed log line must not be able to smuggle path separators.
+        tmp_match = re.search(r"Temporary files are in (\/tmp\/simc_[A-Za-z0-9_]+)", log_str)
         tmp_dir = tmp_match.group(1) if tmp_match else None
 
         if tmp_dir or report_file:
@@ -385,6 +409,9 @@ async def _execute_task(session, task_id: str, input_file: str, websocket) -> tu
                     if os.path.exists(report_path):
                         zf.write(report_path, report_file)
             await upload_file(session, task_id, zip_path)
+            if tmp_dir:
+                # LIFE-10: engine temp dir is fully captured in the zip.
+                shutil.rmtree(tmp_dir, ignore_errors=True)
 
         return exit_code, report_file, None
     finally:
@@ -397,6 +424,10 @@ async def _execute_task(session, task_id: str, input_file: str, websocket) -> tu
 async def run_worker():
     logger.info(f"Starting Worker: {WORKER_NAME}")
     logger.info(f"Master URL: {MASTER_URL}")
+
+    swept = _sweep_stale_tmp_dirs()
+    if swept:
+        logger.info("Startup sweep removed %d stale /tmp task dirs (LIFE-10)", swept)
 
     active_process = None
     active_task_id = None
@@ -513,6 +544,7 @@ async def run_worker():
                                                         "retry_count": 0,
                                                         "max_retries": MAX_RETRY_COUNT,
                                                     }))
+                                                    shutil.rmtree(workspace, ignore_errors=True)
                                                     active_task_id = None
                                                     continue
                                             else:
@@ -627,6 +659,11 @@ async def run_worker():
                                                 "max_retries": task_status.max_retries,
                                             }))
                                             active_task_id = None
+                                            # LIFE-10: task is terminal here (done/stopped/
+                                            # retries exhausted) — drop the per-task workspace.
+                                            # The reconnect path leaks it until the next start
+                                            # of this task or the startup sweep; accepted.
+                                            shutil.rmtree(workspace, ignore_errors=True)
 
                                         elif data["type"] == "update":
                                             task_id = data["task_id"]

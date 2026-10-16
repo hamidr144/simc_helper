@@ -13,6 +13,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 from worker import (
     TaskStatus,
     _calculate_retry_backoff,
+    _sweep_stale_tmp_dirs,
     download_input_file,
     get_or_create_task_status,
     process_logs,
@@ -21,6 +22,15 @@ from worker import (
     task_status_store,
     worker_subcommand,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_host_tmp_sweep(monkeypatch):
+    """LIFE-10: run_worker sweeps the real /tmp at startup; keep unit tests
+    off the host filesystem. Tests that need the sweep call the function
+    directly (the top-level import above binds the original)."""
+    import worker as _w
+    monkeypatch.setattr(_w, "_sweep_stale_tmp_dirs", lambda root="/tmp": 0)
 
 
 def test_simc_update_due_on_startup_and_after_interval():
@@ -182,12 +192,15 @@ async def test_worker_start_command():
          patch("worker.asyncio.sleep", side_effect=[None, Exception("Stop")]), \
          patch("worker.download_input_file", return_value=True), \
          patch("worker.os.makedirs"), \
+         patch("worker.shutil.rmtree") as mock_rmtree, \
          patch("worker._execute_task", side_effect=fake_execute) as mock_execute:
         mock_connect.return_value.__aenter__.return_value = mock_ws
         try: await run_worker()
         except: pass
         assert mock_execute.called
         assert mock_execute.call_count >= 1
+        # LIFE-10: terminal task must drop its /tmp/worker_sim_<id> workspace.
+        mock_rmtree.assert_any_call("/tmp/worker_sim_t1", ignore_errors=True)
 
 @pytest.mark.asyncio
 async def test_worker_stop_command():
@@ -455,7 +468,7 @@ def test_execute_task_report_regexes_match_real_simhelper_logs():
         report_match = re.search(r"report_.*\.html", log_str)
         assert report_match is not None, f"no report found in {log_path.name}"
         assert report_match.group(0) == expected_report
-        tmp_match = re.search(r"Temporary files are in (\/tmp\/simc_[^\s\n]+)", log_str)
+        tmp_match = re.search(r"Temporary files are in (\/tmp\/simc_[A-Za-z0-9_]+)", log_str)
         assert tmp_match is not None, f"no tmp dir found in {log_path.name}"
         assert tmp_match.group(1) == expected_tmp
 
@@ -519,3 +532,34 @@ async def test_execute_task_uploads_real_baseline_report(tmp_path, monkeypatch):
     with zipfile.ZipFile(uploads[0][1]) as zf:
         assert report_file in zf.namelist()
         assert zf.read(report_file) == NIGHTLY_BASELINE_REPORT.read_bytes()
+
+
+def test_sweep_stale_tmp_dirs(tmp_path):
+    """LIFE-10 (t_3075ffff): startup sweep removes leaked per-task dirs."""
+    (tmp_path / "worker_sim_t1").mkdir()
+    (tmp_path / "simc_20261016_101029").mkdir()
+    reports = tmp_path / "simc_reports"
+    reports.mkdir()
+    (reports / "report_x.html").write_text("x")
+    (tmp_path / "unrelated").mkdir()
+    (tmp_path / "worker_sim_notadir").write_text("x")
+
+    assert _sweep_stale_tmp_dirs(str(tmp_path)) == 2
+    assert not (tmp_path / "worker_sim_t1").exists()
+    assert not (tmp_path / "simc_20261016_101029").exists()
+    assert (reports / "report_x.html").exists()
+    assert (tmp_path / "unrelated").exists()
+    assert (tmp_path / "worker_sim_notadir").exists()
+    assert _sweep_stale_tmp_dirs(str(tmp_path / "missing")) == 0
+
+
+def test_tmp_dir_regex_rejects_spoofed_paths():
+    """LIFE-10: tmp_dir is rmtree'd, so the regex must not match path escapes."""
+    for spoof in (
+        "/tmp/simc_a/../../../../home/user",
+        "/tmp/simc_../../etc",
+    ):
+        m = re.search(r"Temporary files are in (\/tmp\/simc_[A-Za-z0-9_]+)",
+                      f"Temporary files are in {spoof}")
+        captured = m.group(1) if m else None
+        assert captured is None or "/" not in captured[len("/tmp/simc_"):]
