@@ -325,6 +325,7 @@ async def test_upload_file_direct():
     from worker import upload_file
     mock_session = MagicMock()
     mock_resp = AsyncMock()
+    mock_resp.status = 200
     mock_resp.json.return_value = {"status": "success"}
     mock_session.post.return_value.__aenter__.return_value = mock_resp
     
@@ -338,15 +339,36 @@ async def test_upload_file_direct():
 
 @pytest.mark.asyncio
 async def test_upload_file_error():
+    # LIFE-9 (t_a13e5be8): upload failures must propagate, not return None.
     from worker import upload_file
     mock_session = MagicMock()
     mock_session.post.side_effect = Exception("Upload error")
     with open("fake_error.zip", "w") as f: f.write("data")
     try:
-        res = await upload_file(mock_session, "t1", "fake_error.zip")
-        assert res is None
+        with pytest.raises(Exception, match="Upload error"):
+            await upload_file(mock_session, "t1", "fake_error.zip")
     finally:
         if os.path.exists("fake_error.zip"): os.remove("fake_error.zip")
+
+@pytest.mark.asyncio
+async def test_upload_file_non_200_raises():
+    from worker import upload_file
+    mock_session = MagicMock()
+    mock_resp = AsyncMock()
+    mock_resp.status = 500
+    mock_session.post.return_value.__aenter__.return_value = mock_resp
+    with open("fake_500.zip", "w") as f: f.write("data")
+    try:
+        with pytest.raises(RuntimeError, match="HTTP 500"):
+            await upload_file(mock_session, "t1", "fake_500.zip")
+    finally:
+        if os.path.exists("fake_500.zip"): os.remove("fake_500.zip")
+
+@pytest.mark.asyncio
+async def test_upload_file_missing_file_raises():
+    from worker import upload_file
+    with pytest.raises(FileNotFoundError):
+        await upload_file(MagicMock(), "t1", "does_not_exist.zip")
 
 @pytest.mark.asyncio
 async def test_download_input_file_error():
