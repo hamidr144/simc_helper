@@ -8,6 +8,7 @@ Covers all 5 implementation points from the retry-logic task:
   5. Edge cases and configuration variations
 """
 
+import asyncio
 import json
 import os
 import sys
@@ -611,3 +612,82 @@ class TestEdgeCases:
         assert ts.task_id == "id-preserved"
         d = ts.to_dict()
         assert d["task_id"] == "id-preserved"
+
+
+# ---------------------------------------------------------------------------
+# 7. User Stop must not be retried (t_a0bb3a07, LIFE-1)
+# ---------------------------------------------------------------------------
+
+class TestStopNotRetried:
+    """Regression: Stop was treated as a failure and the retry loop
+    re-started the simulation (worker.py retry loop, LIFE-1)."""
+
+    @pytest.mark.asyncio
+    async def test_execute_task_maps_stopped_to_sentinel(self):
+        """process_logs returning 'stopped' yields STOPPED_EXIT_CODE, not 1."""
+        from types import SimpleNamespace
+        master_fd, slave_fd = os.openpty()
+        proc = SimpleNamespace(pid=os.getpid(), wait=lambda timeout=None: 0)
+        with patch("worker.pty.openpty", return_value=(master_fd, slave_fd)), \
+             patch("worker.subprocess.Popen", return_value=proc), \
+             patch("worker.process_logs", new=AsyncMock(return_value="stopped")):
+            code, report, err = await worker._execute_task(None, "t-map", "/tmp/in.simc", AsyncMock())
+        assert code == worker.STOPPED_EXIT_CODE
+        assert report is None
+        assert err == "Task was stopped by user"
+
+    @pytest.mark.asyncio
+    async def test_stop_is_not_retried(self):
+        """A stopped task runs exactly one attempt and reports stopped:true."""
+        mock_ws = AsyncMock()
+        mock_ws.open = True
+
+        async def fake_execute(session, task_id, input_file, websocket):
+            return worker.STOPPED_EXIT_CODE, None, "Task was stopped by user"
+
+        mock_ws.recv.side_effect = [
+            json.dumps({"type": "start", "task_id": "t-stop", "input_url": "/in"}),
+            Exception("Break"),
+        ]
+
+        with patch("worker.websockets.connect") as mock_connect, \
+             patch("worker.aiohttp.ClientSession"), \
+             patch("worker.should_update_simc", return_value=False), \
+             patch("worker.asyncio.sleep", side_effect=Exception("Stop")), \
+             patch("worker.download_input_file", return_value=True), \
+             patch("worker.os.makedirs"), \
+             patch("worker._execute_task", side_effect=fake_execute) as mock_execute, \
+             patch("worker.MAX_RETRY_COUNT", 3):
+            mock_connect.return_value.__aenter__.return_value = mock_ws
+            try:
+                await run_worker()
+            except Exception:
+                pass
+
+        assert mock_execute.call_count == 1  # no restart after stop
+        assert worker.task_status_store["t-stop"].status == "stopped"
+        done_calls = [
+            c for c in mock_ws.send.call_args_list
+            if json.loads(c.args[0]).get("type") == "done"
+        ]
+        assert len(done_calls) == 1
+        final_msg = json.loads(done_calls[-1].args[0])
+        assert final_msg["stopped"] is True
+        assert final_msg["error"] == "Task was stopped by user"
+        assert final_msg["retry_count"] == 0
+
+    @pytest.mark.asyncio
+    async def test_master_relay_reports_stopped(self):
+        """done{stopped:true} relays as 'Simulation stopped.', not 'failed'."""
+        import web.main as main_mod
+        queue: asyncio.Queue = asyncio.Queue()
+        queue.put_nowait({
+            "type": "done", "task_id": "t-relay",
+            "code": worker.STOPPED_EXIT_CODE,
+            "error": "Task was stopped by user", "stopped": True,
+        })
+        main_mod.manager.task_queues["t-relay"] = queue
+        events = [e async for e in main_mod.simulation_event_generator("t-relay", "w1")]
+        payload = json.loads(events[-1].split("data: ", 1)[1])
+        assert payload["type"] == "error"
+        assert payload["text"] == "Simulation stopped."

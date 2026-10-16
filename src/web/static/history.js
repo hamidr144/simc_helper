@@ -33,7 +33,7 @@ function reportCell(run) {
   if (run.report_url) {
     return `<a class="history-report" href="${escapeHtml(run.report_url)}" target="_blank" rel="noopener">Open report</a>`;
   }
-  if (run.status === 'failed') return '<span class="history-missing">no report</span>';
+  if (run.status === 'failed' || run.status === 'stopped') return '<span class="history-missing">no report</span>';
   return '<span class="history-missing" title="Old runs are pruned automatically">expired</span>';
 }
 

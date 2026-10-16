@@ -2144,8 +2144,13 @@ async def simulation_event_generator(task_id: str, worker_id: str):
                 elif data["type"] == "done":
                     # t_b3b78acd: durable results-history row at the task-done
                     # point (best-effort; never breaks the stream).
-                    _record_run_history(task_id, "success" if data["code"] == 0 else "failed")
-                    if data["code"] == 0:
+                    # t_a0bb3a07 (LIFE-1): a user Stop is reported as stopped,
+                    # not as a failed simulation.
+                    stopped = bool(data.get("stopped"))
+                    _record_run_history(task_id, "stopped" if stopped else ("success" if data["code"] == 0 else "failed"))
+                    if stopped:
+                        yield f"data: {json.dumps({'type': 'error', 'text': 'Simulation stopped.'})}\n\n"
+                    elif data["code"] == 0:
                         yield f"data: {json.dumps({'type': 'done', 'text': 'Simulation finished successfully!', 'report_file': data.get('report_file'), 'task_id': task_id})}\n\n"
                     else:
                         err = data.get("error") or "the SimC process exited with a non-zero code — see the log above"
