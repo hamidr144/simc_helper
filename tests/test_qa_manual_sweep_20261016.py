@@ -201,3 +201,22 @@ def test_life2_master_restart_keeps_run_attribution(auth_on):
         master.task_user_map.pop(task_id, None)
         master.task_meta_map.pop(task_id, None)
         manager.active_workers.pop("w-test", None)
+
+
+def test_life9_worker_upload_failure_must_not_swallow():
+    """BUG LIFE-9: worker.upload_file swallows every exception and returns
+    None (worker.py:145-147) -> artifact loss looks like success."""
+    import asyncio
+    import src.worker as worker_mod
+
+    class _Boom:
+        def __init__(self, *a, **k): raise RuntimeError("disk full")
+
+    old_url = worker_mod.MASTER_URL
+    worker_mod.MASTER_URL = "http://master.invalid"
+    try:
+        with patch.object(worker_mod, "aiohttp", MagicMock(**{"ClientSession": _Boom})):
+            with pytest.raises(Exception):
+                asyncio.run(worker_mod.upload_file(MagicMock(), "t1", "/nonexistent.bin"))
+    finally:
+        worker_mod.MASTER_URL = old_url

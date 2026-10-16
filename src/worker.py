@@ -134,8 +134,11 @@ if WS_URL.startswith("wss://"):
         ssl_context = ssl.create_default_context()
 
 async def upload_file(session, task_id, file_path):
+    # LIFE-9 (t_a13e5be8): failures must propagate — a swallowed upload error
+    # used to report run success with no artifact on master.
+    # _execute_task_with_reconnect turns this into a visible retry/failure.
     if not file_path or not os.path.exists(file_path):
-        return None
+        raise FileNotFoundError(f"Artifact missing, cannot upload: {file_path}")
     file_name = os.path.basename(file_path)
     # Audit MEDIUM-2: cluster secret travels in a header, never in the URL.
     url = f"{MASTER_URL}/api/worker/upload-file?task_id={task_id}&file_name={file_name}"
@@ -146,10 +149,13 @@ async def upload_file(session, task_id, file_path):
             async with session.post(
                 url, data=data, headers={"X-Cluster-Secret": CLUSTER_SECRET}
             ) as resp:
+                if resp.status != 200:
+                    raise RuntimeError(
+                        f"Master rejected upload of {file_name}: HTTP {resp.status}")
                 return await resp.json()
     except Exception as e:
-        logger.info(f"Failed to upload {file_name}: {e}")
-        return None
+        logger.error(f"Failed to upload {file_name}: {e}")
+        raise
 
 async def download_input_file(session, url_path, dest_path):
     url = f"{MASTER_URL}{url_path}"
