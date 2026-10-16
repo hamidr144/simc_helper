@@ -686,8 +686,8 @@ class TestStopNotRetried:
             "code": worker.STOPPED_EXIT_CODE,
             "error": "Task was stopped by user", "stopped": True,
         })
-        main_mod.manager.task_queues["t-relay"] = queue
-        events = [e async for e in main_mod.simulation_event_generator("t-relay", "w1")]
+        main_mod.manager.task_queues["t-relay"] = set()
+        events = [e async for e in main_mod.simulation_event_generator("t-relay", "w1", queue=queue)]
         payload = json.loads(events[-1].split("data: ", 1)[1])
         assert payload["type"] == "error"
         assert payload["text"] == "Simulation stopped."
