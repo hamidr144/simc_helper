@@ -149,7 +149,9 @@ async def upload_file(session, task_id, file_path):
 async def download_input_file(session, url_path, dest_path):
     url = f"{MASTER_URL}{url_path}"
     try:
-        async with session.get(url) as resp:
+        # SEC-14 (t_28df6d81): master gates /inputs behind session-or-cluster;
+        # workers authenticate with the cluster secret like upload-file.
+        async with session.get(url, headers={"X-Cluster-Secret": CLUSTER_SECRET}) as resp:
             if resp.status == 200:
                 with open(dest_path, 'wb') as f:
                     async for chunk in resp.content.iter_chunked(8192):
