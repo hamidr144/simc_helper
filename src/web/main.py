@@ -1787,12 +1787,25 @@ async def parse_addon_text(request: Request, payload: ParseAddonRequest, current
     item strings as ``item_names``); it is empty for exports without it.
     ``warnings`` carries soft WoW: Forever signals that do not block parsing.
     Exports with explicit WoW: Forever markers are rejected with HTTP 400.
+    Text without a class line (not a SimC export at all) is rejected with
+    HTTP 400 "No valid SimC export found".
     """
     lines = payload.addon_text.split('\n')
     if is_forever_export(lines):
         raise HTTPException(status_code=400, detail=FOREVER_EXPORT_MESSAGE)
     warnings = forever_export_warnings(lines)
     base_profile, equipped_gear, items_by_slot, item_names, char_name, char_class, item_upgrades = parse_addon_lines(lines)
+    if char_class == "Unknown":
+        # t_0cb6af81 (E2E-9/LIFE-8): every real /simc export starts with a
+        # class line; without one the parse is an Unknown/Unknown dead end.
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No valid SimC export found. Paste the full text from the "
+                'in-game /simc export window (it starts with a line like '
+                'paladin="Name").'
+            ),
+        )
     # t_b3b78acd: remember where this user's character came from so the
     # eventual run_history row can say "addon".
     run_meta_by_user.setdefault(_resolved_user_id(request, current_user), {}).update(

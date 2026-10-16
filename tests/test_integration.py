@@ -165,15 +165,13 @@ class TestParseAddonE2E:
         assert data["item_names"].get("id=100300") == "Neck of Valor"
 
     def test_parse_addon_with_empty_text(self, client):
-        """Parsing empty addon text should return defaults."""
+        """Empty addon text is not a SimC export and gets a 400 (t_0cb6af81)."""
         response = client.post(
             "/api/parse-addon",
             json={"addon_text": ""},
         )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["char_name"] == "Unknown"
-        assert data["char_class"] == "Unknown"
+        assert response.status_code == 400
+        assert "No valid SimC export found" in response.json()["detail"]
 
     def test_parse_addon_invalid_payload_returns_422(self, client):
         """Sending non-dict body should return 422 validation error."""

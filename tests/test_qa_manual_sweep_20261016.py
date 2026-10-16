@@ -228,3 +228,13 @@ def test_sec1b_get_results_latest_scoped_to_caller(auth_on, tmp_path, monkeypatc
     os.utime(victim_report, (time.time() + 10, time.time() + 10))
     r = c.get("/api/get-results", params={"task_id": "latest"})
     assert "OwnChar" in r.text and "VictimChar" not in r.text, r.text[:160]
+
+def test_life8_parse_garbage_must_be_rejected(auth_on):
+    """BUG LIFE-8/E2E-9: garbage addon text must get a 4xx, not 200 with an
+    empty Unknown/Unknown parse."""
+    c = _login(f"life8-{uuid.uuid4().hex[:6]}")
+    r = c.post("/api/parse-addon", json={
+        "addon_text": "this is not a simc export\njust some words\n12345\n",
+        "character_name": "x"})
+    assert r.status_code >= 400, (
+        f"garbage parsed with HTTP {r.status_code}: {r.text[:120]}")
