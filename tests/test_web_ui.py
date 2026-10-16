@@ -68,7 +68,7 @@ def test_web_ui_styles_include_responsive_dense_layout():
     assert "grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr)" in css
     assert "position: sticky" in css
     assert "@media (max-width: 900px)" in css
-    assert "--accent-color: #7170ff" in css
+    assert "--accent: #5d5bf0" in css  # t_2ab8f3be: fill/text accent split
 
 
 def test_web_ui_applies_linear_design_system_tokens():
@@ -76,13 +76,13 @@ def test_web_ui_applies_linear_design_system_tokens():
     assert response.status_code == 200
     css = response.text
 
-    assert "--panel-bg: rgba(255, 255, 255, 0.02)" in css
-    assert "--surface-bg: #191a1b" in css
+    assert "--surface-panel: #1d1e20" in css
+    assert "--surface-bg: #131415" in css
     assert "--radius-card: 12px" in css
     assert "--radius-control: 6px" in css
     assert "font-weight: 510" in css
-    assert "background: rgba(255, 255, 255, 0.02)" in css
-    assert "--shadow-panel: inset 0 0 12px rgba(0, 0, 0, 0.20)" in css
+    assert "background: var(--surface-panel)" in css
+    assert "--border-hairline: rgba(255, 255, 255, 0.10)" in css
 
 
 def test_gear_selection_uses_midnight_track_rank_upgrades():
@@ -117,7 +117,7 @@ def test_gear_selection_uses_compact_icon_tiles_instead_of_text_rows():
     js = js_response.text
     css = css_response.text
 
-    assert "iconizeLinks: true" in html
+    assert "iconizeLinks: false" in html  # t_2ab8f3be: no DOM mutation of our links
     assert "createWowheadIconLink" in js
     assert "slot-items" in js
     assert "item-option" in js
@@ -295,7 +295,7 @@ def test_gear_selection_hydrates_exact_grades_from_wowhead():
     js = response.text
 
     assert "hydrateWowheadUpgrades(parsedData.items_by_slot);" in js
-    assert "fetch('api/wowhead-upgrades'" in js
+    assert "apiFetch('api/wowhead-upgrades'" in js  # t_2ab8f3be: 401-banner wrapper
     assert "(gearUpgrades[slot] ||= {})[item] = upgrade;" in js
     assert "renderGear();" in js
 
@@ -373,7 +373,7 @@ def test_current_gear_is_ready_to_run_and_selected_enhancements_are_checked():
     assert "equippedEnchants[slot].has(id)" in js
     assert "equippedGems.has(id)" in js
     assert "void generateInput(true);" in js
-    assert "includes('heliotrope')" in js
+    assert "PVP_META_NAME_MATCH" in js
 
 
 def test_report_gear_summary_shows_only_slot_and_item_link():
@@ -396,7 +396,7 @@ def test_report_separates_baseline_and_only_lists_combo_differences():
     assert "Baseline Gear" in js
     assert "selectedItems" in js
     assert "estimateCombinations" in js
-    assert "window.location.assign(`results?task_id=" in js
+    assert "results?task_id=" in js  # t_2ab8f3be: success card link, no auto-redirect
 
 
 def test_results_page_is_a_dedicated_user_friendly_view():
@@ -415,7 +415,7 @@ def test_successful_simulation_exposes_uploaded_report_link():
     # t_c968bf8d: durable reports live under /reports/<user_id>/<task_id>/, so
     # the frontend resolves the URL via /api/report-url instead of building it.
     assert "api/report-url?task_id=" in js
-    assert '>Open report</a>' in js
+    assert '>Open full report</a>' in js
 
 
 # ---------------------------------------------------------------------------
@@ -449,7 +449,7 @@ def test_realm_dropdown_markup_starts_hidden_and_disabled():
 def test_app_fetches_static_realms_json_and_groups_by_region():
     js = client.get("/static/app.js").text
 
-    assert "fetch('static/realms.json')" in js
+    assert "apiFetch('static/realms.json')" in js  # t_2ab8f3be: 401-banner wrapper
     # EU/US optgroups, region-qualified keys (Kel'thuzad exists in both).
     assert "createElement('optgroup')" in js
     assert "const labels = { eu: 'EU', us: 'US' }" in js
