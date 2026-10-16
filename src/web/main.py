@@ -2171,7 +2171,9 @@ async def run_simulation(request: Request, worker_id: Optional[str] = Query(None
     unauthenticated callers get HTTP 401 — dev mode never bypasses this.
     **Query Parameters:**
       - ``worker_id``: Optional worker ID to target (auto-selected if omitted)
-      - ``input_id``: Optional input file ID (defaults to user's latest)
+      - ``input_id``: Optional input file ID (defaults to the caller's own
+        latest generated input; HTTP 422 if the caller has none — never
+        another user's input, SEC-6 t_2447fdbd)
 
     **Rate Limiting:** 300-second cooldown per user.
 
@@ -2190,6 +2192,18 @@ async def run_simulation(request: Request, worker_id: Optional[str] = Query(None
     target_worker = worker_id if worker_id and worker_id in manager.active_workers and manager.active_workers[worker_id].status == "Idle" else manager.get_idle_worker()
     if not target_worker: raise HTTPException(status_code=503, detail="No idle workers available")
 
+    # SEC-6 (t_2447fdbd): resolve the input BEFORE any state is consumed and
+    # only from the caller's own record — the old global "latest" fallback let
+    # one user run another user's generated profile.
+    if input_id:
+        validate_safe_id(input_id, "input id")
+        input_record = {"input_url": f"/inputs/{input_id}.simc"}
+    else:
+        input_record = generated_inputs_by_user.get(user_id)
+    if not input_record:
+        raise HTTPException(status_code=422, detail="No generated input for this user; generate a profile first or pass input_id")
+    input_url = input_record["input_url"]
+
     logger.info(f"Starting sim for {user_id} on {target_worker}")
     user_last_sim_time[user_id] = now
     session_set(user_id, now)
@@ -2200,13 +2214,6 @@ async def run_simulation(request: Request, worker_id: Optional[str] = Query(None
     # hook consumes (and pops) it when writing the run_history row.
     task_meta_map[task_id] = dict(run_meta_by_user.get(user_id) or {})
     try:
-        input_record = None
-        if input_id:
-            validate_safe_id(input_id, "input id")
-            input_record = {"input_url": f"/inputs/{input_id}.simc"}
-        else:
-            input_record = generated_inputs_by_user.get(user_id) or generated_inputs_by_user.get("latest")
-        input_url = input_record["input_url"] if input_record else "/inputs/char_simc_addon.txt"
         await manager.send_task(target_worker, {"type": "start", "task_id": task_id, "input_url": input_url})
         manager.active_workers[target_worker].status, manager.active_workers[target_worker].current_task, manager.active_workers[target_worker].user_id = "Busy", task_id, user_id
     except Exception:

@@ -79,7 +79,8 @@ def _drive_run(client: TestClient, worker_ws, *, report_file=None, code=0):
     Returns ``(task_id, worker_id)`` after the SSE stream has observed the
     terminal event, i.e. after the run_history insert hook has fired.
     """
-    resp = client.post("/api/run-simulation")
+    # SEC-6: explicit input_id (the fake ws worker never fetches it)
+    resp = client.post("/api/run-simulation", params={"input_id": "acc-drive"})
     assert resp.status_code == 200, resp.text
     task_id, worker_id = resp.json()["task_id"], resp.json()["worker_id"]
 
@@ -332,7 +333,8 @@ def test_restart_persistence_two_process_history_link_serves_report(tmp_path):
             f"ws://127.0.0.1:{port}/ws/worker?name=acc",
             additional_headers={"X-Cluster-Secret": ACC_SECRET},
         ) as ws:
-            r = client.post("/api/run-simulation")
+            # SEC-6: explicit input_id (the fake ws worker never fetches it)
+            r = client.post("/api/run-simulation", params={"input_id": "acc-live"})
             assert r.status_code == 200, r.text
             task_id, worker_id = r.json()["task_id"], r.json()["worker_id"]
 
