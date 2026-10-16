@@ -84,6 +84,10 @@ from src.core.armory import (
 )
 from src.core.circuit_breaker import CircuitBreaker
 from src.core.db import (
+    auth_session_create,
+    auth_session_delete,
+    auth_session_purge_expired,
+    auth_session_user,
     init_db,
     input_set,
     load_inputs,
@@ -96,7 +100,6 @@ from src.core.db import (
     session_set,
     user_create,
     user_get,
-    user_get_by_id,
     user_set_password_hash,
 )
 from src.core.env import get_bind_host, load_cluster_secret, require_admin_token
@@ -718,12 +721,38 @@ def authentication_enabled() -> bool:
     return os.environ.get("AUTHENTICATION_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"}
 
 
+SESSION_TTL_SECONDS = 3600 * 24 * 7  # must match the session cookie max_age
+
+
+def _session_user(request: Request) -> Optional[Dict[str, Any]]:
+    """Resolve the ``session_id`` cookie to its user record, or None.
+
+    SEC-7 (t_0e328148): the cookie is an opaque token issued at
+    login/register and recorded in the ``auth_sessions`` table — the
+    server-side session store. Deleting the row (logout, expiry, account
+    deletion) invalidates the cookie immediately, so a copied cookie dies
+    with its session instead of being valid forever.
+    """
+    token = request.cookies.get("session_id")
+    if not token:
+        return None
+    return auth_session_user(token, time.time())
+
+
+def _issue_session(user_id: str) -> str:
+    """Create an opaque session token (SEC-7) and record it server-side."""
+    token = uuid.uuid4().hex
+    now = time.time()
+    auth_session_purge_expired(now)
+    auth_session_create(token, user_id, now + SESSION_TTL_SECONDS)
+    return token
+
+
 def require_session(request: Request) -> str:
     """FastAPI dependency: require a valid server-side session on an endpoint.
 
-    The ``session_id`` cookie set at login must name an existing user (the
-    ``user_sessions`` table is only a cooldown tracker and is purged
-    regularly, so validity is checked against the ``users`` table).
+    The ``session_id`` cookie must be a token issued at login/register and
+    still present (unexpired) in ``auth_sessions`` (SEC-7).
 
     Security policy (P0 audit F1):
     - ``SIMC_HELPER_DEV_MODE`` must NEVER bypass this gate — dev mode only
@@ -736,26 +765,24 @@ def require_session(request: Request) -> str:
     """
     if not authentication_enabled():
         return "anonymous"
-    session_id = request.cookies.get("session_id")
-    if not session_id:
+    if not request.cookies.get("session_id"):
         raise HTTPException(status_code=401, detail="Authentication required")
-    user = user_get_by_id(session_id)
+    user = _session_user(request)
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
     return user["user_id"]
 
 
 def _page_session_valid(request: Request) -> bool:
-    """True when the request's ``session_id`` cookie names an existing user.
+    """True when the request carries a valid server-side session token.
 
-    Page gates must validate against the ``users`` table, exactly like
-    ``require_session`` does for the API. The ``user_sessions`` table is
-    only sim-cooldown state and is purged every ``SIM_COOLDOWN_SECONDS``
-    (300s) — trusting it for page auth silently logged users out ~5
-    minutes after login (t_ef8682a4).
+    Page gates use exactly the same rule as ``require_session`` (SEC-7):
+    the opaque token must exist unexpired in ``auth_sessions``. The
+    ``user_sessions`` table is only sim-cooldown state and is purged every
+    ``SIM_COOLDOWN_SECONDS`` (300s) — trusting it for page auth silently
+    logged users out ~5 minutes after login (t_ef8682a4).
     """
-    session_id = request.cookies.get("session_id")
-    return bool(session_id) and user_get_by_id(session_id) is not None
+    return _session_user(request) is not None
 
 
 def _dev_mode_enabled() -> bool:
@@ -884,14 +911,12 @@ async def history_page(request: Request):
     """Run-history page (t_d34ced81).
 
     Gate note: unlike the older page routes above, the session cookie is
-    validated against the ``users`` table — the same rule as
-    ``require_session`` — because ``session_get`` reads the cooldown table
-    that gets purged, which would bounce logged-in users to /login.
+    validated by the shared session gate (``_page_session_valid``, SEC-7) —
+    the cooldown table gets purged and must not back auth decisions.
     """
     if not authentication_enabled() or "pytest" in sys.modules or os.environ.get("SIMC_HELPER_DEV_MODE") == "1":
         return FileResponse(HISTORY_PAGE)
-    session_id = request.cookies.get("session_id")
-    if session_id and user_get_by_id(session_id) is not None:
+    if _page_session_valid(request):
         return FileResponse(HISTORY_PAGE)
     return RedirectResponse(url="login", status_code=303)
 
@@ -942,12 +967,13 @@ async def register(request: Request, username: str = Form(...), password: str = 
 
     password_hash = hash_password(password)
     user_id = user_create(username, password_hash)
+    token = _issue_session(user_id)
     # Browser flow (t_e4d97db9): land on /dashboard logged in, exactly like
     # a successful /login, instead of dumping raw JSON on the user.
     redirect_resp = RedirectResponse(url="dashboard", status_code=303)
     redirect_resp.set_cookie(
         key="session_id",
-        value=user_id,
+        value=token,
         httponly=True,
         max_age=3600 * 24 * 7,
         samesite="lax",
@@ -983,10 +1009,11 @@ async def login(request: Request, response: Response, username: str = Form(...),
     # made every run started within the cooldown window after login return a
     # bogus 429 for users who had never run a simulation.
 
+    token = _issue_session(user["user_id"])
     redirect_resp = RedirectResponse(url="dashboard", status_code=303)
     redirect_resp.set_cookie(
         key="session_id", 
-        value=user["user_id"], 
+        value=token, 
         httponly=True, 
         max_age=3600 * 24 * 7, 
         samesite="lax",
@@ -996,7 +1023,12 @@ async def login(request: Request, response: Response, username: str = Form(...),
 
 
 @app.get("/logout")
-async def logout():
+async def logout(request: Request):
+    # SEC-7 (t_0e328148): revoke the session server-side, not just the
+    # browser copy of the cookie — a captured cookie must die with logout.
+    token = request.cookies.get("session_id")
+    if token:
+        auth_session_delete(token)
     redirect_resp = RedirectResponse(url="./", status_code=303)
     redirect_resp.delete_cookie("session_id")
     return redirect_resp

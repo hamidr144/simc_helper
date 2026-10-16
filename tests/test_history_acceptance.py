@@ -68,7 +68,7 @@ def _authed_client(user_id: str) -> TestClient:
     # conftest kill switch -> require_session yields "anonymous"; the user_id
     # cookie then carries the identity through _resolved_user_id, same rule
     # the write hook used to stamp task ownership.
-    client.cookies.set("session_id", user_id)
+    client.cookies.set("session_id", master._issue_session(user_id))
     client.cookies.set("user_id", user_id)
     return client
 
@@ -308,14 +308,14 @@ def test_restart_persistence_two_process_history_link_serves_report(tmp_path):
         client = httpx.Client(base_url=url, timeout=15)
 
         # register + login for real (auth is on by default in the subprocess)
-        # t_e4d97db9: register now redirects like login; user_id rides in the
-        # session_id cookie.
+        # t_e4d97db9: register now redirects like login; SEC-7 (t_0e328148):
+        # session_id is an opaque token, the user is resolved via auth_sessions.
         username = f"restart-{uuid.uuid4().hex[:8]}"
         r = client.post("/register", data={"username": username, "password": "***"},
                         follow_redirects=False)
         assert r.status_code == 303, r.text
-        user_id = client.cookies.get("session_id")
-        assert user_id
+        session_token = client.cookies.get("session_id")
+        assert session_token
         r = client.post("/login", data={"username": username, "password": "***"},
                         follow_redirects=False)
         assert r.status_code == 303
@@ -324,6 +324,9 @@ def test_restart_persistence_two_process_history_link_serves_report(tmp_path):
         # login would 429 run-simulation for 30s. Rewind the cooldown row
         # directly; the xfail test below pins the bug itself.
         db = sqlite3.connect(os.path.join(base_dir, "data", "master", "simc_helper.sqlite"))
+        user_id = db.execute(
+            "SELECT user_id FROM auth_sessions WHERE token = ?", (session_token,)
+        ).fetchone()[0]
         db.execute("UPDATE user_sessions SET last_sim_time = 0 WHERE user_id = ?", (user_id,))
         db.commit()
         db.close()
@@ -413,7 +416,7 @@ def test_history_reads_work_without_cooldown_rows(history_user, monkeypatch):
     assert master.session_get(history_user) is None  # no cooldown row exists
 
     client = TestClient(app)
-    client.cookies.set("session_id", history_user)
+    client.cookies.set("session_id", master._issue_session(history_user))
 
     assert client.get("/history").status_code == 200
     resp = client.get("/api/history")

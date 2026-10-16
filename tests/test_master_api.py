@@ -933,7 +933,7 @@ def test_valid_session_passes_gate_run_simulation(monkeypatch):
     user_id = user_create(username, security.hash_password("pw-not-used"))
     monkeypatch.setattr(master.manager, "get_idle_worker", lambda: None)
     authed = TestClient(app)
-    authed.cookies.set("session_id", user_id)
+    authed.cookies.set("session_id", master._issue_session(user_id))
     response = authed.post("/api/run-simulation")
     # Past the auth gate; fails later only because no workers are connected.
     assert response.status_code == 503
@@ -1043,7 +1043,13 @@ def test_register_form_redirects_and_logs_in(monkeypatch):
     )
     assert response.status_code == 303
     assert response.headers["location"] == "dashboard"
-    assert anon.cookies.get("session_id") == user_get(username)["user_id"]
+    # SEC-7 (t_0e328148): the cookie is an opaque token, not the user_id;
+    # it must resolve to the new user through the server-side session store.
+    from src.core.db import auth_session_user
+    token = anon.cookies.get("session_id")
+    assert token
+    resolved = auth_session_user(token, time.time())
+    assert resolved and resolved["user_id"] == user_get(username)["user_id"]
     assert anon.get("/dashboard").status_code == 200
     # The issued session passes the API gate, same as login's does.
     gated = anon.post("/api/parse-addon", json={"addon_text": "paladin=Test\nhead=id=123"})
@@ -1158,7 +1164,7 @@ def test_login_form_error_redirects_with_error_param(monkeypatch):
 
 def _authed_client(user_id):
     authed = TestClient(app)
-    authed.cookies.set("session_id", user_id)
+    authed.cookies.set("session_id", master._issue_session(user_id))
     return authed
 
 
@@ -1382,7 +1388,7 @@ def test_dashboard_survives_cooldown_purge(monkeypatch):
 
 
 def test_page_gates_reject_unknown_session_cookie(monkeypatch):
-    """The users-table check must still bounce forged/stale cookies."""
+    """The session-store check must still bounce forged/stale cookies."""
     _pages_under_auth(monkeypatch)
     anon = TestClient(app)
     anon.cookies.set("session_id", "user-id-that-does-not-exist")
