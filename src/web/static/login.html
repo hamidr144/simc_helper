@@ -86,6 +86,7 @@
       <h1>SimC Helper</h1>
       <p>Log in to access your simulation workspace</p>
     </div>
+    <div class="error-panel" id="form-error" hidden></div>
     <form action="login" method="post">
       <div class="form-group">
         <label for="username">Username</label>
@@ -101,5 +102,15 @@
       <a href="register">Create an account</a>
     </div>
   </div>
+  <script>
+    // t_6f351b30: show the error message the backend 303-redirects here as
+    // ?error=<msg>. textContent (not innerHTML) keeps it XSS-safe.
+    const formError = new URLSearchParams(location.search).get("error");
+    if (formError) {
+      const el = document.getElementById("form-error");
+      el.textContent = formError;
+      el.hidden = false;
+    }
+  </script>
 </body>
 </html>
