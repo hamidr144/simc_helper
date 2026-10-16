@@ -607,7 +607,7 @@ class TestRealNightlyReportResultsE2E:
             assert by_name["Hamidriel"]["dps"] == 7865
             assert by_name["Hamidriel_wrist_0"]["dps"] == 7887
             assert by_name["Hamidriel_neck_1"]["dps"] == 7822
-            assert by_name["Fluffy_Pillow"]["dps"] == 0
+            assert "Fluffy_Pillow" not in by_name  # 0-dps pet filtered (E2E-7)
             head = by_name["Hamidriel"]["gear"]["head"]
             assert head.startswith("id=249961")
             assert "enchant_id=8017" in head
