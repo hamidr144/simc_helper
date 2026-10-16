@@ -980,9 +980,41 @@ def test_register_stores_pbkdf2_hash(monkeypatch):
     master._registrations.reset()
     username = f"reg-{uuid.uuid4().hex[:8]}"
     anon = TestClient(app)
-    response = anon.post("/register", data={"username": username, "password": "pw-123456"})
-    assert response.status_code == 200
+    response = anon.post(
+        "/register", data={"username": username, "password": "pw-123456"}, follow_redirects=False
+    )
+    assert response.status_code == 303
     assert user_get(username)["password_hash"].startswith("pbkdf2_sha256$")
+    master._registrations.reset()
+
+
+def test_register_form_redirects_and_logs_in(monkeypatch):
+    """t_e4d97db9: browser registration flow — GET page, 303 + session cookie,
+    duplicate username still errors."""
+    _auth_on(monkeypatch)
+    master._registrations.reset()
+    username = f"flow-{uuid.uuid4().hex[:8]}"
+    anon = TestClient(app)
+
+    page = anon.get("/register")
+    assert page.status_code == 200
+    assert 'action="/register"' in page.text
+
+    response = anon.post(
+        "/register", data={"username": username, "password": "pw-123456"}, follow_redirects=False
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/dashboard"
+    assert anon.cookies.get("session_id") == user_get(username)["user_id"]
+    assert anon.get("/dashboard").status_code == 200
+    # The issued session passes the API gate, same as login's does.
+    gated = anon.post("/api/parse-addon", json={"addon_text": "paladin=Test\nhead=id=123"})
+    assert gated.status_code == 200
+
+    dup = TestClient(app).post(
+        "/register", data={"username": username, "password": "pw-123456"}
+    )
+    assert dup.status_code == 400
     master._registrations.reset()
 
 

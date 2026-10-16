@@ -20,6 +20,7 @@ server.log
 *.html
 !src/web/static/app.html
 !src/web/static/login.html
+!src/web/static/register.html
 !src/web/static/index.html
 !tests/fixtures/*.html
 *.simc
