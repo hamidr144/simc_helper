@@ -66,3 +66,24 @@ def test_sec1_get_results_requires_session(auth_on):
     r = c.get("/api/get-results", params={"task_id": "latest"})
     assert r.status_code == 401, f"unauthenticated get-results returned {r.status_code}"
 
+
+def test_sec5_sec14_static_mounts_require_session(auth_on):
+    """BUG SEC-5/SEC-14: /reports/ and /inputs/ mounts must not serve files
+    to unauthenticated callers (401/403, not 404/200)."""
+    c = TestClient(app)
+    r = c.get("/inputs/char_simc_addon.txt")
+    assert r.status_code in (401, 403), f"unauthenticated /inputs returned {r.status_code}"
+    r = c.get("/reports/deadbeef/report.html")
+    assert r.status_code in (401, 403), f"unauthenticated /reports returned {r.status_code}"
+
+    # The fix must not over-block: a logged-in browser and a cluster worker
+    # (X-Cluster-Secret, no cookie) still get past the gate (404 is fine —
+    # the file need not exist; 401/403 means the gate is broken).
+    a = _login(f"sec5-{uuid.uuid4().hex[:6]}")
+    assert a.get("/reports/deadbeef/report.html").status_code not in (401, 403)
+    assert a.get("/inputs/char_simc_addon.txt").status_code not in (401, 403)
+    if master.CLUSTER_SECRET:
+        r = c.get("/inputs/char_simc_addon.txt",
+                  headers={"X-Cluster-Secret": master.CLUSTER_SECRET})
+        assert r.status_code not in (401, 403), "worker cluster-secret gate broken"
+

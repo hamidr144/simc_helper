@@ -651,7 +651,18 @@ REPORTS_DIR = os.environ.get("REPORTS_DIR") or os.path.join(BASE_DIR, "data", "r
 # Per-user retention cap: the oldest run directories are pruned on insert.
 REPORT_RETENTION = int(os.environ.get("REPORT_RETENTION", "50"))
 os.makedirs(REPORTS_DIR, exist_ok=True)
-app.mount("/reports", StaticFiles(directory=REPORTS_DIR), name="reports")
+class _SessionStaticFiles(StaticFiles):
+    """SEC-5 (t_28df6d81): reports are per-user sim output, so the mount
+    demands the same session the API endpoints demand (require_session is
+    resolved at request time; the AUTHENTICATION_ENABLED kill switch still
+    bypasses it, returning "anonymous")."""
+
+    async def get_response(self, path: str, scope):
+        require_session(Request(scope))
+        return await super().get_response(path, scope)
+
+
+app.mount("/reports", _SessionStaticFiles(directory=REPORTS_DIR), name="reports")
 
 # Register middlewares for request ID and structured logging
 app.add_middleware(RequestIDMiddleware)
@@ -789,6 +800,14 @@ def _cluster_secret_ok(header_secret: Optional[str], query_secret: Optional[str]
     if not candidate:
         return False
     return hmac.compare_digest(candidate, CLUSTER_SECRET)
+
+
+def require_session_or_cluster(request: Request) -> str:
+    """SEC-14 (t_28df6d81): gate a resource behind a browser session OR the
+    cluster secret — workers fetch generated inputs without cookies."""
+    if _cluster_secret_ok(request.headers.get("X-Cluster-Secret"), None):
+        return "cluster"
+    return require_session(request)
 
 
 def _require_own_session(user_id: str, current_user: str) -> None:
@@ -2382,7 +2401,7 @@ async def get_history_run(
 
 
 @app.get("/inputs/{file_name}")
-async def get_input_file(file_name: str):
+async def get_input_file(file_name: str, _: str = Depends(require_session_or_cluster)):
     from fastapi.responses import FileResponse
 
     if file_name == "char_simc_addon.txt":
