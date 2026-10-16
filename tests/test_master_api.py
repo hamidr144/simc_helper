@@ -758,9 +758,9 @@ def test_input_serving_allows_generated_simc_file_only():
     assert blocked.status_code == 404
 
 def test_parse_addon_edge_cases():
-    # Empty text
+    # Empty text is not a SimC export (t_0cb6af81)
     response = client.post("/api/parse-addon", json={"addon_text": ""})
-    assert response.status_code == 200
+    assert response.status_code == 400
     
     # No items
     response = client.post("/api/parse-addon", json={"addon_text": "paladin=Test"})
