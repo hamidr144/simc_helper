@@ -736,13 +736,13 @@ def test_api_get_results_nightly_report_format():
     response = client.get(f"/api/get-results?task_id={task_id}")
     assert response.status_code == 200
     results = response.json()["results"]
-    assert len(results) == 3
+    assert len(results) == 2
     by_name = {r["name"]: r for r in results}
     assert by_name["Hamidriel"]["dps"] == 18820
     assert by_name["Hamidriel_back_12"]["dps"] == 19872
-    assert by_name["Fluffy_Pillow"]["dps"] == 0
-    # Non-player headers (Table of Contents, apm-summary) are not results.
-    assert set(by_name) == {"Hamidriel", "Hamidriel_back_12", "Fluffy_Pillow"}
+    # Non-player headers (Table of Contents, apm-summary) are not results,
+    # and the 0-dps pet/utility section is filtered (E2E-7).
+    assert set(by_name) == {"Hamidriel", "Hamidriel_back_12"}
     head = by_name["Hamidriel"]["gear"]["head"]
     assert head.startswith("id=271465")
     assert "enchant_id=8017" in head

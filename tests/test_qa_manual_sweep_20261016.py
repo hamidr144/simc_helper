@@ -370,3 +370,20 @@ def test_life9_worker_upload_failure_must_not_swallow():
                 asyncio.run(worker_mod.upload_file(MagicMock(), "t1", "/nonexistent.bin"))
     finally:
         worker_mod.MASTER_URL = old_url
+
+# ---------------------------------------------------------------- E2E-7
+
+def test_e2e7_zero_dps_pet_profiles_excluded_from_results(auth_on):
+    """BUG E2E-7: nightly reports emit pet/utility profiles (e.g.
+    Fluffy_Pillow) as player sections with 0 dps; parse_report_results
+    returns them and the results page ranks them as real alternatives."""
+    html = (
+        '<h2 id="player1toggle" class="toggle"">QASweep&#160;:&#160;190784 dps</h2>'
+        '<div class="player-section gear"></div>'
+        '<h2 id="player-1toggle" class="toggle"">Fluffy_Pillow&#160;:&#160;0 dps</h2>'
+        '<div class="player-section gear"></div>'
+    )
+    results = master.parse_report_results(html)
+    names = [r["name"] for r in results]
+    assert "Fluffy_Pillow" not in names, (
+        f"0-dps pet profile surfaced as alternative: {names}")

@@ -2380,6 +2380,10 @@ def parse_report_results(html_content: str) -> list:
         if name == "Raid":
             continue
         dps = int(float(m.group(2).replace(',', '')))
+        # Nightly reports emit pet/utility profiles (e.g. Fluffy_Pillow) as
+        # player sections with 0 dps; they are not real alternatives (E2E-7).
+        if dps == 0:
+            continue
         gear = {}
         gt_match = re.search(r'<div class="player-section gear">.*?<table[^>]*>(.*?)</table>', section, re.DOTALL)
         if gt_match:
