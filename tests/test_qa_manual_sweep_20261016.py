@@ -82,6 +82,15 @@ def test_sec3_report_url_requires_session(auth_on):
     assert r.status_code == 401, f"unauthenticated report-url returned {r.status_code}"
 
 
+def test_sec4_sse_streams_require_session(auth_on):
+    """BUG SEC-4: simulation + update-simc SSE streams must require a session."""
+    c = TestClient(app)
+    r = c.get("/api/simulation/stream/abc12345", params={"worker_id": "w1"})
+    assert r.status_code == 401, f"unauthenticated sim stream returned {r.status_code}"
+    r = c.get("/api/update-simc/stream/upd-1")
+    assert r.status_code == 401, f"unauthenticated update stream returned {r.status_code}"
+
+
 def test_sec5_sec14_static_mounts_require_session(auth_on):
     """BUG SEC-5/SEC-14: /reports/ and /inputs/ mounts must not serve files
     to unauthenticated callers (401/403, not 404/200)."""
