@@ -620,8 +620,12 @@ function targetUpgradeLevel(slot, item) {
   const upgrade = gearUpgrades[slot]?.[item];
   if (!upgrade) return null;
   const ascension = seasonAscension();
-  if (voidforgedItems[slot]?.[item] && ascension.results?.[upgrade.track] != null) {
-    return Number(ascension.results[upgrade.track]);
+  if (voidforgedItems[slot]?.[item]) {
+    // A crafted base ascends to the season's lower crafted_results ilvl
+    // (mirror of backend apply_gear_upgrade); track items use results.
+    const crafted = isCraftedItem(item) ? ascension.crafted_results?.[upgrade.track] : null;
+    const target = crafted != null ? crafted : ascension.results?.[upgrade.track];
+    if (target != null) return Number(target);
   }
   // Export-provided entries carry their own absolute ilvl.
   if (upgrade.source === 'export' && upgrade.item_level != null) {

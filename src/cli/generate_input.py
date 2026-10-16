@@ -146,7 +146,10 @@ def apply_gear_upgrade(gear_str, upgrade, slot=None, voidforged=False, season=No
     if level is None:
         level = midnight_track_level(upgrade.get("track"), upgrade.get("rank"), season=season)
     if voidforged and level is not None and is_ascension_eligible_slot(season, slot):
-        ascended = ascension_result(season, upgrade.get("track"))
+        # Same crafted predicate as the UI (app.js isCraftedItem): a max-quality
+        # crafted base ascends to the season's lower crafted_results ilvl.
+        crafted = "crafted_stats=" in gear_str or "crafting_quality=" in gear_str
+        ascended = ascension_result(season, upgrade.get("track"), crafted=crafted)
         if ascended is not None:
             level = ascended
     return apply_item_level(gear_str, level, slot=slot, voidforged=False, season=season)
@@ -209,7 +212,9 @@ def generate_variations(item_list, slot_name, config, extra_sockets=None):
             return True
         if "gem_id=" in item:
             return True
-        return bool(extra_sockets.get(slot_name))
+        # Jewelry always has exactly one socket (t_fa0d755f §4): finger/neck
+        # accept standard gems even when the export omits gem_id=.
+        return bool(extra_sockets.get(slot_name)) or slot_name in ("finger", "neck")
     
     variations = []
     for item in item_list:

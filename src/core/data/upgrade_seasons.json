@@ -27,10 +27,11 @@
       "ascension": {
         "name": "Ascendant Voidforged",
         "currency_item_id": 268552,
-        "cost": 5,
+        "cost": 1,
         "bonus_ids": ["13653", "13654"],
         "eligible_slots": ["main_hand", "off_hand", "trinket", "trinket1", "trinket2"],
         "results": { "hero": 285, "myth": 298 },
+        "crafted_results": { "hero": 282, "myth": 295 },
         "legacy_bonus_ilvl": 9,
         "legacy_final_ilvls": [285, 298]
       }
@@ -56,12 +57,12 @@
         "hero": [305, 308, 311, 315, 318, 321],
         "myth": [318, 321, 324, 328, 331, 334]
       },
-      "elevated_ilvls": [337, 344],
+      "elevated_ilvls": [344],
       "ascension": {
         "name": "Ascendant Venomforged",
         "currency_item_id": 280562,
         "cost": 10,
-        "bonus_ids": [],
+        "bonus_ids": ["12856"],
         "eligible_slots": ["neck", "main_hand", "off_hand", "trinket", "trinket1", "trinket2"],
         "results": { "hero": 328, "myth": 340 },
         "crafted_results": { "hero": 325, "myth": 338 }
