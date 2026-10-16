@@ -107,7 +107,7 @@ from src.core.security import (
     password_needs_rehash,
     verify_password,
 )
-from src.worker import task_status_store
+from src.worker import get_or_create_task_status, task_status_store
 
 
 # ---------------------------------------------------------------------------
@@ -2594,6 +2594,15 @@ async def worker_websocket(websocket: WebSocket, name: str, secret: Optional[str
                     # Forward task status updates to SSE consumers
                     tid = data["task_id"]
                     task = data["status"]
+                    # t_14e40e6c: mirror the worker-pushed status into the
+                    # master's task_status_store — the store is per-process,
+                    # this WS channel is the only writer that crosses the
+                    # master/worker boundary, so /api/task-status stays empty
+                    # on master without it.
+                    ts = get_or_create_task_status(tid)
+                    for field, value in task.items():
+                        if field != "task_id" and hasattr(ts, field):
+                            setattr(ts, field, value)
                     # Broadcast via all task queues that might have subscribers
                     for qid, queue in manager.task_queues.items():
                         try:

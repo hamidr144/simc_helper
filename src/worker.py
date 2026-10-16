@@ -547,6 +547,10 @@ async def run_worker():
                                                     task_status.status = "done"
                                                     task_status.exit_code = exit_code
                                                     task_status.updated_at = time.time()
+                                                    # t_14e40e6c: every other transition pushes;
+                                                    # done was silently dropped, leaving master's
+                                                    # /api/task-status stuck on "running".
+                                                    await _push_task_status(websocket, task_id, task_status)
                                                     final_exit_code = exit_code
                                                     final_report_file = report_file
                                                     logger.info(f"[{task_id}] Task succeeded on attempt {attempt}")
