@@ -238,3 +238,117 @@ def test_life8_parse_garbage_must_be_rejected(auth_on):
         "character_name": "x"})
     assert r.status_code >= 400, (
         f"garbage parsed with HTTP {r.status_code}: {r.text[:120]}")
+
+# ---------------------------------------------------------------------------
+# LIFE-4 (t_5d6903e4): SSE disconnect must not delete the run queue and the
+# first viewer to leave must not kill another tab's stream.
+# ---------------------------------------------------------------------------
+
+class _FakeWorkerWS:
+    """Minimal stand-in for the /ws/worker socket (pattern from
+    test_worker_retry's direct-handler tests)."""
+
+    def __init__(self, msgs):
+        self._msgs = list(msgs)
+        self.headers = {"x-cluster-secret": master.CLUSTER_SECRET}
+
+    async def accept(self): pass
+
+    async def receive_json(self):
+        if self._msgs:
+            return self._msgs.pop(0)
+        from starlette.websockets import WebSocketDisconnect
+        raise WebSocketDisconnect(code=1000)
+
+    async def send_json(self, data): pass
+
+    async def close(self, code=None): pass
+
+
+@pytest.mark.asyncio
+async def test_life4_streams_independent_and_survive_disconnect():
+    """Two viewers on one task each receive every event; cancelling one
+    viewer's generator (what starlette does on SSE disconnect) must keep the
+    task queue and metadata alive and the survivor must still see done."""
+    import asyncio as aio
+    task_id = f"life4-{uuid.uuid4().hex[:6]}"
+    manager.task_queues[task_id] = set()
+    manager.active_workers["w-life4"] = MagicMock(status="Busy")
+    master.task_meta_map[task_id] = {"char_name": "Life4"}
+    master.task_user_map[task_id] = "life4-no-such-user"  # FK insert fails, swallowed by design
+    try:
+        gen1 = master.simulation_event_generator(task_id, "w-life4")
+        gen2 = master.simulation_event_generator(task_id, "w-life4")
+        t1 = aio.ensure_future(gen1.__anext__())
+        t2 = aio.ensure_future(gen2.__anext__())
+        await aio.sleep(0.05)  # both generators register their queues
+        assert len(manager.task_queues[task_id]) == 2
+
+        t1.cancel()  # viewer 1 closes its tab mid-run
+        try:
+            await t1
+        except aio.CancelledError:
+            pass
+        assert task_id in manager.task_queues, \
+            "SSE disconnect deleted the run queue (LIFE-4)"
+        assert task_id in master.task_meta_map, \
+            "SSE disconnect lost the run metadata"
+
+        # the real worker-WS handler delivers log + done with viewer 1 gone
+        await master.worker_websocket(_FakeWorkerWS([
+            {"type": "log", "task_id": task_id, "text": "x"},
+            {"type": "done", "task_id": task_id, "code": 0},
+        ]), name="life4-ws")
+
+        log_line = await aio.wait_for(t2, timeout=2)
+        assert '"log"' in log_line, "survivor stream lost its events"
+        done_line = await aio.wait_for(gen2.__anext__(), timeout=2)
+        assert '"type": "done"' in done_line, "survivor never saw done"
+        assert task_id not in manager.task_queues, \
+            "done must free the queue entry"
+        assert task_id not in master.task_meta_map, \
+            "done must consume the metadata snapshot"
+    finally:
+        manager.task_queues.pop(task_id, None)
+        manager.active_workers.pop("w-life4", None)
+        master.task_meta_map.pop(task_id, None)
+        master.task_user_map.pop(task_id, None)
+
+
+def test_life4_run_completes_without_viewer_records_history_row(auth_on):
+    """Card case (a): no SSE viewer is ever connected (refresh mid-run) —
+    the run must still finish with a /history row, and the queue entry is
+    freed at run end, not on viewer presence."""
+    from src.core.db import run_history_list, user_delete
+    c = _login(f"life4-{uuid.uuid4().hex[:8]}")
+    task_id = None
+    try:
+        with TestClient(app) as admin:
+            with admin.websocket_connect(
+                f"/ws/worker?name=life4-{uuid.uuid4().hex[:6]}",
+                headers={"X-Cluster-Secret": master.CLUSTER_SECRET},
+            ) as ws:
+                # no patching: the connected fake worker IS the idle worker
+                r = c.post("/api/run-simulation", params={"input_id": "life4-drive"})
+                assert r.status_code == 200, r.text
+                task_id = r.json()["task_id"]
+                assert ws.receive_json()["task_id"] == task_id
+                assert task_id in manager.task_queues
+                ws.send_json({"type": "done", "task_id": task_id, "code": 0})
+
+                deadline = time.time() + 5
+                rows = []
+                while time.time() < deadline:
+                    rows = run_history_list(c.user_id)
+                    if any(row["status"] == "success" for row in rows):
+                        break
+                    time.sleep(0.1)
+                assert any(row["status"] == "success" for row in rows), \
+                    f"no history row for viewer-less run: {rows}"
+                assert task_id not in manager.task_queues, \
+                    "done must free the queue entry"
+    finally:
+        if task_id:
+            master.task_user_map.pop(task_id, None)
+            master.task_meta_map.pop(task_id, None)
+        user_delete(c.user_id)  # FK CASCADE removes the run_history rows

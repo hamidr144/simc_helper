@@ -43,7 +43,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             extra={"request_id": request_id},
         )
         return response
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Set, Union
 from urllib.parse import quote, urlencode
 from xml.etree import ElementTree
 
@@ -419,6 +419,19 @@ task_user_map: dict = {}
 # task_owner.meta) so the done hook can write a complete run_history row.
 run_meta_by_user: Dict[str, Dict[str, Any]] = {}
 task_meta_map: Dict[str, Dict[str, Any]] = {}
+# LIFE-4 (t_5d6903e4): the worker's done payload, kept briefly after the run
+# frees its queue entry so a viewer that opens the stream late (fast run, or a
+# tab that reconnects after the run ended) still gets a terminal event instead
+# of a 404. Pruned on every write.
+task_done_map: Dict[str, Dict[str, Any]] = {}
+TASK_DONE_TTL_SECONDS = 300
+
+
+def _record_task_done(task_id: str, data: Dict[str, Any]) -> None:
+    now = time.time()
+    for stale in [t for t, d in task_done_map.items() if now - d.get("_at", 0) > TASK_DONE_TTL_SECONDS]:
+        task_done_map.pop(stale, None)
+    task_done_map[task_id] = {**data, "_at": now}
 
 
 def _restore_task_owner_maps() -> None:
@@ -501,7 +514,10 @@ class Worker:
 class WorkerManager:
     def __init__(self):
         self.active_workers: Dict[str, Worker] = {}
-        self.task_queues: Dict[str, asyncio.Queue] = {}
+        # LIFE-4 (t_5d6903e4): one subscriber queue per connected SSE viewer;
+        # producers broadcast to all of them, so a disconnect (or a second
+        # tab) can no longer delete or starve another viewer's stream.
+        self.task_queues: Dict[str, Set[asyncio.Queue]] = {}
         self._shutting_down = False
 
     async def connect(self, websocket: WebSocket, name: str):
@@ -521,13 +537,13 @@ class WorkerManager:
 
             # If worker was busy, notify the task queue that it failed
             if worker.current_task and worker.current_task in self.task_queues:
-                queue = self.task_queues[worker.current_task]
-                queue.put_nowait(
-                    {
-                        "type": "error",
-                        "text": f"Worker {worker.name} disconnected abruptly.",
-                    }
-                )
+                for queue in self.task_queues[worker.current_task]:
+                    queue.put_nowait(
+                        {
+                            "type": "error",
+                            "text": f"Worker {worker.name} disconnected abruptly.",
+                        }
+                    )
 
             del self.active_workers[worker_id]
 
@@ -2130,7 +2146,7 @@ async def update_simc(request: Request, _: str = Depends(require_session)):
     worker_id = manager.get_idle_worker()
     if not worker_id: raise HTTPException(status_code=503, detail="No idle workers")
     task_id = "upd-" + str(uuid.uuid4())[:8]
-    manager.task_queues[task_id] = asyncio.Queue()
+    manager.task_queues[task_id] = set()
     await manager.send_task(worker_id, {"type": "update", "task_id": task_id})
     return {"status": "success", "task_id": task_id}
 
@@ -2145,20 +2161,29 @@ async def stream_update_simc(task_id: str, _: str = Depends(require_session)):
         raise HTTPException(status_code=404, detail="Task not found")
 
     async def update_event_generator():
-        queue = manager.task_queues[task_id]
-        while True:
-            try:
-                data = await asyncio.wait_for(queue.get(), timeout=5.0)
-                if data["type"] == "log":
-                    yield f"data: {json.dumps({'type': 'log', 'text': data['text']})}\n\n"
-                elif data["type"] == "done":
-                    yield f"data: {json.dumps({'type': 'exit', 'code': data['code']})}\n\n"
+        # LIFE-4 (t_5d6903e4): per-viewer subscriber queue; a disconnect only
+        # removes its own subscription. The task entry is freed by the
+        # worker-WS done handler.
+        # shortcut: worker dying mid-update without done leaks the entry
+        # until master restart; upgrade with a TTL sweeper if it shows up.
+        queue: asyncio.Queue = asyncio.Queue()
+        manager.task_queues.setdefault(task_id, set()).add(queue)
+        try:
+            while True:
+                try:
+                    data = await asyncio.wait_for(queue.get(), timeout=5.0)
+                    if data["type"] == "log":
+                        yield f"data: {json.dumps({'type': 'log', 'text': data['text']})}\n\n"
+                    elif data["type"] == "done":
+                        yield f"data: {json.dumps({'type': 'exit', 'code': data['code']})}\n\n"
+                        break
+                except asyncio.TimeoutError:
+                    yield ": keep-alive\n\n"
+                except Exception:
                     break
-            except asyncio.TimeoutError:
-                yield ": keep-alive\n\n"
-            except Exception:
-                break
-        if task_id in manager.task_queues: del manager.task_queues[task_id]
+        finally:
+            subs = manager.task_queues.get(task_id)
+            if subs is not None: subs.discard(queue)
 
     return StreamingResponse(update_event_generator(), media_type="text/event-stream")
 
@@ -2191,9 +2216,38 @@ async def shutdown(request: Request):
     os.kill(os.getpid(), signal.SIGTERM)
     return {"status": "shutting down"}
 
-async def simulation_event_generator(task_id: str, worker_id: str):
+def _done_event(task_id: str, data: Dict[str, Any]) -> str:
+    # LIFE-2 (t_2c718ca6): the run_history row is written by the worker-WS
+    # done handler — this generator only exists while a browser is watching
+    # the stream, so hooking here lost the row when the master restarted
+    # mid-run. t_a0bb3a07 (LIFE-1): a user Stop is reported as stopped, not
+    # as a failed simulation.
+    if data.get("stopped"):
+        payload = {"type": "error", "text": "Simulation stopped."}
+    elif data.get("code") == 0:
+        payload = {"type": "done", "text": "Simulation finished successfully!", "report_file": data.get("report_file"), "task_id": task_id}
+    else:
+        err = data.get("error") or "the SimC process exited with a non-zero code — see the log above"
+        payload = {"type": "error", "text": f"Simulation failed: {err}"}
+    return f"data: {json.dumps(payload)}\n\n"
+
+
+async def simulation_event_generator(task_id: str, worker_id: str, queue: Optional[asyncio.Queue] = None):
+    # LIFE-4 (t_5d6903e4): one subscriber queue per connected viewer; a
+    # disconnect removes only its own subscription. The task entry is freed
+    # by the worker-WS done handler (the run completes with or without
+    # viewers); this generator pops it only when the worker is already gone,
+    # so no done can arrive. task_meta_map stays until _record_run_history
+    # consumes it — popping it here lost the history row's metadata on
+    # refresh.
+    if task_id not in manager.task_queues and task_id in task_done_map:
+        # Viewer joined after the run ended (fast run, or reconnect after a
+        # refresh): replay the buffered terminal event instead of hanging.
+        yield _done_event(task_id, task_done_map[task_id])
+        return
+    if queue is None: queue = asyncio.Queue()
+    manager.task_queues.setdefault(task_id, set()).add(queue)
     try:
-        queue = manager.task_queues[task_id]
         while True:
             try:
                 data = await asyncio.wait_for(queue.get(), timeout=5.0)
@@ -2204,18 +2258,7 @@ async def simulation_event_generator(task_id: str, worker_id: str):
                 elif data["type"] == "task_status_update":
                     yield f"data: {json.dumps({'type': 'task_status_update', 'task_id': data['task_id'], 'status': data['status']})}\n\n"
                 elif data["type"] == "done":
-                    # LIFE-2 (t_2c718ca6): the run_history row is written by
-                    # the worker-WS done handler — this generator only exists
-                    # while a browser is watching the stream, so hooking here
-                    # lost the row when the master restarted mid-run.
-                    stopped = bool(data.get("stopped"))
-                    if stopped:
-                        yield f"data: {json.dumps({'type': 'error', 'text': 'Simulation stopped.'})}\n\n"
-                    elif data["code"] == 0:
-                        yield f"data: {json.dumps({'type': 'done', 'text': 'Simulation finished successfully!', 'report_file': data.get('report_file'), 'task_id': task_id})}\n\n"
-                    else:
-                        err = data.get("error") or "the SimC process exited with a non-zero code — see the log above"
-                        yield f"data: {json.dumps({'type': 'error', 'text': f'Simulation failed: {err}'})}\n\n"
+                    yield _done_event(task_id, data)
                     break
             except asyncio.TimeoutError:
                 if worker_id not in manager.active_workers:
@@ -2223,10 +2266,11 @@ async def simulation_event_generator(task_id: str, worker_id: str):
                     break
                 yield ": keep-alive\n\n"
     finally:
-        if task_id in manager.task_queues: del manager.task_queues[task_id]
-        # t_b3b78acd: drop the metadata snapshot if the done event never
-        # reached the hook (worker dropped, stream cancelled).
-        task_meta_map.pop(task_id, None)
+        subs = manager.task_queues.get(task_id)
+        if subs is not None:
+            subs.discard(queue)
+            if not subs and worker_id not in manager.active_workers:
+                manager.task_queues.pop(task_id, None)
 
 @app.post("/api/run-simulation", response_model=RunSimulationResponse, tags=["Simulation"])
 async def run_simulation(request: Request, worker_id: Optional[str] = Query(None), input_id: Optional[str] = Query(None), current_user: str = Depends(require_session)):
@@ -2274,7 +2318,7 @@ async def run_simulation(request: Request, worker_id: Optional[str] = Query(None
     user_last_sim_time[user_id] = now
     session_set(user_id, now)
     task_id = str(uuid.uuid4())[:8]
-    manager.task_queues[task_id] = asyncio.Queue()
+    manager.task_queues[task_id] = set()
     task_user_map[task_id] = user_id  # t_c968bf8d: owner of the report directory
     # t_b3b78acd: freeze the character metadata for this task; the done hook
     # consumes (and pops) it when writing the run_history row.
@@ -2297,7 +2341,7 @@ async def stream_simulation(task_id: str, worker_id: str, _: str = Depends(requi
     **Tags:** Simulation
     **Response Type:** ``text/event-stream``
     """
-    if task_id not in manager.task_queues: raise HTTPException(status_code=404)
+    if task_id not in manager.task_queues and task_id not in task_done_map: raise HTTPException(status_code=404)
     return StreamingResponse(simulation_event_generator(task_id, worker_id), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"})
 
 # --- SimC HTML report parsing -------------------------------------------------
@@ -2741,15 +2785,20 @@ async def worker_websocket(websocket: WebSocket, name: str, secret: Optional[str
                         if field != "task_id" and hasattr(ts, field):
                             setattr(ts, field, value)
                     # Broadcast via all task queues that might have subscribers
-                    for qid, queue in manager.task_queues.items():
-                        try:
-                            await queue.put({"type": "task_status_update", "task_id": tid, "status": task})
-                        except Exception:
-                            pass
+                    for subs in manager.task_queues.values():
+                        for queue in subs:
+                            try:
+                                await queue.put({"type": "task_status_update", "task_id": tid, "status": task})
+                            except Exception:
+                                pass
                 elif data["type"] == "log" or data["type"] == "log_batch" or data["type"] == "done":
                     tid = data.get("task_id")
-                    if tid in manager.task_queues: await manager.task_queues[tid].put(data)
+                    for queue in manager.task_queues.get(tid, ()): await queue.put(data)
                     if data["type"] == "done":
+                        # LIFE-4 (t_5d6903e4): the queue entry lives for the
+                        # run, not for the viewers — free it here at run end.
+                        manager.task_queues.pop(tid, None)
+                        _record_task_done(tid, data)
                         manager.active_workers[worker_id].status = "Idle"
                         # LIFE-2 (t_2c718ca6): history row recorded here, at the
                         # one done writer that crosses the master/worker boundary
