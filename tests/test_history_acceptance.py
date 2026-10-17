@@ -336,8 +336,17 @@ def test_restart_persistence_two_process_history_link_serves_report(tmp_path):
             f"ws://127.0.0.1:{port}/ws/worker?name=acc",
             additional_headers={"X-Cluster-Secret": ACC_SECRET},
         ) as ws:
-            # SEC-6: explicit input_id (the fake ws worker never fetches it)
-            r = client.post("/api/run-simulation", params={"input_id": "acc-live"})
+            # SEC-6/t_2f386596: run the caller's own generated input (the
+            # fake ws worker never fetches it).
+            gen = client.post("/api/generate-simc", json={
+                "char_class": "paladin", "char_name": "AccLive",
+                "base_profile": "paladin=AccLive", "equipped_gear": {},
+                "selected_items": {}, "selected_enchants": {}, "selected_gems": [],
+                "selected_meta_gems": [], "item_levels": {}, "gear_upgrades": {},
+                "voidforged_items": {}, "extra_sockets": {},
+            })
+            assert gen.status_code == 200, gen.text
+            r = client.post("/api/run-simulation", params={"input_id": gen.json()["input_id"]})
             assert r.status_code == 200, r.text
             task_id, worker_id = r.json()["task_id"], r.json()["worker_id"]
 
