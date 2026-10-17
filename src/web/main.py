@@ -1714,7 +1714,7 @@ async def health_check(request: Request):
 
 
 @app.get("/api/task-status", response_model=Union[TaskStatusResponse, TaskListResponse], tags=["Tasks"])
-async def get_task_status(task_id: Optional[str] = None, _: str = Depends(require_session)):
+async def get_task_status(task_id: Optional[str] = None, user_id: str = Depends(require_session)):
     """Get task status for a specific task or list all tasks.
 
     **Tags:** Tasks
@@ -1723,16 +1723,27 @@ async def get_task_status(task_id: Optional[str] = None, _: str = Depends(requir
 
     **Response:** Returns a ``TaskStatusResponse`` for a single task or a
     ``TaskListResponse`` when listing all tasks.
+
+    Ownership (SEC-2 residual t_1e5e7fb4): only the caller's own tasks are
+    visible; another user's task_id answers with the same ``not_found`` shape
+    as a nonexistent id (no existence oracle). Tasks with no resolvable owner
+    row (update-simc tasks, attribution lost before LIFE-2) stay visible to
+    every logged-in user — the documented pass-through bucket shared with
+    ``_task_access_ok`` across the ownership family. With
+    AUTHENTICATION_ENABLED=false the kill switch makes everything visible
+    (single-operator mode).
     """
     if task_id:
         status = task_status_store.get(task_id)
-        if not status:
+        if not status or not _task_access_ok(task_id, user_id):
             return {"status": "not_found", "task_id": task_id}
         return {"status": "ok", "task_id": task_id, "task": status.to_dict()}
+    visible = {tid: s for tid, s in task_status_store.items()
+               if _task_access_ok(tid, user_id)}
     return {
         "status": "ok",
-        "tasks": {tid: s.to_dict() for tid, s in task_status_store.items()},
-        "total": len(task_status_store),
+        "tasks": {tid: s.to_dict() for tid, s in visible.items()},
+        "total": len(visible),
     }
 
 @app.get("/api/upgrade-data", tags=["Gear"])

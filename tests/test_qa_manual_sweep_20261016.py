@@ -648,3 +648,42 @@ def test_sec8_state_active_input_is_per_user(auth_on):
         f"B sees A's active_input {a_input} (global latest leak)")
     # No over-block: A still sees its own active input (family precedent).
     assert a.get("/api/state").json().get("active_input") == a_input
+
+
+# ------------------------------------------- SEC-2 residual (t_1e5e7fb4)
+
+def test_sec2b_task_status_scoped_to_owner(auth_on, monkeypatch):
+    """BUG SEC-2 residual (t_1e5e7fb4): /api/task-status must only show the
+    caller's own tasks. B sees A's task neither in the list nor via task_id
+    (not_found shape, no existence oracle); A is not over-blocked; the
+    AUTHENTICATION_ENABLED=false kill switch keeps everything visible."""
+    from src.worker import TaskStatus
+    a = _login(f"sec2b-a-{uuid.uuid4().hex[:6]}")
+    b = _login(f"sec2b-b-{uuid.uuid4().hex[:6]}")
+    task_id = f"s2b{uuid.uuid4().hex[:6]}"
+    master.task_user_map[task_id] = a.user_id
+    master.task_status_store[task_id] = TaskStatus(task_id)
+    try:
+        lst = b.get("/api/task-status").json()
+        assert task_id not in lst["tasks"], "B sees A's task in the list"
+        r = b.get("/api/task-status", params={"task_id": task_id}).json()
+        assert r.get("status") == "not_found" and not r.get("task"), \
+            f"non-owner task_id leaked: {r}"
+        r2 = b.get("/api/task-status", params={"task_id": "s2bnosuch"}).json()
+        r.pop("task_id"); r2.pop("task_id")  # echoed id is not an oracle
+        assert r == r2, f"existence oracle: foreign={r} missing={r2}"
+        # No over-block: A sees own task in both variants.
+        lst_a = a.get("/api/task-status").json()
+        assert task_id in lst_a["tasks"], "A blocked from own task in list"
+        assert lst_a["total"] == len(lst_a["tasks"])
+        r_a = a.get("/api/task-status", params={"task_id": task_id}).json()
+        assert r_a["status"] == "ok" and r_a["task"]["task_id"] == task_id, \
+            f"owner task_id blocked: {r_a}"
+        # Kill switch: auth disabled -> everything visible to anyone.
+        monkeypatch.setattr(master, "authentication_enabled", lambda: False)
+        lst_k = b.get("/api/task-status").json()
+        assert lst_k.get("status") == "ok" and task_id in lst_k["tasks"], \
+            "kill switch hid A's task from B"
+    finally:
+        master.task_user_map.pop(task_id, None)
+        master.task_status_store.pop(task_id, None)
