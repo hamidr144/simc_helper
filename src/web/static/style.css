@@ -22,7 +22,7 @@
   /* Semantic */
   --ok: #4ade80;
   --warn: #fbbf24;
-  --danger: #f87181;
+  --danger: #f87171;
 
   /* Item quality (Wowhead language, AA-adjusted for dark) */
   --rarity-uncommon: #2ee66b;
@@ -1538,8 +1538,8 @@ button.pw-toggle:hover { background: var(--surface-hover); color: var(--text-pri
 
 button.btn-danger {
   background: transparent;
-  border: 1px solid rgba(251, 113, 133, 0.5);
-  color: #fda4af;
+  border: 1px solid var(--danger);
+  color: var(--danger);
   box-shadow: none;
   margin: 0;
   padding: 10px 16px;
@@ -1547,9 +1547,9 @@ button.btn-danger {
 }
 
 button.btn-danger:not(:disabled):hover {
-  background: rgba(251, 113, 133, 0.1);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
   border-color: var(--danger);
-  color: #fecdd3;
+  color: var(--danger);
   transform: none;
   box-shadow: none;
 }
@@ -1633,8 +1633,8 @@ html { scroll-padding-top: 80px; }
   .paste-footer .paste-actions { width: 100%; }
   .paste-footer .paste-actions button { flex: 1; min-height: 44px; }
   /* Results table: horizontal scroll with sticky # + Candidate columns. */
-  .results-table th:first-child, .results-table td:first-child { position: sticky; left: 0; background: var(--surface-panel); z-index: 1; }
-  .results-table th:nth-child(2), .results-table td:nth-child(2) { position: sticky; left: 40px; background: var(--surface-panel); z-index: 1; }
+  .results-table th:first-child, .results-table td:first-child { position: sticky; left: 0; width: var(--results-num-col); background: var(--surface-panel); z-index: 1; }
+  .results-table th:nth-child(2), .results-table td:nth-child(2) { position: sticky; left: var(--results-num-col); background: var(--surface-panel); z-index: 1; }
 }
 
 @media (max-width: 480px) {
@@ -1752,7 +1752,9 @@ button.slot-add-toggle { margin-top: 0; padding: 5px 10px; font-size: 11px; }
 
 /* --- Results table (t_2ab8f3be doc 4.5) --- */
 .results-table-card { overflow-x: auto; }
-.results-table { border-collapse: collapse; width: 100%; min-width: 560px; }
+/* NB7: sticky Candidate column offsets from this token; the # column is sized
+   by it too, so the two cannot drift apart. */
+.results-table { border-collapse: collapse; width: 100%; min-width: 560px; --results-num-col: 40px; }
 .results-table th, .results-table td {
   padding: 8px 10px;
   border-bottom: 1px solid var(--border-hairline);
