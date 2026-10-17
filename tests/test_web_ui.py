@@ -117,7 +117,8 @@ def test_gear_selection_uses_compact_icon_tiles_instead_of_text_rows():
     js = js_response.text
     css = css_response.text
 
-    assert "iconizeLinks: true" in html
+    # t_268f5264: icons are app-rendered; wh.js must not iconize/rename links.
+    assert "iconizeLinks: false" in html
     assert "createWowheadIconLink" in js
     assert "slot-items" in js
     assert "item-option" in js
@@ -499,3 +500,19 @@ def test_static_browser_code_has_no_root_absolute_urls():
         for match in pattern.finditer(path.read_text(encoding="utf-8"))
     ]
     assert offenders == []
+
+
+def test_wowhead_tooltip_config_keeps_gear_icons():
+    """t_268f5264 (UI-2): wh.js renameLinks replaces the gear-card <img>
+    with a plain text item link (innerHTML = <span>name</span>). The binding
+    design-doc ruling (gui-design-doc.md §Step2, t_8655bd7e) is
+    iconizeLinks:false + renameLinks:false; the per-link data-wh-rename
+    attribute is never read by the lib (it reads data-wh-rename-link)."""
+    response = client.get("/static/app.html")
+    assert response.status_code == 200
+    html = response.text
+
+    assert "iconizeLinks: false" in html
+    assert "renameLinks: false" in html
+    assert "renameLinks: true" not in html
+    assert "iconizeLinks: true" not in html
