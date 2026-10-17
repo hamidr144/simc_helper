@@ -410,9 +410,9 @@ generated_inputs_by_user: dict = load_inputs()
 # t_2f386596: the global "latest" input used to live inside this map under a
 # magic key that collided with real buckets (the client-controlled user_id
 # cookie fallback when auth is disabled, and legacy user_inputs rows loaded
-# above). Namespace it as its own variable instead.
+# above). SEC-8 (t_ff260cdb) removed the global latest entirely — every
+# reader answers from the caller's own bucket. Drop the legacy rows.
 generated_inputs_by_user.pop("latest", None)
-latest_input: Optional[Dict[str, Any]] = None
 # t_c968bf8d: task_id -> user_id so worker uploads land in the owner's report
 # directory. LIFE-2 (t_2c718ca6): durable in the sqlite task_owner table —
 # an in-memory-only map lost report attribution when the master restarted
@@ -809,6 +809,19 @@ def require_session(request: Request) -> str:
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
     return user["user_id"]
+
+
+def _input_bucket(request: Request, current_user: str) -> str:
+    """Key of the caller's generated-input bucket in generated_inputs_by_user.
+
+    Shared by generate-simc, run-simulation and /api/state so writer and
+    readers cannot disagree (SEC-8 t_ff260cdb). With auth disabled
+    require_session returns "anonymous", so fall back to the legacy
+    client-controlled user_id cookie / client-IP bucket (single-operator mode).
+    """
+    if current_user != "anonymous":
+        return current_user
+    return request.cookies.get("user_id") or f"ip_{request.client.host}"
 
 
 def _page_session_valid(request: Request) -> bool:
@@ -1591,7 +1604,7 @@ async def fetch_wowhead_upgrade(item: str) -> Optional[Dict[str, Any]]:
 
 
 @app.get("/api/state", response_model=StateResponse, tags=["System"])
-async def get_api_state(_: str = Depends(require_session)):
+async def get_api_state(request: Request, user_id: str = Depends(require_session)):
     """Retrieve the current system state – active input and connected workers.
 
     **Tags:** System
@@ -1600,10 +1613,14 @@ async def get_api_state(_: str = Depends(require_session)):
     Audit LOW-1: worker names/ids are internal topology, so this endpoint
     now requires a logged-in session (the dashboard sends its session cookie
     automatically).
+
+    SEC-8 (t_ff260cdb): active_input is the caller's own latest generated
+    input (or null) — never another user's global "latest".
     """
+    record = generated_inputs_by_user.get(_input_bucket(request, user_id))
     return {
         "status": "ready",
-        "active_input": latest_input.get("input_id") if latest_input else None,
+        "active_input": record.get("input_id") if record else None,
         "workers": [
             {"id": w.id, "name": w.name, "status": w.status}
             for w in manager.active_workers.values()
@@ -2123,14 +2140,12 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
         with open("char_simc_addon.txt", "w", encoding="utf-8") as f:
             f.write(profile_content)
 
-        user_id = current_user if current_user != "anonymous" else (request.cookies.get("user_id") or f"ip_{request.client.host}")
+        user_id = _input_bucket(request, current_user)
         record = {"input_id": input_id, "file_path": file_path, "input_url": f"/inputs/{input_id}.simc"}
-        # t_2f386596: global latest is a namespaced variable now, not a magic
-        # "latest" key inside the per-user map (and no longer persisted under
-        # a fake "latest" user_id row).
-        global latest_input
+        # t_2f386596: no global "latest" key in the per-user map and no fake
+        # "latest" user_id row — SEC-8 (t_ff260cdb) removed the global latest
+        # variable entirely.
         generated_inputs_by_user[user_id] = record
-        latest_input = record
         input_set(user_id, record)
 
         # The base actor is always a valid current-gear simulation, even if no
@@ -2315,7 +2330,7 @@ async def run_simulation(request: Request, worker_id: Optional[str] = Query(None
 
     **Response Model:** ``RunSimulationResponse``
     """
-    user_id = current_user if current_user != "anonymous" else (request.cookies.get("user_id") or f"ip_{request.client.host}")
+    user_id = _input_bucket(request, current_user)
     now = time.time()
     # Cooldown state lives ONLY here (t_ef8682a4): ``user_sessions`` is set
     # when a simulation actually starts and is purged after

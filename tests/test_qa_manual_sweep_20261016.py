@@ -631,3 +631,20 @@ def test_life10_history_row_recorded_once():
     finally:
         master._history_recorded_tasks.discard(task_id)
         master.task_user_map.pop(task_id, None)
+
+
+# ------------------------------------------------------- SEC-8 (t_ff260cdb)
+
+def test_sec8_state_active_input_is_per_user(auth_on):
+    """BUG SEC-8: /api/state active_input must be the CALLER's input, never
+    another user's (global 'latest')."""
+    a = _login(f"sec8-a-{uuid.uuid4().hex[:6]}")
+    gen = a.post("/api/generate-simc", json=GEN_BODY)
+    a_input = gen.json()["input_id"]
+
+    b = _login(f"sec8-b-{uuid.uuid4().hex[:6]}")
+    state = b.get("/api/state").json()
+    assert state.get("active_input") != a_input, (
+        f"B sees A's active_input {a_input} (global latest leak)")
+    # No over-block: A still sees its own active input (family precedent).
+    assert a.get("/api/state").json().get("active_input") == a_input
