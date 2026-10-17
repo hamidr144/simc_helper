@@ -35,7 +35,7 @@ function isElevatedLevel(level) {
 }
 async function loadUpgradeData() {
   try {
-    const response = await fetch('api/upgrade-data');
+    const response = await apiFetch('api/upgrade-data');
     if (!response.ok) return;
     upgradeData = await response.json();
     activeSeason = (upgradeData.seasons || [])
@@ -70,7 +70,7 @@ function detectSeasonFromExport(data) {
   if (matches.length) activeSeason = matches.reduce((a, b) => b.ilvl_band[1] > a.ilvl_band[1] ? b : a);
 }
 
-/* WoW class colors — identity accent only; the accent system stays --accent-color. */
+/* WoW class colors — identity accent only; the accent system stays --accent-*. */
 const CLASS_COLORS = {
   deathknight: '#c41f3b', demonhunter: '#a335ee', druid: '#ff7c0a',
   evoker: '#33937f', hunter: '#aad372', mage: '#3fc7eb',
@@ -178,28 +178,45 @@ function observeWorkflowSteps() {
 
 /* ---------- Worker status ---------- */
 
+let workerPollFailures = 0;
+
 async function pollWorkerStatus() {
   const chip = document.getElementById('worker-status');
   const text = document.getElementById('worker-status-text');
   if (!chip || !text) return;
   try {
-    const response = await fetch('api/state');
+    const response = await apiFetch('api/state');
+    // 401 = logged out: the banner explains it; the chip stays unknown ("—")
+    // until a successful authenticated poll (A4 — never a misleading chip).
+    if (response.status === 401) return;
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
+    workerPollFailures = 0;
     const workers = data.workers || [];
     const idle = workers.filter(worker => /idle/i.test(worker.status || '')).length;
+    const titles = workers.map(worker => `${worker.name}: ${worker.status}`).join('\n');
     if (!workers.length) {
       chip.className = 'status-chip status-err';
       text.textContent = 'No workers';
       chip.title = 'No SimC worker is connected to the master.';
+    } else if (idle === 0) {
+      // Busy is a queue state, not an error (doc 4.1).
+      chip.className = 'status-chip status-warn';
+      text.textContent = 'All workers busy \u00b7 waiting';
+      chip.title = titles;
     } else {
       chip.className = 'status-chip status-ok';
       text.textContent = `${idle}/${workers.length} workers idle`;
-      chip.title = workers.map(worker => `${worker.name}: ${worker.status}`).join('\n');
+      chip.title = titles;
     }
   } catch {
-    chip.className = 'status-chip status-err';
-    text.textContent = 'Server offline';
-    chip.title = 'The master server could not be reached.';
+    // Only after 3 consecutive failures is "Server offline" honest.
+    workerPollFailures += 1;
+    if (workerPollFailures >= 3) {
+      chip.className = 'status-chip status-err';
+      text.textContent = 'Server offline';
+      chip.title = 'The master server could not be reached.';
+    }
   }
 }
 
@@ -209,7 +226,7 @@ function renderCharChip() {
   const chip = document.getElementById('char-chip');
   if (!chip || !parsedData) return;
   const cls = String(parsedData.char_class || '').toLowerCase();
-  const color = CLASS_COLORS[cls] || 'var(--accent-color)';
+  const color = CLASS_COLORS[cls] || 'var(--accent-text)';
   const slots = Object.keys(parsedData.items_by_slot || {}).length;
   const candidates = Object.values(parsedData.items_by_slot || {})
     .reduce((total, items) => total + items.length, 0);
@@ -292,8 +309,14 @@ function startRunProgress() {
   simulationDone = false;
   runStartedAt = Date.now();
   logLineCount = 0;
+  logLines = [];
+  lastProgressPct = 0;
+  lastMetaAt = 0;
+  const resultSlot = document.getElementById('run-result');
+  if (resultSlot) { resultSlot.hidden = true; resultSlot.innerHTML = ''; }
   document.getElementById('run-progress').hidden = false;
-  document.getElementById('run-progress-meta').textContent = 'Starting…';
+  setRunProgress(0, 'Starting…');
+  setRunStage('');
   document.getElementById('run-elapsed').textContent = '00:00';
   runTimer = setInterval(() => {
     document.getElementById('run-elapsed').textContent = formatElapsed(Date.now() - runStartedAt);
@@ -304,16 +327,101 @@ function stopRunProgress() {
   if (runTimer) { clearInterval(runTimer); runTimer = null; }
 }
 
+// Stage markers printed by src/cli/sim_helper.py (STAGE 1/2/3, BASELINE).
+const RUN_STAGE_LABELS = {
+  'STAGE 1': 'Stage 1 of 3 · Fast filtering',
+  'STAGE 2': 'Stage 2 of 3 · Refinement',
+  'STAGE 3': 'Stage 3 of 3 · Final selection',
+  'BASELINE': 'Baseline only',
+};
+
+let lastProgressPct = 0;
+let lastMetaAt = 0;
+
 function updateRunProgressMeta(text) {
-  const meta = document.getElementById('run-progress-meta');
-  if (!meta) return;
-  const progress = String(text).match(/Progress:\s*(\d+)%\s*\(([^)]+)\)/);
+  const line = String(text).trim();
+  if (!line) return;
+  const progress = line.match(/Progress:\s*(\d+)%\s*\(([^)]+)\)/);
   if (progress) {
-    meta.textContent = `${progress[1]}% · ${progress[2]} profiles`;
+    setRunProgress(Number(progress[1]), `${progress[1]}% · ${progress[2]} profiles`);
     return;
   }
-  const line = String(text).trim();
-  if (line) meta.textContent = line.length > 90 ? `${line.slice(0, 90)}…` : line;
+  for (const marker of Object.keys(RUN_STAGE_LABELS)) {
+    if (line.includes(marker)) { setRunStage(RUN_STAGE_LABELS[marker]); return; }
+  }
+  setRunMeta(line.length > 90 ? `${line.slice(0, 90)}…` : line);
+}
+
+function setRunProgress(pct, meta) {
+  lastProgressPct = Math.min(100, Math.max(0, pct));
+  const fill = document.getElementById('run-progress-fill');
+  if (fill) {
+    fill.style.width = `${lastProgressPct}%`;
+    fill.setAttribute('aria-valuenow', String(lastProgressPct));
+  }
+  setRunMeta(meta);
+  updateRunEta();
+}
+
+function setRunStage(label) {
+  const el = document.getElementById('run-stage');
+  if (el) el.textContent = label;
+}
+
+// aria-live polite throttled to <=1 update/s (doc 4.2) so fast log lines
+// never spam screen readers.
+function setRunMeta(text) {
+  const now = Date.now();
+  if (now - lastMetaAt < 1000) return;
+  lastMetaAt = now;
+  const meta = document.getElementById('run-progress-meta');
+  if (meta) meta.textContent = text;
+}
+
+// t_2ab8f3be: log rendering was O(n^2) (textContent += per line) and froze
+// the tab on long runs. Full lines stay in logLines for the download button;
+// the DOM shows only the last LOG_RENDER_CAP lines, repainted once per frame.
+const LOG_RENDER_CAP = 2000;
+let logLines = [];
+let logRenderQueued = false;
+
+function pushLogLines(lines) {
+  logLines.push(...lines);
+  logLineCount += lines.length;
+  if (!logRenderQueued) {
+    logRenderQueued = true;
+    requestAnimationFrame(renderLogTail);
+  }
+}
+
+function renderLogTail() {
+  logRenderQueued = false;
+  const log = document.getElementById('simulation-log');
+  if (!log) return;
+  log.textContent = logLines.slice(-LOG_RENDER_CAP).join('\n') + '\n';
+  const follow = document.getElementById('log-follow');
+  if (!follow || follow.checked) log.scrollTop = log.scrollHeight;
+}
+
+function downloadLog() {
+  const blob = new Blob([logLines.join('\n')], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `simc-run-${currentTaskId || Date.now()}.log`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+let currentTaskId = '';
+
+function updateRunEta() {
+  const eta = document.getElementById('run-eta');
+  if (!eta) return;
+  // ETA only after 5% so the first noisy samples do not skew it (doc 4.2).
+  if (lastProgressPct < 5 || !runStartedAt) { eta.hidden = true; return; }
+  const remainSec = Math.round((Date.now() - runStartedAt) * (100 - lastProgressPct) / lastProgressPct / 1000);
+  eta.hidden = false;
+  eta.textContent = remainSec < 60 ? `~${remainSec}s left` : `~${Math.round(remainSec / 60)} min left`;
 }
 
 async function stopSimulation() {
@@ -324,7 +432,7 @@ async function stopSimulation() {
   if (entered === null) return;
   token = entered.trim();
   try {
-    const response = await fetch('api/stop-simulation', {
+    const response = await apiFetch('api/stop-simulation', {
       method: 'POST', headers: { 'X-Admin-Token': token }
     });
     if (response.status === 403) {
@@ -359,12 +467,14 @@ function parseItemParams(item) {
   );
 }
 
-function createWowheadIconLink(itemId, bonusIds = '') {
+// t_2ab8f3be: icon and name merged into ONE anchor (was 2 tab stops per card,
+// 42+ per slot group). nameHtml must arrive pre-escaped.
+function createWowheadIconLink(itemId, bonusIds = '', nameHtml = '') {
   const safeId = encodeURIComponent(itemId || '0');
   const safeBonus = String(bonusIds || '').split('/').filter(value => /^\d+$/.test(value)).join(':');
   const bonusQuery = safeBonus ? `?bonus=${encodeURIComponent(safeBonus)}` : '';
   const tooltipData = safeBonus ? `bonus=${safeBonus}&iconsize=large` : 'iconsize=large';
-  return `<a href="https://www.wowhead.com/item=${safeId}${bonusQuery}" class="item-icon-link wowhead-item-link" data-wowhead="${tooltipData}" data-wh-rename="false" target="_blank"><img src="api/item-icon/${safeId}" alt="" loading="lazy" onerror="this.closest('.item-icon-link').classList.add('icon-missing')"></a>`;
+  return `<a href="https://www.wowhead.com/item=${safeId}${bonusQuery}" class="item-icon-link wowhead-item-link" data-wowhead="${tooltipData}" data-wh-rename="false" target="_blank"><img src="api/item-icon/${safeId}" alt="" loading="lazy" onerror="this.closest('.item-icon-link').classList.add('icon-missing')">${nameHtml}</a>`;
 }
 
 function createEnhancementWowheadLink(enhancement, name) {
@@ -694,7 +804,7 @@ async function fetchUpgradePreview(slot, item, card) {
   try {
     let data = upgradePreviewCache.get(url);
     if (!data) {
-      const response = await fetch(url);
+      const response = await apiFetch(url);
       if (!response.ok) throw new Error(`status ${response.status}`);
       data = await response.json();
       upgradePreviewCache.set(url, data);
@@ -738,7 +848,7 @@ async function ensureStatScores(slot, items, selectEl) {
   try {
     for (let start = 0; start < pending.length; start += STAT_SORT_BATCH) {
       const chunk = pending.slice(start, start + STAT_SORT_BATCH);
-      const response = await fetch('api/wowhead/tooltips/batch', {
+      const response = await apiFetch('api/wowhead/tooltips/batch', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           char_class: parsedData.char_class,
@@ -841,7 +951,7 @@ function wireSlotAddForm(group, slot) {
     const itemId = Number(raw);
     showSlotAddMessage(addPreview, 'loading', `Resolving item ${itemId} on Wowhead…`);
     try {
-      const response = await fetch(`api/wowhead/tooltip?item=${itemId}`);
+      const response = await apiFetch(`api/wowhead/tooltip?item=${itemId}`);
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.detail || `status ${response.status}`);
       renderSlotAddPreview(slot, itemId, data.preview || {}, addPreview, addInput);
@@ -869,7 +979,8 @@ function renderGear() {
       `title="Sort candidates. 'Stat priority' is a heuristic class weight order, not a sim result.">` +
       `<option value="ilvl">ilvl ↓</option><option value="name">Name</option>` +
       `<option value="priority">Stat priority*</option></select>` +
-      `<button type="button" class="slot-toggle-all">Select none</button></div>` +
+      `<button type="button" class="slot-toggle-all">Select none</button>` +
+      `<button type="button" class="btn-ghost slot-add-toggle" aria-expanded="false">Add by ID</button></div>` +
       `<div class="slot-add-form">` +
       `<input type="text" class="slot-add-input" inputmode="numeric" autocomplete="off" ` +
       `placeholder="Own it but not in the export? Add by Wowhead item id…" ` +
@@ -891,6 +1002,16 @@ function renderGear() {
       }
     });
     wireSlotAddForm(group, slot);
+    // t_2ab8f3be: add-by-id is a power feature — collapsed until asked for.
+    const addToggle = group.querySelector('.slot-add-toggle');
+    const addForm = group.querySelector('.slot-add-form');
+    addForm.hidden = true;
+    addToggle.addEventListener('click', () => {
+      const open = addForm.hidden;
+      addForm.hidden = !open;
+      addToggle.setAttribute('aria-expanded', String(open));
+      if (open) addForm.querySelector('.slot-add-input').focus();
+    });
     const syncSlotHeader = () => {
       slotCountEl.textContent = `${selectedItems[slot].size}/${items.length} selected`;
       slotToggleAll.textContent = items.length && selectedItems[slot].size === items.length
@@ -916,13 +1037,10 @@ function renderGear() {
       card.innerHTML = `
         <label class="item-select-row">
           <input type="checkbox" class="item-select-input" ${selectedItems[slot].has(item) ? 'checked' : ''}>
-          ${createWowheadIconLink(params.id, params.bonus_id)}
-          <span class="gear-card-info"><a href="https://www.wowhead.com/item=${encodeURIComponent(params.id || '0')}${params.bonus_id ? `?bonus=${encodeURIComponent(params.bonus_id.replace(/\//g, ':'))}` : ''}" class="item-option-name gear-card-name wowhead-item-link" data-wowhead="${params.bonus_id ? `bonus=${escapeHtml(params.bonus_id.replace(/\//g, ':'))}` : ''}" target="_blank">${escapeHtml(label.replace(/\s*\(\d+\)/, ''))}</a>${addedItems.has(item) ? '<span class="added-badge">Added</span>' : ''}<span class="gear-card-slot"><span>Item level</span><span class="gear-card-slot-ilvl">${level ? level : '—'}</span></span></span>
+          <span class="gear-card-info">${createWowheadIconLink(params.id, params.bonus_id, `<span class="item-option-name gear-card-name">${escapeHtml(label.replace(/\s*\(\d+\)/, ''))}</span>`)}${addedItems.has(item) ? '<span class="added-badge">Added</span>' : ''}<span class="gear-card-slot"><span>Item level</span><span class="gear-card-slot-ilvl">${level ? level : '—'}</span></span></span>
         </label>
-        <div class="gear-card-controls">${renderTrackControls(slot, item)}</div>
         ${cardBadges(slot, item)}
-        ${isVoidforgeEligibleSlot(slot) ? `<label class="voidforge-field-container"><input type="checkbox" class="voidforge-input" ${voidforgedItems[slot][item] ? 'checked' : ''}> ${seasonAscension().name || 'Ascendant'} ×${seasonAscension().cost ?? ''}</label>` : ''}
-        <div class="upgrade-preview" hidden></div>
+        ${upgradePopoverMarkup(slot, item)}
         ${addedItems.has(item) ? `<button type="button" class="slot-remove-added" title="Remove this added item from the candidates"><span class="sr-only">Remove ${escapeHtml(label.replace(/\s*\(\d+\)/, ''))} from candidates</span>×</button>` : ''}
       `;
 
@@ -1005,7 +1123,40 @@ function renderGear() {
           selectionChanged();
         });
       }
+      const upgradeTrigger = card.querySelector('.upgrade-trigger');
+      if (upgradeTrigger) {
+        const pop = card.querySelector('.popover');
+        wirePopover(upgradeTrigger, pop);
+        pop.addEventListener('change', () => {
+          card.querySelector('.upgrade-state').textContent = upgradeStateText(slot, item);
+        });
+      }
       itemGrid.appendChild(card);
+    }
+
+    // t_2ab8f3be: slot collapse (doc 4.2) — selected + top 3 visible, rest
+    // behind a toggle so 42-card slots stop dominating the tab order.
+    const cards = [...itemGrid.children];
+    let collapsedCount = 0;
+    cards.forEach((card, index) => {
+      if (index >= 3 && !card.classList.contains('is-selected')) {
+        card.classList.add('is-collapsed');
+        collapsedCount += 1;
+      }
+    });
+    if (collapsedCount) {
+      const showAll = document.createElement('button');
+      showAll.type = 'button';
+      showAll.className = 'btn-ghost slot-show-all';
+      showAll.setAttribute('aria-expanded', 'false');
+      const label = `Show all ${cards.length} items (${collapsedCount} hidden)`;
+      showAll.textContent = label;
+      showAll.addEventListener('click', () => {
+        const open = itemGrid.classList.toggle('is-expanded');
+        showAll.setAttribute('aria-expanded', String(open));
+        showAll.textContent = open ? 'Show fewer' : label;
+      });
+      itemGrid.after(showAll);
     }
 
     if ((appConfig.gems?.standard || []).length) {
@@ -1023,62 +1174,192 @@ function renderGear() {
   refreshWowheadLinks();
 }
 
+// t_2ab8f3be: shared popover behavior (gear upgrade + pre-run diff, doc 5):
+// aria-expanded, Esc, outside-click, focus return, Tab trap.
+function wirePopover(trigger, popover, onOpen) {
+  const focusables = () => [...popover.querySelectorAll('button, select, input, a[href]')]
+    .filter(el => !el.disabled && el.offsetParent !== null);
+  function onKey(event) {
+    if (event.key === 'Escape') { event.preventDefault(); close(); return; }
+    if (event.key !== 'Tab') return;
+    const els = focusables();
+    if (!els.length) return;
+    const first = els[0];
+    const last = els[els.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  }
+  function onDoc(event) {
+    if (!popover.contains(event.target) && event.target !== trigger) close(false);
+  }
+  function open() {
+    popover.hidden = false;
+    trigger.setAttribute('aria-expanded', 'true');
+    if (onOpen) onOpen();
+    focusables()[0]?.focus();
+    document.addEventListener('keydown', onKey, true);
+    document.addEventListener('click', onDoc, true);
+  }
+  function close(focusBack = true) {
+    if (popover.hidden) return;
+    popover.hidden = true;
+    trigger.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('keydown', onKey, true);
+    document.removeEventListener('click', onDoc, true);
+    if (focusBack) trigger.focus();
+  }
+  trigger.setAttribute('aria-expanded', 'false');
+  trigger.addEventListener('click', () => { if (popover.hidden) open(); else close(); });
+}
+
+function upgradeStateText(slot, item) {
+  const upgrade = gearUpgrades[slot]?.[item];
+  const level = targetUpgradeLevel(slot, item);
+  const bits = [];
+  if (upgrade?.track) bits.push(upgrade.track[0].toUpperCase() + upgrade.track.slice(1) + (upgrade.rank ? ` ${upgrade.rank}` : ''));
+  else if (upgrade?.source === 'export') bits.push('Export ladder');
+  else bits.push('No grade');
+  if (level != null) bits.push(`ilvl ${level}`);
+  return bits.join(' \u00b7 ');
+}
+
+function upgradePopoverMarkup(slot, item) {
+  const controls = renderTrackControls(slot, item);
+  const voidforge = isVoidforgeEligibleSlot(slot)
+    ? `<label class="voidforge-field-container"><input type="checkbox" class="voidforge-input" ${voidforgedItems[slot][item] ? 'checked' : ''}> ${seasonAscension().name || 'Ascendant'} \u00d7${seasonAscension().cost ?? ''}</label>`
+    : '';
+  if (!controls && !voidforge) return '';
+  return `<div class="gear-card-controls popover-host">` +
+    `<span class="upgrade-state">${escapeHtml(upgradeStateText(slot, item))}</span>` +
+    `<button type="button" class="btn-ghost upgrade-trigger" aria-expanded="false" aria-haspopup="dialog">Upgrade\u2026</button>` +
+    `<div class="popover" hidden>${controls}${voidforge}<div class="upgrade-preview" hidden></div></div></div>`;
+}
+
+// Pre-run diff (doc 5): client-side summary only; the server combo count in
+// the run bar stays authoritative.
+function renderReviewPopover() {
+  const pop = document.getElementById('review-popover');
+  if (!pop) return;
+  const rows = [];
+  for (const [slot, items] of Object.entries(selectedItems)) {
+    for (const item of items) {
+      const name = parsedData.item_names[item] || item;
+      rows.push(`<tr><td>${escapeHtml(slot.replace('_', ' '))}</td><td>${escapeHtml(String(name).replace(/\s*\(\d+\)/, ''))}</td><td>${escapeHtml(upgradeStateText(slot, item))}</td></tr>`);
+    }
+  }
+  pop.innerHTML = rows.length
+    ? `<table class="diff-table"><thead><tr><th scope="col">Slot</th><th scope="col">Item</th><th scope="col">Grade</th></tr></thead><tbody>${rows.join('')}</tbody></table>`
+    : '<small>No items selected yet.</small>';
+}
+
+// shortcut: PVP meta gems are excluded by name substring; upgrade to item-id
+// filtering when the backend exposes gem ids.
+const PVP_META_NAME_MATCH = /heliotrope/i;
+
 function renderEnhancements() {
   const container = document.getElementById('enhancement-options');
   container.innerHTML = '';
-  for (const [slot, enchants] of Object.entries(appConfig.enchantments || {})) {
-    if (!enchants.length || !parsedData.items_by_slot[slot]) continue;
+  // t_2ab8f3be (doc 4.3): 68 flat checkboxes -> searchable, grouped <details>
+  // sections. t_16e4f177 (leader ruling, supersedes doc 4.2 open-if-checked
+  // clause): ALL groups start closed — the doc's clause forced every group
+  // holding an equipped/checked candidate open, keeping 136 chip stops
+  // permanently in the tab order. Selection state stays visible in the
+  // summary label instead; the search input opens matches on demand.
+  const search = document.createElement('input');
+  search.type = 'search';
+  search.className = 'enh-search';
+  search.placeholder = 'Search enchantments and gems\u2026';
+  search.setAttribute('aria-label', 'Search enchantments and gems');
+  container.appendChild(search);
+
+  const addSection = (title, build) => {
+    const section = document.createElement('details');
+    section.className = 'enh-section';
+    const summary = document.createElement('summary');
     const group = document.createElement('fieldset');
     group.className = 'enhancement-group';
-    group.innerHTML = `<legend>${escapeHtml(slot.replace('_', ' '))} enchants</legend>`;
-    for (const enchant of enchants) {
-      const id = String(typeof enchant === 'object' ? enchant.id : enchant);
-      const name = typeof enchant === 'object' ? enchant.name : `Enchant ${id}`;
-      const label = document.createElement('label');
-      label.className = 'choice-chip';
-      label.innerHTML = `<input type="checkbox">${createEnhancementWowheadLink(enchant, name)}`;
-      const input = label.querySelector('input');
-      input.checked = selectedEnchants[slot].has(id) || equippedEnchants[slot].has(id);
-      input.addEventListener('change', event => {
-        if (event.target.checked) selectedEnchants[slot].add(id);
-        else {
-          selectedEnchants[slot].delete(id);
-          equippedEnchants[slot].delete(id);
-        }
-        selectionChanged();
-      });
-      group.appendChild(label);
-    }
-    container.appendChild(group);
+    build(group);
+    const total = group.querySelectorAll('input').length;
+    const renderLabel = () => {
+      const checked = group.querySelectorAll('input:checked').length;
+      summary.textContent = checked
+        ? `${title} \u00b7 ${checked} selected`
+        : `${title} (${total})`;
+    };
+    renderLabel();
+    group.addEventListener('change', renderLabel);
+    section.append(summary, group);
+    container.appendChild(section);
+  };
+
+  for (const [slot, enchants] of Object.entries(appConfig.enchantments || {})) {
+    if (!enchants.length || !parsedData.items_by_slot[slot]) continue;
+    addSection(`${slot.replace('_', ' ')} enchants`, group => {
+      for (const enchant of enchants) {
+        const id = String(typeof enchant === 'object' ? enchant.id : enchant);
+        const name = typeof enchant === 'object' ? enchant.name : `Enchant ${id}`;
+        const equipped = equippedEnchants[slot].has(id);
+        const label = document.createElement('label');
+        label.className = 'choice-chip';
+        label.innerHTML = `<input type="checkbox">${createEnhancementWowheadLink(enchant, name)}` +
+          (equipped ? '<span class="equipped-badge">equipped</span>' : '');
+        const input = label.querySelector('input');
+        input.checked = selectedEnchants[slot].has(id) || equipped;
+        input.addEventListener('change', event => {
+          if (event.target.checked) selectedEnchants[slot].add(id);
+          else {
+            selectedEnchants[slot].delete(id);
+            equippedEnchants[slot].delete(id);
+          }
+          selectionChanged();
+        });
+        group.appendChild(label);
+      }
+    });
   }
 
   const gems = (appConfig.gems?.standard || []).filter(gem =>
-    !String(gem.name || '').toLowerCase().includes('heliotrope')
+    !PVP_META_NAME_MATCH.test(String(gem.name || ''))
   );
   if (gems.length) {
-    const group = document.createElement('fieldset');
-    group.className = 'enhancement-group gems-group';
-    group.innerHTML = '<legend>Flawless gems</legend>';
-    for (const gem of gems) {
-      const id = String(typeof gem === 'object' ? gem.id : gem);
-      const name = typeof gem === 'object' ? gem.name : `Gem ${id}`;
-      const label = document.createElement('label');
-      label.className = 'choice-chip';
-      label.innerHTML = `<input type="checkbox">${createEnhancementWowheadLink(gem, name)}`;
-      const input = label.querySelector('input');
-      input.checked = selectedGems.has(id) || equippedGems.has(id);
-      input.addEventListener('change', event => {
-        if (event.target.checked) selectedGems.add(id);
-        else {
-          selectedGems.delete(id);
-          equippedGems.delete(id);
-        }
-        selectionChanged();
-      });
-      group.appendChild(label);
-    }
-    container.appendChild(group);
+    addSection('Flawless gems', group => {
+      group.className = 'enhancement-group gems-group';
+      for (const gem of gems) {
+        const id = String(typeof gem === 'object' ? gem.id : gem);
+        const name = typeof gem === 'object' ? gem.name : `Gem ${id}`;
+        const equipped = equippedGems.has(id);
+        const label = document.createElement('label');
+        label.className = 'choice-chip';
+        label.innerHTML = `<input type="checkbox">${createEnhancementWowheadLink(gem, name)}` +
+          (equipped ? '<span class="equipped-badge">equipped</span>' : '');
+        const input = label.querySelector('input');
+        input.checked = selectedGems.has(id) || equipped;
+        input.addEventListener('change', event => {
+          if (event.target.checked) selectedGems.add(id);
+          else {
+            selectedGems.delete(id);
+            equippedGems.delete(id);
+          }
+          selectionChanged();
+        });
+        group.appendChild(label);
+      }
+    });
   }
+
+  search.addEventListener('input', () => {
+    const needle = search.value.trim().toLowerCase();
+    container.querySelectorAll('.enh-section').forEach(section => {
+      let visible = 0;
+      section.querySelectorAll('.choice-chip').forEach(chip => {
+        const hit = !needle || chip.textContent.toLowerCase().includes(needle);
+        chip.hidden = !hit;
+        if (hit) visible += 1;
+      });
+      section.hidden = Boolean(needle) && visible === 0;
+      if (needle && visible) section.open = true;
+    });
+  });
   refreshWowheadLinks();
 }
 
@@ -1086,15 +1367,25 @@ function renderWorkflow() {
   workflowContainer.innerHTML = `
     <section class="panel-card workflow-panel full-width baseline-gear-panel" id="baseline-gear-panel"><div class="step-heading"><span class="num-badge num-badge-lg">2</span><div><h2>Baseline Gear · select candidates for ${escapeHtml(parsedData.char_name)}</h2><small>Grades are inferred from the export and refined with Wowhead. Toggle whole slots with Select all/none.</small></div></div><div id="gear-grid"></div></section>
     <section class="panel-card workflow-panel full-width" id="step-enhance"><div class="step-heading"><span class="num-badge num-badge-lg">3</span><div><h2>Select gems and enchantments</h2><small>Checked enhancements are included in generated variations; the ones you already wear are pre-checked as the baseline.</small></div></div><div id="enhancement-options" class="enhancement-options"></div></section>
-    <section class="panel-card workflow-panel run-panel full-width" id="step-run"><div class="step-heading"><span class="num-badge num-badge-lg">4</span><div><h2>Run comparison</h2><small>Combinations update automatically as you change gear. Start the run from the bar at the bottom.</small></div></div><div id="run-progress" hidden><div class="progress-card"><span class="progress-dot" aria-hidden="true"></span><span class="progress-elapsed" id="run-elapsed">00:00</span><span class="progress-meta" id="run-progress-meta">Starting…</span><button type="button" id="btn-stop" class="btn-danger">Stop run</button></div></div><div class="log-toolbar" id="log-toolbar" hidden><label class="log-follow"><input type="checkbox" id="log-follow" checked> Follow log</label><span class="char-count" id="log-lines">0 lines</span></div><pre id="simulation-log" class="simulation-log" hidden></pre></section>
+    <section class="panel-card workflow-panel run-panel full-width" id="step-run"><div class="step-heading"><span class="num-badge num-badge-lg">4</span><div><h2>Run comparison</h2><small>Combinations update automatically as you change gear. Start the run from the bar at the bottom.</small></div></div><div id="run-progress" hidden><div class="progress-card" aria-live="polite"><div class="progress-head"><span class="progress-elapsed" id="run-elapsed">00:00</span><span class="progress-stage" id="run-stage"></span><span class="progress-eta" id="run-eta" hidden></span><button type="button" id="btn-stop" class="btn-danger">Stop run</button></div><div class="progress-track"><div class="progress-fill" id="run-progress-fill" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Simulation progress"></div></div><span class="progress-meta" id="run-progress-meta">Starting…</span></div></div><div id="run-result" hidden></div><div class="log-toolbar" id="log-toolbar" hidden><label class="log-follow"><input type="checkbox" id="log-follow" checked> Follow log</label><span class="char-count" id="log-lines">0 lines</span><button type="button" id="btn-log-download" class="btn-ghost">Download full log</button></div><pre id="simulation-log" class="simulation-log" role="log" aria-live="off" hidden></pre></section>
   `;
   renderGear();
   renderEnhancements();
   renderCharChip();
   document.getElementById('run-bar').hidden = false;
+  // t_16e4f177 (leader ruling): with the gear list rendered, the skip link
+  // must move focus past it to the run controls in one activation.
+  const skipLink = document.querySelector('.skip-link');
+  if (skipLink) {
+    skipLink.href = '#btn-run';
+    skipLink.textContent = 'Skip to run controls';
+  }
   document.getElementById('btn-run').addEventListener('click', runSimulation);
   document.getElementById('fight-style').addEventListener('change', selectionChanged);
   document.getElementById('btn-stop').addEventListener('click', stopSimulation);
+  document.getElementById('btn-log-download').addEventListener('click', downloadLog);
+  wirePopover(document.getElementById('btn-review'),
+    document.getElementById('review-popover'), renderReviewPopover);
   observeWorkflowSteps();
   updateSummary();
   void generateInput(true);
@@ -1109,7 +1400,7 @@ async function hydrateWowheadUpgrades(itemsBySlot) {
       const rest = (items || []).filter(item => !parsedData?.item_upgrades?.[item]);
       if (rest.length) lookupItems[slot] = rest;
     }
-    const response = await fetch('api/wowhead-upgrades', {
+    const response = await apiFetch('api/wowhead-upgrades', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ items_by_slot: lookupItems })
     });
@@ -1158,7 +1449,7 @@ async function generateInput(quiet = false) {
   const status = document.getElementById('workflow-status');
   if (!quiet) status.textContent = 'Preparing comparison…';
   try {
-    const response = await fetch('api/generate-simc', {
+    const response = await apiFetch('api/generate-simc', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(buildPayload())
     });
@@ -1187,10 +1478,11 @@ async function runSimulation() {
   const log = document.getElementById('simulation-log');
   status.textContent = 'Looking for an idle worker…';
   try {
-    const response = await fetch(`api/run-simulation?input_id=${encodeURIComponent(generatedInput.input_id)}`, { method: 'POST' });
+    const response = await apiFetch(`api/run-simulation?input_id=${encodeURIComponent(generatedInput.input_id)}`, { method: 'POST' });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || 'Simulation could not start');
     status.textContent = `Simulation ${data.task_id} is running on worker ${data.worker_id}.`;
+    currentTaskId = data.task_id;
     log.hidden = false;
     log.textContent = '';
     document.getElementById('log-toolbar').hidden = false;
@@ -1200,19 +1492,15 @@ async function runSimulation() {
     events.onmessage = async event => {
       const message = JSON.parse(event.data);
       if (message.type === 'log') {
-        log.textContent += `${message.text}\n`;
-        logLineCount += 1;
+        pushLogLines([message.text]);
         updateRunProgressMeta(message.text);
       }
       if (message.type === 'log_batch') {
-        log.textContent += `${message.lines.join('\n')}\n`;
-        logLineCount += message.lines.length;
+        pushLogLines(message.lines);
       }
       if (message.type === 'log' || message.type === 'log_batch') {
         const linesEl = document.getElementById('log-lines');
         if (linesEl) linesEl.textContent = `${logLineCount.toLocaleString()} lines`;
-        const follow = document.getElementById('log-follow');
-        if (!follow || follow.checked) log.scrollTop = log.scrollHeight;
       }
       if (message.type === 'done' || message.type === 'error') {
         stopRunProgress();
@@ -1220,22 +1508,9 @@ async function runSimulation() {
         if (message.type === 'done') simulationDone = true;
         updateRailState();
         if (message.type === 'done' && message.report_file && message.task_id) {
-          // t_c968bf8d: durable reports live under /reports/<user_id>/<task_id>/,
-          // which only the master can resolve — ask it for the URL.
-          let reportLink = '';
-          try {
-            const urlResp = await fetch(`api/report-url?task_id=${encodeURIComponent(message.task_id)}`);
-            if (urlResp.ok) {
-              const urlData = await urlResp.json();
-              if (urlData.url) reportLink = ` <a href="${urlData.url}" target="_blank">Open report</a>`;
-            }
-          } catch (e) { /* report link is best-effort */ }
-          status.innerHTML = `${escapeHtml(message.text)}${reportLink}`;
-          const baseline = parsedData?.char_name || '';
-          window.location.assign(`results?task_id=${encodeURIComponent(message.task_id)}&baseline=${encodeURIComponent(baseline)}`);
+          await showRunResultCard(message);
         } else {
-          status.textContent = message.text || 'The simulation stopped unexpectedly — see the log above.';
-          status.classList.add('error');
+          showRunFailureCard(message);
         }
         events.close();
       }
@@ -1244,6 +1519,60 @@ async function runSimulation() {
   } catch (error) {
     status.textContent = `Could not start simulation: ${error.message}`;
   }
+}
+
+// t_2ab8f3be: the run ends on a card the user acts on — the old code yanked
+// the browser to the results page mid-view (auto-redirect removed).
+async function showRunResultCard(message) {
+  const status = document.getElementById('workflow-status');
+  const slot = document.getElementById('run-result');
+  const baseline = parsedData?.char_name || '';
+  const resultsHref = `results?task_id=${encodeURIComponent(message.task_id)}&baseline=${encodeURIComponent(baseline)}`;
+  let reportHref = '';
+  try {
+    // t_c968bf8d: durable reports live under /reports/<user_id>/<task_id>/,
+    // which only the master can resolve — ask it for the URL.
+    const urlResp = await apiFetch(`api/report-url?task_id=${encodeURIComponent(message.task_id)}`);
+    if (urlResp.ok) {
+      const urlData = await urlResp.json();
+      if (urlData.url) reportHref = urlData.url;
+    }
+  } catch (e) { /* report link is best-effort */ }
+  let bestLine = message.text || 'Run complete.';
+  try {
+    const resp = await apiFetch(`api/get-results?task_id=${encodeURIComponent(message.task_id)}`);
+    if (resp.ok) {
+      const results = ((await resp.json()).results || []).filter(r => r && r.dps > 0);
+      const base = results.find(r => r.name === baseline);
+      const candidates = results.filter(r => r.name !== baseline).sort((a, b) => b.dps - a.dps);
+      if (base && candidates.length) {
+        const delta = candidates[0].dps - base.dps;
+        bestLine = `Best: ${delta >= 0 ? '+' : ''}${Math.round(delta).toLocaleString()} DPS \u00b7 ${candidates[0].name}`;
+      }
+    }
+  } catch (e) { /* best-line is best-effort */ }
+  status.textContent = 'Run complete.';
+  if (!slot) return;
+  slot.hidden = false;
+  slot.innerHTML = `<div class="success-card"><span class="success-icon" aria-hidden="true">\u2713</span><div><h3>Done in ${escapeHtml(formatElapsed(Date.now() - runStartedAt))}</h3><p>${escapeHtml(bestLine)}</p><div class="success-actions"><a class="btn" href="${resultsHref}">Open results</a>${reportHref ? ` <a class="btn-ghost" href="${escapeHtml(reportHref)}" target="_blank">Open full report</a>` : ''}<button type="button" data-back-gear class="btn-ghost">Back to gear</button></div></div></div>`;
+  slot.querySelector('[data-back-gear]').addEventListener('click', backToGear);
+}
+
+function showRunFailureCard(message) {
+  const status = document.getElementById('workflow-status');
+  const slot = document.getElementById('run-result');
+  status.textContent = message.text || 'The simulation stopped unexpectedly.';
+  status.classList.add('error');
+  if (!slot) return;
+  const tail = logLines.slice(-12).join('\n');
+  slot.hidden = false;
+  slot.innerHTML = `<div class="success-card is-failed"><span class="success-icon" aria-hidden="true">\u2715</span><div><h3>Run failed</h3><p>${escapeHtml(message.text || 'The simulation stopped unexpectedly \u2014 see the log below.')}</p>${tail ? `<pre class="success-log-tail">${escapeHtml(tail)}</pre>` : ''}<div class="success-actions"><button type="button" data-open-log class="btn-ghost">Open log</button><button type="button" data-back-gear class="btn-ghost">Back to gear</button></div></div></div>`;
+  slot.querySelector('[data-open-log]').addEventListener('click', () => document.getElementById('simulation-log')?.scrollIntoView({ block: 'start' }));
+  slot.querySelector('[data-back-gear]').addEventListener('click', backToGear);
+}
+
+function backToGear() {
+  document.getElementById('step-gear')?.scrollIntoView({ block: 'start' });
 }
 
 async function applyParsedCharacter(data) {
@@ -1274,8 +1603,8 @@ btnParseAddon.addEventListener('click', async () => {
   clearParseError();
   try {
     const [parseResponse, configResponse] = await Promise.all([
-      fetch('api/parse-addon', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ addon_text: text }) }),
-      fetch('api/config')
+      apiFetch('api/parse-addon', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ addon_text: text }) }),
+      apiFetch('api/config')
     ]);
     if (!parseResponse.ok) {
       const detail = await parseResponse.json().catch(() => ({}));
@@ -1335,7 +1664,7 @@ function populateRealmSelect(data) {
 async function loadRealms() {
   if (!armoryRealm) return;
   try {
-    const response = await fetch('static/realms.json');
+    const response = await apiFetch('static/realms.json');
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     populateRealmSelect(await response.json());
   } catch (error) {
@@ -1391,11 +1720,11 @@ btnArmoryLoad?.addEventListener('click', async () => {
   try {
     const payload = buildArmoryPayload(value);
     const [armoryResponse, configResponse] = await Promise.all([
-      fetch('api/armory-load', {
+      apiFetch('api/armory-load', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       }),
-      fetch('api/config')
+      apiFetch('api/config')
     ]);
     if (!armoryResponse.ok) {
       const detail = await armoryResponse.json().catch(() => ({}));
@@ -1426,6 +1755,12 @@ document.getElementById('btn-new-export').addEventListener('click', () => {
   workflowContainer.innerHTML = '';
   document.getElementById('run-bar').hidden = true;
   document.getElementById('char-chip').hidden = true;
+  // t_16e4f177: no gear list and no run bar anymore — restore the plain skip link.
+  const skipLink = document.querySelector('.skip-link');
+  if (skipLink) {
+    skipLink.href = '#main';
+    skipLink.textContent = 'Skip to content';
+  }
   resetPastePanel();
   updateRailState();
   observeWorkflowSteps();
