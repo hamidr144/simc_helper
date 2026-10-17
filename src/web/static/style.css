@@ -1292,6 +1292,28 @@ button.slot-toggle-all:not(:disabled):hover {
   box-shadow: none;
 }
 
+/* TG2-A §3.1: enhancement state chips in the slot-group header (echo of
+step-3 selection + jump shortcut). Same chip family as slot-toggle-all. */
+button.enh-chip {
+  background: transparent;
+  border: 1px solid var(--border-hairline);
+  color: var(--text-secondary);
+  font-size: 11px;
+  padding: 4px 10px;
+  min-height: 26px;
+  border-radius: 20px;
+  box-shadow: none;
+  font-family: var(--font-sans);
+  font-weight: 600;
+}
+
+button.enh-chip:hover {
+  color: var(--text-primary);
+  border-color: rgba(157, 156, 255, 0.4);
+  transform: none;
+  box-shadow: none;
+}
+
 /* --- Run progress card (t_2ab8f3be: determinate % bar + stage + ETA) --- */
 .progress-card {
   display: flex;

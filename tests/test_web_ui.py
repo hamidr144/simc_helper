@@ -521,3 +521,32 @@ def test_wowhead_tooltip_config_keeps_gear_icons():
     assert "renameLinks: false" in html
     assert "renameLinks: true" not in html
     assert "iconizeLinks: true" not in html
+
+
+def test_enhancement_state_chips_on_slot_headers():
+    """TG2-A §3.4: step-2 slot headers echo step-3 enhancement state in
+    jump-and-open chips (design t_0fbfd0bd §3.1): chip class + label strings,
+    section-open target, and the step-3 hint."""
+    js = client.get("/static/app.js").text
+    assert js, "app.js must be served"
+
+    # Chip markup + label strings.
+    assert 'class="enh-chip"' in js
+    assert "Enchants: ${k} selected" in js
+    assert "· worn ${e}" in js
+    assert "`Gems: ${selectedGems.size} selected`" in js
+    assert "'Gems: none'" in js
+
+    # Section-open target: stable title stamp on <details> + lookup, the two
+    # section-title families, and the off_hand -> main_hand fallback mirror
+    # of generate_input.py's enchant-list fallback.
+    assert "section.dataset.enhTitle = title" in js
+    assert "s.dataset.enhTitle === title" in js
+    assert "'Flawless gems'" in js
+    assert "'main hand enchants'" in js
+
+    # Jump-and-open mechanics + step-3 hint (§3.1.2/.3).
+    assert "scrollIntoView({ block: 'start' })" in js
+    assert "section.open = true" in js
+    assert "querySelector('summary')?.focus()" in js
+    assert "You can also jump here from the chips in each gear slot above." in js
