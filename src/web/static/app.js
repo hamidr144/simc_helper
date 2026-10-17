@@ -1260,7 +1260,11 @@ function renderEnhancements() {
   const container = document.getElementById('enhancement-options');
   container.innerHTML = '';
   // t_2ab8f3be (doc 4.3): 68 flat checkboxes -> searchable, grouped <details>
-  // sections; a group opens automatically when it holds a checked candidate.
+  // sections. t_16e4f177 (leader ruling, supersedes doc 4.2 open-if-checked
+  // clause): ALL groups start closed — the doc's clause forced every group
+  // holding an equipped/checked candidate open, keeping 136 chip stops
+  // permanently in the tab order. Selection state stays visible in the
+  // summary label instead; the search input opens matches on demand.
   const search = document.createElement('input');
   search.type = 'search';
   search.className = 'enh-search';
@@ -1275,9 +1279,16 @@ function renderEnhancements() {
     const group = document.createElement('fieldset');
     group.className = 'enhancement-group';
     build(group);
-    summary.textContent = `${title} (${group.querySelectorAll('input').length})`;
+    const total = group.querySelectorAll('input').length;
+    const renderLabel = () => {
+      const checked = group.querySelectorAll('input:checked').length;
+      summary.textContent = checked
+        ? `${title} \u00b7 ${checked} selected`
+        : `${title} (${total})`;
+    };
+    renderLabel();
+    group.addEventListener('change', renderLabel);
     section.append(summary, group);
-    section.open = Boolean(group.querySelector('input:checked'));
     container.appendChild(section);
   };
 
@@ -1362,6 +1373,13 @@ function renderWorkflow() {
   renderEnhancements();
   renderCharChip();
   document.getElementById('run-bar').hidden = false;
+  // t_16e4f177 (leader ruling): with the gear list rendered, the skip link
+  // must move focus past it to the run controls in one activation.
+  const skipLink = document.querySelector('.skip-link');
+  if (skipLink) {
+    skipLink.href = '#btn-run';
+    skipLink.textContent = 'Skip to run controls';
+  }
   document.getElementById('btn-run').addEventListener('click', runSimulation);
   document.getElementById('fight-style').addEventListener('change', selectionChanged);
   document.getElementById('btn-stop').addEventListener('click', stopSimulation);
@@ -1737,6 +1755,12 @@ document.getElementById('btn-new-export').addEventListener('click', () => {
   workflowContainer.innerHTML = '';
   document.getElementById('run-bar').hidden = true;
   document.getElementById('char-chip').hidden = true;
+  // t_16e4f177: no gear list and no run bar anymore — restore the plain skip link.
+  const skipLink = document.querySelector('.skip-link');
+  if (skipLink) {
+    skipLink.href = '#main';
+    skipLink.textContent = 'Skip to content';
+  }
   resetPastePanel();
   updateRailState();
   observeWorkflowSteps();

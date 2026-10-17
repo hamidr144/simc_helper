@@ -5,11 +5,17 @@ test_project_hardening.py (static-file assertions, no browser needed).
 
 Only bug-1 (TC-RESP-390-DASH) ships here (fix card t_ab5b5f2e); bug-3
 (TC-A11Y-TABLE, results.js) rides its own fix card t_dccc2343.
+Bug-2 (TC-A11Y-TABSTOPS, t_16e4f177) adds the two tests below per the
+leader-reconciled gate: enhancement <details> groups closed by default with
+checked-count in the summary, and a skip link that reaches the run controls
+in one activation. The raw visible-stop total stays browser-only (QA manual
+procedure on t_16e4f177); these pins cover the two code-level causes.
 """
 from pathlib import Path
 import re
 
 CSS = Path("src/web/static/style.css").read_text()
+APP_JS = Path("src/web/static/app.js").read_text()
 
 
 def _rule(css, selector):
@@ -28,4 +34,37 @@ def test_bug_t2aede9cd_1_slot_group_header_wraps_at_narrow_width():
     assert re.search(r"flex-wrap\s*:\s*wrap|flex-flow[^;]*wrap|flex-wrap\s*:\s*wrap-reverse", body), (
         ".slot-group-header must allow wrapping (flex-wrap: wrap) so its "
         "controls fit 390px viewports"
+    )
+
+
+def test_bug_t2aede9cd_2a_enhancement_groups_closed_by_default():
+    """BUG t_16e4f177 (TC-A11Y-TABSTOPS, leader ruling): the design doc's
+    open-if-checked clause (section.open = Boolean(group.querySelector
+    ('input:checked'))) forced every enhancement group that held an
+    equipped/checked candidate open on a real export, keeping 136 chip +
+    wowhead-link stops permanently in the tab order (137 of 281 visible
+    stops). Groups must start closed and show selection state in the
+    summary label instead."""
+    assert "section.open = Boolean" not in APP_JS, (
+        "enhancement <details> groups must not auto-open on checked content"
+    )
+    assert "${checked} selected" in APP_JS, (
+        "summary label must show the checked count (e.g. 'Gems · 2 selected')"
+    )
+    assert "group.addEventListener('change', renderLabel)" in APP_JS, (
+        "summary label must update when a checkbox changes"
+    )
+
+
+def test_bug_t2aede9cd_2b_skip_link_reaches_run_controls_after_parse():
+    """BUG t_16e4f177 (TC-A11Y-TABSTOPS, leader ruling): the skip link
+    pointed at #main, which CONTAINS the gear list — activating it never
+    skipped the 135 gear-panel stops. After the workflow renders it must
+    target the run controls (#btn-run) so one activation moves focus past
+    the gear list; New export restores the plain #main target."""
+    assert "skipLink.href = '#btn-run'" in APP_JS, (
+        "skip link must retarget to the run controls once the gear list exists"
+    )
+    assert "skipLink.href = '#main'" in APP_JS, (
+        "New export must restore the plain skip-to-content target"
     )
