@@ -82,6 +82,12 @@ RETRY_BACKOFF_MAX = float(os.environ.get("RETRY_BACKOFF_MAX", str(DEFAULT_RETRY_
 # outside real exit codes and signal deaths (wait() returns -1..-64).
 STOPPED_EXIT_CODE = -100
 
+
+class _ReconnectRequested(Exception):
+    """t_acd39188 (LIFE-10): the WS to master died mid-execution. Distinct
+    from a task failure so the retry loop breaks out to reconnect instead of
+    burning its attempts against the dead socket."""
+
 # Task status tracking (in-memory, shared with main.py via sync)
 # (defined after TaskStatus class)
 
@@ -157,6 +163,65 @@ async def upload_file(session, task_id, file_path):
     except Exception as e:
         logger.error(f"Failed to upload {file_name}: {e}")
         raise
+
+
+UPLOAD_RETRY_ATTEMPTS = 3
+
+
+async def _upload_file_with_retry(session, task_id, file_path):
+    """t_acd39188 (LIFE-10): bounded retry around upload_file so a master
+    restart during the upload window does not lose the run's artifacts.
+    Final failure raises — never re-swallow (LIFE-9 t_a13e5be8: upload_file
+    itself raises on missing artifact or master non-200)."""
+    last_exc = RuntimeError(
+        f"Upload of {file_path} failed after {UPLOAD_RETRY_ATTEMPTS} attempts")
+    for attempt in range(UPLOAD_RETRY_ATTEMPTS):
+        try:
+            return await upload_file(session, task_id, file_path)
+        except FileNotFoundError:
+            raise  # missing artifact: retrying cannot help
+        except Exception as exc:
+            last_exc = exc
+        if attempt < UPLOAD_RETRY_ATTEMPTS - 1:
+            await asyncio.sleep(_calculate_retry_backoff(attempt + 1))
+    raise last_exc
+
+
+async def _recover_task_after_reconnect(session, websocket, task_id: str):
+    """t_acd39188 (LIFE-10): after a master restart the in-flight sim is
+    gone (its pty died with the old WS). Replay what survived: a finished
+    run's artifacts.zip is still on disk — re-upload it and report success;
+    otherwise report the loss so the user gets a failed history row
+    instead of silence."""
+    zip_path = f"/tmp/worker_sim_{task_id}/artifacts.zip"  # nosec B108
+    report_file = None
+    if os.path.exists(zip_path):
+        try:
+            import zipfile
+            report_file = next(
+                (n for n in zipfile.ZipFile(zip_path).namelist()
+                 if n.startswith("report_") and n.endswith(".html")), None)
+            await _upload_file_with_retry(session, task_id, zip_path)
+            code = 0 if report_file else 1
+            error = None if report_file else "Simulation produced no report before the connection loss"
+        except Exception as exc:
+            code, report_file, error = 1, None, f"Artifact re-upload after reconnect failed: {exc}"
+    else:
+        code, error = 1, "Connection to master lost: in-flight simulation was not resumable"
+    task_status = get_or_create_task_status(task_id)
+    task_status.status = "done" if code == 0 else "failed"
+    task_status.exit_code = code
+    task_status.error = error
+    task_status.updated_at = time.time()
+    await _push_task_status(websocket, task_id, task_status)
+    await websocket.send(json.dumps({
+        "type": "done", "task_id": task_id, "code": code,
+        "report_file": report_file, "error": error,
+        "retry_count": task_status.retry_count,
+        "max_retries": task_status.max_retries,
+    }))
+    # Recovery reached terminal state — honour LIFE-10's cleanup contract.
+    shutil.rmtree(f"/tmp/worker_sim_{task_id}", ignore_errors=True)  # nosec B108
 
 async def download_input_file(session, url_path, dest_path):
     url = f"{MASTER_URL}{url_path}"
@@ -386,7 +451,16 @@ async def _execute_task(session, task_id: str, input_file: str, websocket) -> tu
 
         res = await process_logs(master_fd, active_process, websocket, task_id, active_process.full_log_buffer, active_process.last_send_time_ref, 1.0)
         if res == "reconnect":
-            return 1, None, "Worker connection lost during execution"
+            # t_acd39188 (LIFE-10): the WS died. Kill the sim now — relying
+            # on pty SIGHUP left orphans racing the post-reconnect replay —
+            # and surface 'reconnect' so the retry loop stops burning its
+            # attempts against the dead socket.
+            try:
+                os.killpg(os.getpgid(active_process.pid), signal.SIGTERM)
+                active_process.wait(timeout=5)
+            except Exception:
+                pass
+            raise _ReconnectRequested()
         if res == "stopped":
             # Reap the SIGTERM'd process group so a stopped task leaves no zombie.
             try:
@@ -414,7 +488,9 @@ async def _execute_task(session, task_id: str, input_file: str, websocket) -> tu
                     report_path = os.path.join("/tmp/simc_reports", report_file)  # nosec B108
                     if os.path.exists(report_path):
                         zf.write(report_path, report_file)
-            await upload_file(session, task_id, zip_path)
+            # Retry-wrapped (t_acd39188): raises after final attempt, skipping
+            # the cleanup below — the zip stays on disk for post-reconnect replay.
+            await _upload_file_with_retry(session, task_id, zip_path)
             if tmp_dir:
                 # LIFE-10: engine temp dir is fully captured in the zip.
                 shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -460,6 +536,10 @@ async def run_worker():
         try:
             exit_code, report_file, error = await _execute_task(session, task_id, input_file, websocket)
             return ("success", exit_code, report_file, error)
+        except _ReconnectRequested:
+            # t_acd39188: was previously swallowed into a plain exit-1
+            # failure, making the 'reconnect' branch below unreachable.
+            return ("reconnect", 1, None, "WebSocket closed during execution")
         except websockets.ConnectionClosed:
             return ("reconnect", 1, None, "WebSocket closed during execution")
         except Exception as e:
@@ -494,6 +574,11 @@ async def run_worker():
                         if active_task_id:
                             logger.info(f"[{active_task_id}] Resuming active task after reconnect...")
                             await websocket.send(json.dumps({"type": "resume", "task_id": active_task_id}))
+                            # t_acd39188 (LIFE-10): master re-attached the task
+                            # queue; replay the on-disk artifacts or report the
+                            # loss, then clear so we go back to idle.
+                            await _recover_task_after_reconnect(session, websocket, active_task_id)
+                            active_task_id = None
 
                         last_ping_time = time.time()
 
@@ -586,9 +671,10 @@ async def run_worker():
                                                 status, exit_code, report_file, error = result
 
                                                 if status == "reconnect":
-                                                    # Connection lost — exit inner retry loop to reconnect
+                                                    # Connection lost — exit inner retry loop to reconnect.
+                                                    # t_acd39188: keep active_task_id set so the
+                                                    # post-reconnect resume/replay path runs.
                                                     logger.info(f"[{task_id}] Connection lost — reconnecting to master.")
-                                                    active_task_id = None
                                                     final_exit_code = 1
                                                     final_error = "Connection lost"
                                                     break
