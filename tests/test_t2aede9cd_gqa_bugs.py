@@ -10,12 +10,15 @@ leader-reconciled gate: enhancement <details> groups closed by default with
 checked-count in the summary, and a skip link that reaches the run controls
 in one activation. The raw visible-stop total stays browser-only (QA manual
 procedure on t_16e4f177); these pins cover the two code-level causes.
+Bug-3 (TC-A11Y-TABLE, fix card t_dccc2343) appends the results-table
+accessible-name and th-scope pins below.
 """
 from pathlib import Path
 import re
 
 CSS = Path("src/web/static/style.css").read_text()
 APP_JS = Path("src/web/static/app.js").read_text()
+RESULTS_JS = Path("src/web/static/results.js").read_text()
 
 
 def _rule(css, selector):
@@ -73,4 +76,18 @@ def test_bug_t2aede9cd_2b_skip_link_reaches_run_controls_after_parse():
     )
     assert "skipLink.href = '#main'" in APP_JS, (
         "New export must restore the plain skip-to-content target"
+    )
+
+
+def test_bug_t2aede9cd_3_results_table_accessible_name_and_scope():
+    """BUG t_2aede9cd-3 (TC-A11Y-TABLE): the results comparison table has no
+    <caption> and no aria-label, and its first <th> uses scope="#" (invalid
+    value), failing design doc §6 item 7 (tables need caption/aria-label and
+    valid th scope)."""
+    assert re.search(r"<table[^>]*aria-label|<caption", RESULTS_JS), (
+        "results.js must give the comparison table an accessible name "
+        "(<caption> or aria-label on the <table>)"
+    )
+    assert 'scope="#"' not in RESULTS_JS and "scope='#'" not in RESULTS_JS, (
+        'first table header must not use scope="#"'
     )

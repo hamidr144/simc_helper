@@ -142,7 +142,8 @@ function renderResults(results) {
   resultList.innerHTML = `${topCards}
     <section class="panel-card full-width results-table-card">
       <table class="results-table">
-        <thead><tr><th scope="#">&nbsp;</th><th scope="col">Candidate</th><th scope="col">DPS</th><th scope="col">Δ vs equipped</th><th scope="col">Changes</th></tr></thead>
+        <caption class="sr-only">Best combinations, ranked by DPS</caption>
+        <thead><tr><th scope="col">&nbsp;</th><th scope="col">Candidate</th><th scope="col">DPS</th><th scope="col">Δ vs equipped</th><th scope="col">Changes</th></tr></thead>
         <tbody>${tableRows}</tbody>
       </table>
       ${quarantineHtml}
