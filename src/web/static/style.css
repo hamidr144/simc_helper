@@ -1734,6 +1734,11 @@ button.slot-add-toggle { margin-top: 0; padding: 5px 10px; font-size: 11px; }
 .enh-section summary::before { content: '\25b8'; color: var(--text-muted); transition: transform var(--motion-fast) ease; }
 .enh-section[open] summary::before { transform: rotate(90deg); }
 .enh-section .enhancement-group { border: none; padding: 0; margin: 0; min-width: 0; }
+/* Chrome >=131 hides closed <details> content via paint containment on
+   ::details-content, which leaves descendant rects non-zero — rect-based
+   tab-stop audits (QA t_16e4f177 procedure) then count the closed groups.
+   Explicit display:none keeps the closed state honest for any tool. */
+.enh-section:not([open]) .enhancement-group { display: none; }
 .equipped-badge {
   font-size: 10px;
   text-transform: uppercase;

@@ -54,6 +54,12 @@ def test_bug_t2aede9cd_2a_enhancement_groups_closed_by_default():
     assert "group.addEventListener('change', renderLabel)" in APP_JS, (
         "summary label must update when a checkbox changes"
     )
+    # Chrome >=131 hides closed <details> via paint containment on
+    # ::details-content, leaving descendant rects non-zero — rect-based
+    # tab-stop audits then count the closed groups. Pin the explicit hide.
+    assert ".enh-section:not([open]) .enhancement-group" in CSS and "display: none" in (
+        _rule(CSS, ".enh-section:not([open]) .enhancement-group")
+    ), "closed enhancement groups must be display:none so rect-based tools agree"
 
 
 def test_bug_t2aede9cd_2b_skip_link_reaches_run_controls_after_parse():
