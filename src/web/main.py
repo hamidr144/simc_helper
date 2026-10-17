@@ -2529,6 +2529,41 @@ def parse_report_results(html_content: str) -> list:
     return results
 
 
+_PLAYER_BLOCK_RE = re.compile(r"^Player: (\S+)")
+_PLAYER_DPS_RE = re.compile(r"DPS=([\d.]+)[^ ]* DPS-Error=([\d.]+)/([\d.]+)%")
+
+
+def parse_actor_precision(log_path: str) -> dict:
+    """Per-actor ``mean`` / ``error_pct`` from a SimC stage log (D6, t_791b16f5).
+
+    Streams the log: ``Player: <name> ...`` opens an actor block, the next
+    ``DPS=<mean> ... DPS-Error=<abs>/<rel>%`` line closes it. Blocks echo the
+    full APL, so a block whose summary never appears is skipped when the next
+    ``Player:`` line arrives (defensive skip, same spirit as sim_helper's
+    ``filter_best`` streaming loop). Missing/unreadable log -> ``{}`` (legacy
+    runs ship no log; callers treat the fields as absent).
+    """
+    precision: dict = {}
+    pending = None
+    try:
+        with open(log_path, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                m = _PLAYER_BLOCK_RE.match(line)
+                if m:
+                    pending = m.group(1)
+                    continue
+                if pending is None:
+                    continue
+                m = _PLAYER_DPS_RE.search(line)
+                if m:
+                    precision[pending] = {"mean": float(m.group(1)),
+                                          "error_pct": float(m.group(3))}
+                    pending = None
+    except OSError:
+        return {}
+    return precision
+
+
 @app.get("/api/get-results", response_model=GetResultsResponse, tags=["Simulation"])
 async def get_results(task_id: str = Query(default="latest"), user_id: str = Depends(require_session)):
     """Retrieve parsed simulation results (DPS per class, gear data) for a completed task.
@@ -2565,6 +2600,13 @@ async def get_results(task_id: str = Query(default="latest"), user_id: str = Dep
 
         with open(html_path, encoding='utf-8', errors='replace') as f: html_content = f.read()
         results = parse_report_results(html_content)
+        # D6 (t_791b16f5): per-actor precision ships only in the stage-3 log
+        # the worker added to artifacts.zip, extracted next to the report.
+        # No log (legacy runs) -> no merge, response byte-compatible.
+        precision = parse_actor_precision(os.path.join(os.path.dirname(html_path), "stage3.log"))
+        if precision:
+            for item in results:
+                item["mean_error_pct"] = precision.get(item["name"], {}).get("error_pct")
         return {"status": "success", "results": results}
     except HTTPException:
         raise

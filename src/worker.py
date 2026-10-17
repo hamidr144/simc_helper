@@ -484,6 +484,11 @@ async def _execute_task(session, task_id: str, input_file: str, websocket) -> tu
             zip_path = f"/tmp/worker_sim_{task_id}/artifacts.zip"  # nosec B108
             with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
                 if tmp_dir and os.path.exists(os.path.join(tmp_dir, "stage3.simc")): zf.write(os.path.join(tmp_dir, "stage3.simc"), "stage3.simc")
+                # D6 (t_791b16f5): per-actor mean±error lives only in the SimC
+                # log; ship the final-stage one under the uniform arcname
+                # stage3.log (baseline runs write baseline.log — keeps master dumb).
+                if tmp_dir and os.path.exists(os.path.join(tmp_dir, "stage3.log")): zf.write(os.path.join(tmp_dir, "stage3.log"), "stage3.log")
+                elif tmp_dir and os.path.exists(os.path.join(tmp_dir, "baseline.log")): zf.write(os.path.join(tmp_dir, "baseline.log"), "stage3.log")
                 if report_file:
                     report_path = os.path.join("/tmp/simc_reports", report_file)  # nosec B108
                     if os.path.exists(report_path):

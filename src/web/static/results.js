@@ -103,9 +103,20 @@ function renderResults(results) {
   const noDiff = rankedAll.filter(result => !result.changes.length);
   const ranked = rankedAll.filter(result => result.changes.length);
 
+  // Sidegrade band (D6 / ruling Q3, presentation only): ranked rows within
+  // 2x the best candidate's reported error of it are statistical ties —
+  // tint + badge only; rank order stays the raw engine order (§5.5). Do not
+  // conflate this 2xerr display band with the culling K used server-side.
+  const topRow = ranked[0];
+  const band = topRow && typeof topRow.mean_error_pct === 'number'
+    ? topRow.dps * (1 - 2 * topRow.mean_error_pct / 100)
+    : null;
+  const sidegrades = band === null ? 0 : ranked.filter((r, i) => i > 0 && r.dps >= band).length;
+
   subtitle.textContent = ranked.length
     ? `${ranked.length} alternatives ranked against your equipped gear.`
     : 'Only your equipped baseline was simulated.';
+  if (sidegrades > 0) subtitle.textContent += ` ${sidegrades} sidegrades within 2× error of best.`;
 
   const quarantined = [
     ...failed.map(result => [result, 'failed to simulate']),
@@ -138,11 +149,17 @@ function renderResults(results) {
 
   const tableRows = ranked.map((result, index) => {
     const delta = result.dps - baseline.dps;
-    return `<tr>
+    // Index 0 is the band's reference row — best itself is never a sidegrade.
+    const tie = band !== null && index > 0 && result.dps >= band;
+    const err = typeof result.mean_error_pct === 'number'
+      ? ` <span class="result-err">± ${result.mean_error_pct}%</span>` : '';
+    const vsBest = `${((result.dps - topRow.dps) / topRow.dps * 100).toFixed(2)}%`;
+    return `<tr${tie ? ' class="is-sidegrade"' : ''}>
       <td class="results-num">${index + 1}</td>
-      <td>${escapeHtml(result.name)}</td>
-      <td class="results-num">${result.dps.toLocaleString()}</td>
+      <td>${escapeHtml(result.name)}${tie ? '<span class="sidegrade-badge">≈ best (statistical tie)</span>' : ''}</td>
+      <td class="results-num">${result.dps.toLocaleString()}${err}</td>
       <td class="results-num">${deltaHtml(delta)}</td>
+      <td class="results-num">${vsBest}</td>
       <td class="results-changes">${result.changes.map(chipHtml).join('')}</td>
     </tr>`;
   }).join('');
@@ -151,7 +168,7 @@ function renderResults(results) {
     <section class="panel-card full-width results-table-card">
       <table class="results-table">
         <caption class="sr-only">Best combinations, ranked by DPS</caption>
-        <thead><tr><th scope="col">&nbsp;</th><th scope="col">Candidate</th><th scope="col">DPS</th><th scope="col">Δ vs equipped</th><th scope="col">Changes</th></tr></thead>
+        <thead><tr><th scope="col">&nbsp;</th><th scope="col">Candidate</th><th scope="col">DPS</th><th scope="col">Δ vs equipped</th><th scope="col">% vs best</th><th scope="col">Changes</th></tr></thead>
         <tbody>${tableRows}</tbody>
       </table>
       ${quarantineHtml}

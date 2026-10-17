@@ -12,6 +12,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 from web.main import (
     app,
     manager,
+    parse_actor_precision,
     parse_wowhead_icon_name,
     parse_wowhead_upgrade,
     wowhead_xml_url,
@@ -747,6 +748,87 @@ def test_api_get_results_nightly_report_format():
     assert head.startswith("id=271465")
     assert "enchant_id=8017" in head
     assert "bonus_id=6652/12850" in head
+
+
+# --- mean±error end-to-end (D6, t_791b16f5) ---------------------------------
+
+# Synthetic but verbatim-shaped (Appendix A: `Player: <name> <race> <class>
+# <spec> <level>` then `DPS=<mean> DPS-Error=<abs>/<rel>% DPS-Range=...`).
+STAGE3_LOG_TWO_ACTORS = (
+    "SimulationCraft 1210-01 for World of Warcraft 12.1.0.69933\n"
+    "Player: Hamidriel blood_elf paladin retribution 90\n"
+    "  copy=Hamidriel\n"
+    "  Talented: some APL echo line\n"
+    "DPS=18820.458333 DPS-Error=37.715052/0.20% DPS-Range=18745-18896\n"
+    "--------------------------------------------------------------------------------\n"
+    "Player: Hamidriel_back_12 blood_elf paladin retribution 90\n"
+    "  copy=Hamidriel_back_12\n"
+    "DPS=19872.500123 DPS-Error=40.123456/0.21% DPS-Range=19792-19953\n"
+    "--------------------------------------------------------------------------------\n"
+    "DPS Ranking:\n"
+    "   19872 100.4%  Hamidriel_back_12\n"
+    "   18820 100.0%  Hamidriel\n"
+)
+
+
+def test_parse_actor_precision_two_blocks(tmp_path):
+    """D6: per-actor mean+error_pct parsed from a stage-3 log (two Player
+    blocks); a third block whose summary line never appears is skipped
+    defensively when the next block boundary arrives."""
+    log = tmp_path / "stage3.log"
+    log.write_text(
+        STAGE3_LOG_TWO_ACTORS
+        + "Player: Hamidriel_trinket_3 blood_elf paladin retribution 90\n"
+        + "  copy=Hamidriel_trinket_3\n",
+        encoding="utf-8",
+    )
+    parsed = parse_actor_precision(str(log))
+    assert parsed == {
+        "Hamidriel": {"mean": 18820.458333, "error_pct": 0.2},
+        "Hamidriel_back_12": {"mean": 19872.500123, "error_pct": 0.21},
+    }
+
+
+def test_parse_actor_precision_missing_log(tmp_path):
+    assert parse_actor_precision(str(tmp_path / "nope.log")) == {}
+
+
+def test_api_get_results_merges_mean_error(tmp_path):
+    """D6: get-results merges mean_error_pct by exact name from the stage-3
+    log the worker now ships in artifacts.zip (extracted next to the report)."""
+    task_id = "test-meanerr"
+    task_dir = os.path.join(MASTER_REPORTS_DIR, "testuser", task_id)
+    os.makedirs(task_dir, exist_ok=True)
+    with open(os.path.join(task_dir, "report_t.html"), "w") as f:
+        f.write('<h2 class="toggle">Hamidriel&#160;:&#160;18,820 dps</h2>\n'
+                '<h2 class="toggle">Hamidriel_back_12&#160;:&#160;19,872 dps</h2>\n'
+                '<h2 class="toggle">Hamidriel_back_13&#160;:&#160;19,001 dps</h2>')
+    with open(os.path.join(task_dir, "stage3.log"), "w") as f:
+        f.write(STAGE3_LOG_TWO_ACTORS)
+
+    response = client.get(f"/api/get-results?task_id={task_id}")
+    assert response.status_code == 200
+    by_name = {r["name"]: r for r in response.json()["results"]}
+    assert by_name["Hamidriel"]["mean_error_pct"] == 0.2
+    assert by_name["Hamidriel_back_12"]["mean_error_pct"] == 0.21
+    # Actor present in the report but absent from the log -> explicit None.
+    assert by_name["Hamidriel_back_13"]["mean_error_pct"] is None
+
+
+def test_api_get_results_legacy_zip_no_log_fields_absent():
+    """D6/R5: legacy runs have no stage3.log in the task dir — the response
+    keeps its old shape (mean_error_pct key absent, not null)."""
+    task_id = "test-meanerr-legacy"
+    task_dir = os.path.join(MASTER_REPORTS_DIR, "testuser", task_id)
+    os.makedirs(task_dir, exist_ok=True)
+    with open(os.path.join(task_dir, "report_t.html"), "w") as f:
+        f.write('<h2 class="toggle">C1&#160;:&#160;100,000 dps</h2>')
+
+    response = client.get(f"/api/get-results?task_id={task_id}")
+    assert response.status_code == 200
+    item = response.json()["results"][0]
+    assert item["name"] == "C1"
+    assert "mean_error_pct" not in item
 
 
 def test_input_serving_allows_generated_simc_file_only():

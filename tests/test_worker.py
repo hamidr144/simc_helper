@@ -556,6 +556,64 @@ async def test_execute_task_uploads_real_baseline_report(tmp_path, monkeypatch):
         assert zf.read(report_file) == NIGHTLY_BASELINE_REPORT.read_bytes()
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source_log", ["stage3.log", "baseline.log"])
+async def test_execute_task_zip_carries_final_stage_log(tmp_path, monkeypatch, source_log):
+    """D6 (t_791b16f5): artifacts.zip carries the final-stage SimC log under
+    the uniform arcname ``stage3.log``; a baseline-only run (no stage3.log)
+    falls back to ``baseline.log`` content under the same arcname."""
+    import worker as worker_mod
+
+    tag = source_log.split(".")[0]
+    task_id = f"fixture-stagelog-{tag}-{os.getpid()}"
+    simc_dir = f"/tmp/simc_fixturestagelog_{os.getpid()}_{tag}"
+    report_file = f"report_fixture_t791b16f5_{tag}.html"
+    os.makedirs(f"/tmp/worker_sim_{task_id}", exist_ok=True)
+    stub = tmp_path / f"stub_{tag}.py"
+    stub.write_text(
+        "import os, sys\n"
+        f"os.makedirs({simc_dir!r}, exist_ok=True)\n"
+        f"open(os.path.join({simc_dir!r}, {source_log!r}), 'w').write('Player: Stub blood_elf paladin retribution 90\\n')\n"
+        "os.makedirs('/tmp/simc_reports', exist_ok=True)\n"
+        f"open('/tmp/simc_reports/{report_file}', 'w').write('<html>ok</html>')\n"
+        f"sys.stdout.write('Temporary files are in {simc_dir}\\n')\n"
+        f"sys.stdout.write('{report_file}\\n')\n"
+        "sys.stdout.flush()\n"
+    )
+    monkeypatch.setattr(worker_mod, "worker_subcommand", lambda sub: [sys.executable, str(stub)])
+
+    uploads = []
+
+    async def fake_upload(session, tid, path):
+        snapshot = tmp_path / f"artifacts_{tag}.zip"
+        shutil.copy(path, snapshot)
+        uploads.append((tid, str(snapshot)))
+        return {"status": "success"}
+
+    monkeypatch.setattr(worker_mod, "upload_file", fake_upload)
+
+    ws = AsyncMock()
+    ws.recv.side_effect = asyncio.TimeoutError
+    try:
+        exit_code, report, error = await worker_mod._execute_task(
+            MagicMock(), task_id, "/tmp/inputs/fixture.simc", ws
+        )
+    finally:
+        shutil.rmtree(f"/tmp/worker_sim_{task_id}", ignore_errors=True)
+        shutil.rmtree(simc_dir, ignore_errors=True)
+        try:
+            os.remove(f"/tmp/simc_reports/{report_file}")
+        except OSError:
+            pass
+
+    assert (exit_code, error) == (0, None)
+    assert report == report_file
+    assert uploads
+    with zipfile.ZipFile(uploads[0][1]) as zf:
+        assert "stage3.log" in zf.namelist()
+        assert zf.read("stage3.log").startswith(b"Player: Stub")
+
+
 def test_sweep_stale_tmp_dirs(tmp_path):
     """LIFE-10 (t_3075ffff): startup sweep removes leaked per-task dirs."""
     (tmp_path / "worker_sim_t1").mkdir()

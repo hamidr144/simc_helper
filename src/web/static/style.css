@@ -1786,6 +1786,10 @@ button.slot-add-toggle { margin-top: 0; padding: 5px 10px; font-size: 11px; }
 .results-table th { color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
 .results-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .results-changes { min-width: 220px; }
+/* Sidegrade band (D6, t_791b16f5): presentation-only statistical tie rows. */
+.results-table tr.is-sidegrade td { background: rgba(251, 191, 36, 0.07); }
+.result-err { color: var(--text-muted); font-size: 11px; white-space: nowrap; }
+.sidegrade-badge { display: inline-block; margin-left: 6px; padding: 1px 7px; border: 1px solid var(--border-hairline); border-radius: 999px; color: var(--text-muted); font-size: 10px; white-space: nowrap; }
 .chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* --- Icon fallback + run-bar pluralization polish --- */
