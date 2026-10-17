@@ -197,7 +197,7 @@ async function pollWorkerStatus() {
     const titles = workers.map(worker => `${worker.name}: ${worker.status}`).join('\n');
     if (!workers.length) {
       chip.className = 'status-chip status-err';
-      text.textContent = 'No workers';
+      text.textContent = 'No idle workers';
       chip.title = 'No SimC worker is connected to the master.';
     } else if (idle === 0) {
       // Busy is a queue state, not an error (doc 4.1).
@@ -1347,6 +1347,9 @@ function renderEnhancements() {
     });
   }
 
+  // NB4 (review t_89761608): remember which sections the SEARCH opened so
+  // clearing the query re-closes exactly those, never user-opened ones.
+  const searchOpened = new Set();
   search.addEventListener('input', () => {
     const needle = search.value.trim().toLowerCase();
     container.querySelectorAll('.enh-section').forEach(section => {
@@ -1357,7 +1360,13 @@ function renderEnhancements() {
         if (hit) visible += 1;
       });
       section.hidden = Boolean(needle) && visible === 0;
-      if (needle && visible) section.open = true;
+      if (needle && visible) {
+        if (!section.open) searchOpened.add(section); // user-opened stays user-owned
+        section.open = true;
+      } else if (!needle && searchOpened.has(section)) {
+        section.open = false;
+        searchOpened.delete(section);
+      }
     });
   });
   refreshWowheadLinks();

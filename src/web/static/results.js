@@ -95,17 +95,25 @@ function renderResults(results) {
     subtitle.textContent = 'The report could not be loaded.';
     return;
   }
-  const ranked = healthy.filter(result => result !== baseline)
+  const rankedAll = healthy.filter(result => result !== baseline)
     .sort((a, b) => b.dps - a.dps)
     .map(result => ({ ...result, changes: changesFromBaseline(result, baseline) }));
+  // Quarantine (doc D1): dps>0 but zero gear difference vs baseline is the
+  // "No gear difference was parsed" marker — excluded, never ranked as a row.
+  const noDiff = rankedAll.filter(result => !result.changes.length);
+  const ranked = rankedAll.filter(result => result.changes.length);
 
   subtitle.textContent = ranked.length
     ? `${ranked.length} alternatives ranked against your equipped gear.`
     : 'Only your equipped baseline was simulated.';
 
-  const quarantineHtml = failed.length
-    ? `<details class="quarantine"><summary>${failed.length} run${failed.length === 1 ? '' : 's'} failed to simulate (excluded from ranking)</summary><ul>` +
-      failed.map(result => `<li>${escapeHtml(result?.name || 'unnamed run')} — ${escapeHtml(result?.dps ?? '?')} DPS</li>`).join('') +
+  const quarantined = [
+    ...failed.map(result => [result, 'failed to simulate']),
+    ...noDiff.map(result => [result, 'no gear difference']),
+  ];
+  const quarantineHtml = quarantined.length
+    ? `<details class="quarantine"><summary>${quarantined.length} run${quarantined.length === 1 ? '' : 's'} excluded from ranking</summary><ul>` +
+      quarantined.map(([result, reason]) => `<li>${escapeHtml(result?.name || 'unnamed run')} — ${escapeHtml(result?.dps ?? '?')} DPS (${reason})</li>`).join('') +
       `</ul></details>`
     : '';
 
@@ -124,7 +132,7 @@ function renderResults(results) {
       <div class="result-rank">#${index + 1}${index === 0 ? ' · Best' : ''}</div>
       <div class="result-score"><strong>${result.dps.toLocaleString()}</strong><span>DPS</span></div>
       <div class="result-delta ${delta >= 0 ? 'positive' : 'negative'}">${delta >= 0 ? '+' : ''}${delta.toLocaleString()} vs equipped</div>
-      <div class="result-changes"><b>Changes</b><p class="chip-row">${result.changes.map(chipHtml).join('') || 'No gear difference was parsed from the report.'}</p></div>
+      <div class="result-changes"><b>Changes</b><p class="chip-row">${result.changes.map(chipHtml).join('')}</p></div>
     </article>`;
   }).join('');
 
@@ -135,7 +143,7 @@ function renderResults(results) {
       <td>${escapeHtml(result.name)}</td>
       <td class="results-num">${result.dps.toLocaleString()}</td>
       <td class="results-num">${deltaHtml(delta)}</td>
-      <td class="results-changes">${result.changes.map(chipHtml).join('') || '—'}</td>
+      <td class="results-changes">${result.changes.map(chipHtml).join('')}</td>
     </tr>`;
   }).join('');
 
@@ -181,6 +189,9 @@ async function renderHeroExtras() {
       }
     }
   } catch { /* report link is best-effort */ }
+  // fetchResults retries re-run this; replace the previous line instead of
+  // stacking duplicate run-id rows (NB1, review t_89761608).
+  hero.querySelectorAll('.run-id-line').forEach((node) => node.remove());
   hero.append(line);
 }
 
