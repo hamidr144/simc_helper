@@ -4,7 +4,7 @@ t_89761608). String-pinning style follows test_t2aede9cd_gqa_bugs.py.
 NB1 hero extras replace-not-stack | NB2 --danger token | NB3 btn-danger tokens
 NB4 search re-closes its own sections | NB5 chip wording | NB6 D1 quarantine
 NB7 sticky offset token | plus the cache-bust sweep (followed by the
-TG2-A sweep to 20261017-enh-chips).
+TG2-A sweep to 20261017-enh-chips and the TG2-B sweep to 20261017-combos-1).
 
 """
 from pathlib import Path
@@ -71,9 +71,10 @@ def test_nb7_sticky_column_offset_is_a_token():
     assert "left: 40px" not in CSS
 
 
-def test_cache_bust_enh_chips_everywhere():
-    # t_5e099a0a: sweep extended to all pages; pins track the current token.
+def test_cache_bust_token_everywhere():
+    # t_5e099a0a: sweep extended to all pages; pins track the current token
+    # (t_8bf63ec6 TG2-B sweep to 20261017-combos-1).
     for page in PAGES:
         html = Path(f"src/web/static/{page}").read_text()
-        assert "20261017-enh-chips" in html, page
-        assert "20261016-gui-redesign-6" not in html, page
+        assert "20261017-combos-1" in html, page
+        assert "20261017-enh-chips" not in html, page

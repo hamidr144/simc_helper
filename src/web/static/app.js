@@ -658,16 +658,24 @@ function estimateCombinations() {
 }
 
 function updateSummary() {
-  const count = estimateCombinations();
+  // t_8bf63ec6: in combinations mode the server count is authoritative —
+  // show '…' until the first generate-simc response replaces the estimate.
+  const combosMode = document.getElementById('compare-mode')?.value === 'combinations';
+  const server = combosMode && generatedInput?.mode === 'combinations' ? generatedInput : null;
+  const count = combosMode && !server ? null : (server ? server.combinations : estimateCombinations());
   const countEl = document.getElementById('combo-count');
   const itemCountEl = document.getElementById('selected-item-count');
   const runButton = document.getElementById('btn-run');
-  if (countEl) countEl.textContent = count.toLocaleString();
+  if (countEl) countEl.textContent = count === null ? '…' : count.toLocaleString();
   if (itemCountEl) itemCountEl.textContent = selectedItemCount().toLocaleString();
   const comboWord = document.getElementById('combo-word');
   const itemWord = document.getElementById('item-word');
   if (comboWord) comboWord.textContent = count === 1 ? 'combination' : 'combinations';
   if (itemWord) itemWord.textContent = selectedItemCount() === 1 ? 'item' : 'items';
+  const estimateEl = document.getElementById('work-estimate');
+  if (estimateEl) estimateEl.textContent = server?.work_estimate_minutes != null
+    ? ` · ≈${server.work_estimate_minutes} min stage 1 (est.)`
+    : '';
   // t_4485565b: once a character is loaded, Run is always meaningful — a
   // 0-candidate selection runs the baseline current-gear report.
   if (runButton) runButton.disabled = !(generatedInput || parsedData);
@@ -1449,6 +1457,7 @@ function renderWorkflow() {
   }
   document.getElementById('btn-run').addEventListener('click', runSimulation);
   document.getElementById('fight-style').addEventListener('change', selectionChanged);
+  document.getElementById('compare-mode').addEventListener('change', selectionChanged);
   document.getElementById('btn-stop').addEventListener('click', stopSimulation);
   document.getElementById('btn-log-download').addEventListener('click', downloadLog);
   wirePopover(document.getElementById('btn-review'),
@@ -1499,6 +1508,7 @@ function buildPayload() {
     char_name: parsedData.char_name,
     base_profile: parsedData.base_profile,
     fight_style: document.getElementById('fight-style')?.value || 'single_boss',
+    mode: document.getElementById('compare-mode')?.value || 'single_swap',
     equipped_gear: parsedData.equipped_gear,
     selected_items: Object.fromEntries(Object.entries(selectedItems).map(([slot, items]) => [slot, Array.from(items)])),
     selected_enchants: enchantPayload,
