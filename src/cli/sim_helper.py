@@ -3,9 +3,13 @@
 Simcraft Automation Script
 
 This script automates a 3-stage workflow for SimulationCraft:
-1. Stage 1: Fast Filtering (100 iterations) - Broadly identifies top performers.
-2. Stage 2: Refinement (2000 iterations) - Narrows down the results using higher precision.
-3. Stage 3: Final Selection - Produces the final high-precision report.
+1. Stage 1: Fast Filtering (default 200 iterations at target_error=1%) - Broadly identifies top performers.
+2. Stage 2: Refinement (5000 iterations at target_error=0.2%) - Narrows down the results using higher precision.
+3. Stage 3: Final Selection (20000 iterations at target_error=0.05%) - Produces the final high-precision report.
+
+Each stage passes explicit 'iterations=<cap> target_error=<err>%' CLI args (early
+stop per actor); the plan is overridable via SIMC_HELPER_STAGE_PLAN and the
+culling error band via SIMC_HELPER_CULL_K (see get_stage_plan/cull_k).
 
 The script automatically detects the base character profile and ensures it is
 included at the top of the input for every stage.
@@ -20,8 +24,9 @@ Usage:
 Arguments:
     simc_path:           Path to the SimulationCraft executable.
     input_file:          Path to the base .simc file containing 'copy=' profiles.
-    stage1_percent_best: % or number of performers to keep after Stage 1 (default: 25%).
-    stage2_percent_best: % or number of performers to keep after Stage 2 (default: 25%).
+    stage1_percent_best: % or count; overrides the Stage 1 keep-count basis (the cost-cap
+                         anchor) — survivors themselves are chosen by error band (see select_survivors).
+    stage2_percent_best: same for Stage 2 (default: 25%).
     start_server:        Set to 1 to automatically start a local HTTP server and open the report.
 
 Outputs:
@@ -95,6 +100,99 @@ def get_memory_based_batch_size(buffer_gb=4.0, mb_per_profile=90.0):
         return min(calculated, max_batch_size)
     except (AttributeError, OSError, ValueError):
         return max_batch_size
+
+# Staged precision parity (design t_0fbfd0bd §5.1, ruling D5): every stage runs
+# with an explicit iteration cap and target_error so SimC early-stops per actor
+# like Smart Sim — and so stage 3 no longer inherits the export-leaked
+# target_error from the global-settings block (real bug, ruling E3).
+STAGE_PLAN_DEFAULT = [(200, 1.0), (5000, 0.2), (20000, 0.05)]
+
+def get_stage_plan():
+    """Parse SIMC_HELPER_STAGE_PLAN 'iters:err;iters:err;iters:err' (error as
+    percent float). Clamps iters to 1..100000 and err to 0.01..5; malformed
+    input warns and falls back to STAGE_PLAN_DEFAULT (same defensive posture
+    as get_memory_based_batch_size). Permanent worker knob (ruling Q2): the
+    container env flows through get_clean_env() into every run_simc call."""
+    raw = os.environ.get("SIMC_HELPER_STAGE_PLAN", "").strip()
+    if not raw:
+        return list(STAGE_PLAN_DEFAULT)
+    try:
+        plan = []
+        for part in raw.split(";"):
+            iters_s, err_s = part.split(":")
+            plan.append((max(1, min(100000, int(iters_s))),
+                         max(0.01, min(5.0, float(err_s)))))
+        if len(plan) != len(STAGE_PLAN_DEFAULT):
+            raise ValueError(
+                f"expected {len(STAGE_PLAN_DEFAULT)} 'iters:err' entries, got {len(plan)}")
+        return plan
+    except ValueError as exc:
+        print(f"Warning: malformed SIMC_HELPER_STAGE_PLAN '{raw}' ({exc}); using default stage plan.")
+        return list(STAGE_PLAN_DEFAULT)
+
+def stage_args(plan, stage_idx):
+    """Args string for one stage (0-based). The same string is passed to both
+    prepare_stage (file options) and run_simc (CLI) — the CLI is authoritative
+    over any leaked file/export option (verified, design Appendix A#4)."""
+    cap, err = plan[stage_idx]
+    return f"iterations={cap} target_error={err:g}% single_actor_batch=1"
+
+def cull_k():
+    """Keep-band width multiplier (SIMC_HELPER_CULL_K, default 1.0). Engine
+    DPS-Error is the 95% CI half-width of the sample mean (1.96*sigma_mean —
+    step-0 verdict on t_590f5317), so 1.0 mirrors the intended ~2-sigma keep
+    band (ruling Q4). Presentation band (2*err_top) in results.js is separate."""
+    try:
+        return float(os.environ.get("SIMC_HELPER_CULL_K", "1.0"))
+    except ValueError:
+        return 1.0
+
+def _filter_to_count(filter_arg, total):
+    """Resolve a '25%'/'20' stage filter argument to a keep-count."""
+    arg = str(filter_arg)
+    if arg.endswith("%"):
+        return max(1, math.ceil(total * float(arg[:-1]) / 100))
+    return int(arg)
+
+def select_survivors(summaries, count, override=None):
+    """Decide which actors advance a stage (design t_0fbfd0bd §5.3).
+
+    Keep rule is an error band versus the top mean: keep i when
+    mean_i + K*err_i_abs >= mean_top - K*err_top_abs (err_abs = mean*err_pct/100).
+    The old percentage-of-count rule survives only as a cost cap of
+    max(25, 3*count); `count` is the keep-count the old rule would have given
+    from the stage defaults and `override` (the stage1/stage2_percent_best
+    argument, '25%'/'20') replaces that basis — the args never pick the
+    keep-set directly anymore. Actors whose error failed to parse (ok=False)
+    stay only inside the old count-rule ordering. `summaries` must already be
+    in count-rule (ranking) order; the survivor names come back in that order.
+    """
+    if not summaries:
+        return []
+    if override is not None:
+        count = _filter_to_count(override, len(summaries))
+    k = cull_k()
+    banded = [s for s in summaries if s[3]]
+    if not banded:
+        return [s[0] for s in summaries[:count]]
+    top = max(banded, key=lambda s: s[1])
+    bound = top[1] - k * top[1] * top[2] / 100.0
+    kept = set()
+    for idx, (name, mean, err_pct, ok) in enumerate(summaries):
+        if ok:
+            if mean + k * mean * err_pct / 100.0 >= bound:
+                kept.add(name)
+        elif idx < count:
+            kept.add(name)
+    survivors = [s[0] for s in summaries if s[0] in kept]
+    cap = max(25, 3 * count)
+    if len(survivors) > cap:
+        culled = len(survivors) - cap
+        mean_of = {s[0]: s[1] for s in summaries}
+        top_set = set(sorted(survivors, key=lambda n: mean_of[n], reverse=True)[:cap])
+        print(f"Culled {culled} statistically-tied candidates to fit the work budget")
+        survivors = [n for n in survivors if n in top_set]
+    return survivors
 
 def get_character_name(input_file):
     """
@@ -270,34 +368,76 @@ def filter_best(log_path, filter_arg, current_name=None):
 
     return combos_only[:target_n]
 
-def get_all_dps(log_path, current_name=None):
-    """
-    Parses a SimulationCraft log file to extract all (name, dps) tuples.
+def get_actor_summaries(log_path, current_name=None):
+    """Parse a SimC console log into [(name, mean, err_pct, ok)] in DPS
+    Ranking order.
+
+    Names and means come from the 'DPS Ranking:' block (same regex/format as
+    filter_best — engine report_text.cpp); each actor's relative error comes
+    from its 'Player:' summary block, where the engine prints
+    '  DPS=<mean> DPS-Error=<abs>/<rel>%' on the line right after the
+    'Player: <name> ...' header (Player blocks also echo the full APL, hence
+    the bounded streaming window). ok=False marks an error-parse miss —
+    select_survivors then keeps that actor only within the count rule.
+    Quarantine (defect t_6400a2ed #7, design §5.4): entries with dps <= 0 are
+    dropped and Raid/current_name are never listed, so dead actors can no
+    longer occupy keep-set slots when target_n exceeds the healthy population.
     """
     if not os.path.exists(log_path):
         return []
 
-    results = []
+    ranking = []   # (name, mean) in DPS Ranking order
+    stats = []     # (player_rest, mean, err_pct) from Player: summary blocks
     ranking_started = False
+    pending_rest = None  # Player: block still waiting for its DPS= line
+    pending_left = 0
 
     with open(log_path, encoding='utf-8', errors='replace') as f:
         for line in f:
             line = line.strip()
-            if not ranking_started:
-                if line.startswith("DPS Ranking:"):
-                    ranking_started = True
+            if ranking_started:
+                if not line or line.startswith("HPS Ranking:"):
+                    ranking_started = False
+                else:
+                    match = re.match(r"^(\d+)\s+[\d.]+%?\s+(.+)$", line)
+                    if match:
+                        name = match.group(2).strip()
+                        if name != "Raid" and name != current_name:
+                            ranking.append((name, int(match.group(1))))
                 continue
 
-            if not line or line.startswith("HPS Ranking:"):
-                break
-
-            match = re.match(r"^(\d+)\s+[\d.]+%?\s+(.+)$", line)
+            if line.startswith("DPS Ranking:"):
+                ranking_started = True
+                continue
+            match = re.match(r"^Player: (.+)$", line)
             if match:
-                dps = int(match.group(1))
-                name = match.group(2).strip()
-                if name != "Raid" and name != current_name:
-                    results.append((name, dps))
-    return results
+                pending_rest = match.group(1).strip()
+                pending_left = 6
+                continue
+            if pending_rest is not None:
+                pending_left -= 1
+                m = re.match(r"^DPS=([\d.]+)[^ ]* DPS-Error=([\d.]+)/([\d.]+)%", line)
+                if m:
+                    stats.append((pending_rest, float(m.group(1)), float(m.group(3))))
+                    pending_rest = None
+                elif pending_left <= 0:
+                    pending_rest = None
+
+    summaries = []
+    for name, rank_mean in ranking:
+        # Copy names may contain spaces; the Player header line continues with
+        # race/class/spec/level, so match by '<name> ' prefix.
+        hit = next((s for s in stats if s[0] == name or s[0].startswith(name + " ")), None)
+        if hit:
+            summaries.append((name, hit[1], hit[2], True))
+        else:
+            summaries.append((name, float(rank_mean), None, False))
+    return [s for s in summaries if s[1] > 0]
+
+def get_all_dps(log_path, current_name=None):
+    """Legacy (name, dps) view over get_actor_summaries (count-rule callers)."""
+    return [(name, int(mean)) for name, mean, _, _ in
+            get_actor_summaries(log_path, current_name=current_name)]
 
 def prepare_stage(base_simc, combos, output_simc, extra_params, current_name=None):
     """
@@ -416,14 +556,21 @@ def main():
     # instead of failing with "no combos to refine" (t_4485565b).
     baseline_only = initial_combo_count == 0
 
-    s1_filter = args.get("stage1_percent_best")
+    stage_plan = get_stage_plan()
+    s1_args = stage_args(stage_plan, 0)
+    s2_args = stage_args(stage_plan, 1)
+    s3_args = stage_args(stage_plan, 2)
+    user_s1_filter = args.get("stage1_percent_best")
+    user_s2_filter = args.get("stage2_percent_best")
+
+    s1_filter = user_s1_filter
     if baseline_only:
         s1_filter = s1_filter or "100%"  # unused in baseline mode
     elif not s1_filter:
         s1_filter = get_default_filter(1, initial_combo_count)
         print(f"Using dynamic default for Stage 1: {s1_filter}")
 
-    s2_filter = args.get("stage2_percent_best")
+    s2_filter = user_s2_filter
     # s2_filter will be determined after Stage 1 results are known if not provided
 
     start_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -442,57 +589,55 @@ def main():
     top_combos_s1 = []
 
     if baseline_only:
-        # No copy= blocks to refine: simulate the base actor once at full
-        # precision and emit the HTML report (same report path the staged
-        # pipeline uses, so the worker picks it up unchanged).
+        # No copy= blocks to refine: simulate the base actor once with the
+        # final-stage precision plan and emit the HTML report (same report
+        # path the staged pipeline uses, so the worker picks it up unchanged).
         print("\n--- BASELINE: no candidate combinations; simulating current gear only ---")
         baseline_log = os.path.join(tmp_dir, "baseline.log")
-        exit_code = run_simc(simc_path, input_file, "single_actor_batch=1", baseline_log, html_report=report_name)
+        exit_code = run_simc(simc_path, input_file, s3_args, baseline_log, html_report=report_name)
         if exit_code != 0:
             print(f"Error: simc failed on the baseline simulation with exit code {exit_code}.")
             sys.exit(1)
     else:
         # Stage 1: Fast Filtering
         if initial_combo_count > BATCH_SIZE:
-            print(f"\n--- STAGE 1: Fast Filtering (iterations=100) using {s1_filter} [BATCHED, size={BATCH_SIZE}] ---")
+            print(f"\n--- STAGE 1: Fast Filtering ({s1_args}) using {s1_filter} [BATCHED, size={BATCH_SIZE}] ---")
             chunks = [all_combos[i:i + BATCH_SIZE] for i in range(0, len(all_combos), BATCH_SIZE)]
-            all_batch_results = []
+            all_batch_summaries = []
             for idx, chunk in enumerate(chunks):
                 batch_prefix = f"[Batch {idx + 1}/{len(chunks)}] "
                 print(f"\n{batch_prefix}Processing {len(chunk)} combinations...")
                 chunk_simc = os.path.join(tmp_dir, f"stage1_batch{idx+1}.simc")
-                prepare_stage(input_file, chunk, chunk_simc, "iterations=100", current_name=char_name)
+                prepare_stage(input_file, chunk, chunk_simc, s1_args, current_name=char_name)
 
                 chunk_log = os.path.join(tmp_dir, f"stage1_batch{idx+1}.log")
-                exit_code = run_simc(simc_path, chunk_simc, "iterations=100 single_actor_batch=1", chunk_log, prefix=batch_prefix)
+                exit_code = run_simc(simc_path, chunk_simc, s1_args, chunk_log, prefix=batch_prefix)
                 if exit_code != 0:
                     print(f"Error: simc failed on batch {idx+1} with exit code {exit_code}. It might have run out of memory.")
                     sys.exit(1)
 
-                batch_results = get_all_dps(chunk_log, current_name=char_name)
-                all_batch_results.extend(batch_results)
-                # print(f"Parsed {len(batch_results)} results from batch {idx+1}") # Quieter
+                all_batch_summaries.extend(get_actor_summaries(chunk_log, current_name=char_name))
 
-            # Global sorting and filtering
-            all_batch_results.sort(key=lambda x: x[1], reverse=True)
-
-            if s1_filter.endswith("%"):
-                percentage = float(s1_filter.replace("%", "")) / 100
-                target_n = max(1, math.ceil(initial_combo_count * percentage))
-            else:
-                target_n = int(s1_filter)
-
-            top_combos_s1 = [item[0] for item in all_batch_results[:target_n]]
-            print(f"\nAggregated {len(all_batch_results)} total profiles across all batches.")
-            print(f"Kept global top {target_n} profiles for Stage 2.")
+            # Global band culling across all batches (means/errors collected
+            # per actor; batch boundaries cannot shift the keep-set, R4).
+            all_batch_summaries.sort(key=lambda x: x[1], reverse=True)
+            top_combos_s1 = select_survivors(
+                all_batch_summaries,
+                _filter_to_count(get_default_filter(1, initial_combo_count), initial_combo_count),
+                user_s1_filter)
+            print(f"\nAggregated {len(all_batch_summaries)} total profiles across all batches.")
+            print(f"Kept {len(top_combos_s1)} profiles within the error band for Stage 2.")
         else:
-            print(f"\n--- STAGE 1: Fast Filtering (iterations=100) using {s1_filter} ---")
+            print(f"\n--- STAGE 1: Fast Filtering ({s1_args}) using {s1_filter} ---")
             stage1_log = os.path.join(tmp_dir, "stage1.log")
-            exit_code = run_simc(simc_path, input_file, "iterations=100 single_actor_batch=1", stage1_log)
+            exit_code = run_simc(simc_path, input_file, s1_args, stage1_log)
             if exit_code != 0:
                 print(f"Error: simc failed with exit code {exit_code}. It might have run out of memory.")
                 sys.exit(1)
-            top_combos_s1 = filter_best(stage1_log, s1_filter, current_name=char_name)
+            top_combos_s1 = select_survivors(
+                get_actor_summaries(stage1_log, current_name=char_name),
+                _filter_to_count(get_default_filter(1, initial_combo_count), initial_combo_count),
+                user_s1_filter)
 
         if not top_combos_s1:
             print("Error: No combos found to refine after Stage 1. Stopping.")
@@ -501,30 +646,36 @@ def main():
         if not s2_filter:
             s2_filter = get_default_filter(2, len(top_combos_s1))
             print(f"Using dynamic default for Stage 2: {s2_filter}")
+        s2_default_n = _filter_to_count(get_default_filter(2, len(top_combos_s1)), len(top_combos_s1))
 
         stage2_simc = os.path.join(tmp_dir, "stage2.simc")
-        prepare_stage(input_file, top_combos_s1, stage2_simc, "iterations=2000", current_name=char_name)
+        prepare_stage(input_file, top_combos_s1, stage2_simc, s2_args, current_name=char_name)
 
         # Stage 2: Refinement
-        print(f"\n--- STAGE 2: Refinement (iterations=2000) using {s2_filter} ---")
+        print(f"\n--- STAGE 2: Refinement ({s2_args}) using {s2_filter} ---")
         stage2_log = os.path.join(tmp_dir, "stage2.log")
-        exit_code = run_simc(simc_path, stage2_simc, "iterations=2000 single_actor_batch=1", stage2_log, prefix="[Stage 2] ")
+        exit_code = run_simc(simc_path, stage2_simc, s2_args, stage2_log, prefix="[Stage 2] ")
         if exit_code != 0:
             print(f"Error: simc failed on stage 2 with exit code {exit_code}.")
             sys.exit(1)
-        top_combos_s2 = filter_best(stage2_log, s2_filter, current_name=char_name)
+        top_combos_s2 = select_survivors(
+            get_actor_summaries(stage2_log, current_name=char_name), s2_default_n, user_s2_filter)
 
         if not top_combos_s2:
             print("Error: No combos found to refine after Stage 2. Stopping.")
             sys.exit(1)
 
+        # Stage 3 must pass explicit precision args: without them it silently
+        # inherited the target_error/iterations leaked by the export's global
+        # settings block via prepare_stage (live-observed final run at 0.2%;
+        # real bug fixed here, design ruling E3).
         stage3_simc = os.path.join(tmp_dir, "stage3.simc")
-        prepare_stage(input_file, top_combos_s2, stage3_simc, "", current_name=char_name)
+        prepare_stage(input_file, top_combos_s2, stage3_simc, s3_args, current_name=char_name)
 
         # Stage 3: Final Selection
-        print("\n--- STAGE 3: Final Selection ---")
+        print(f"\n--- STAGE 3: Final Selection ({s3_args}) ---")
         stage3_log = os.path.join(tmp_dir, "stage3.log")
-        exit_code = run_simc(simc_path, stage3_simc, "single_actor_batch=1", stage3_log, html_report=report_name, prefix="[Stage 3] ")
+        exit_code = run_simc(simc_path, stage3_simc, s3_args, stage3_log, html_report=report_name, prefix="[Stage 3] ")
         if exit_code != 0:
             print(f"Error: simc failed on stage 3 with exit code {exit_code}.")
             sys.exit(1)

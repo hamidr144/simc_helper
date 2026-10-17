@@ -29,8 +29,7 @@ def test_sim_helper_batched_flow(tmp_path):
          patch("cli.sim_helper.get_character_name", return_value="Test"), \
          patch("cli.sim_helper.get_all_combos", return_value=combos), \
          patch("cli.sim_helper.run_simc", return_value=0) as mock_run, \
-         patch("cli.sim_helper.filter_best", return_value=["C1"]), \
-         patch("cli.sim_helper.get_all_dps", return_value=[("C1", 100)]), \
+         patch("cli.sim_helper.get_actor_summaries", return_value=[("C1", 100.0, None, False)]), \
          patch("cli.sim_helper.get_memory_based_batch_size", return_value=200):
         with patch("cli.sim_helper.prepare_stage"):
             main()
