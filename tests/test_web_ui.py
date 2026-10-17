@@ -122,6 +122,7 @@ def test_gear_selection_uses_compact_icon_tiles_instead_of_text_rows():
     css = css_response.text
 
     assert "iconizeLinks: false" in html  # t_2ab8f3be: no DOM mutation of our links
+    assert "renameLinks: false" in html  # t_27ceb173 (B1): wh.js must not rename our gear links (UI-2)
     assert "createWowheadIconLink" in js
     assert "slot-items" in js
     assert "item-option" in js
