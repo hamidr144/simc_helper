@@ -30,7 +30,11 @@ The current release version lives in `pyproject.toml` (`version = ...`) and is b
 
 ## Milestone: dev → prod
 
-A milestone is ready when the main feature is **completed, tested on the dev system, documented (README/docs updated), and approved by the leader.** Only the leader merges `dev → prod`:
+A milestone is ready when the main feature is **completed, tested on the dev system, documented (README/docs updated), and approved by the leader.**
+
+**Mandatory pre-merge step (before any git commands):** prepare the `CHANGELOG.md` entry for the new version — regenerate/append from `git log --oneline prod..dev`, consolidate to user-visible changes categorized under `### Features` / `### Improvements` / `### Bug fixes` (security fixes go under Bug fixes), and get reviewer approval on the entry set. The `CHANGELOG.md` update ships in the same merge commit that bumps the version and tag.
+
+Only the leader merges `dev → prod`:
 
 ```bash
 git switch prod && git merge --no-ff dev   # bump version + changelog in merge
