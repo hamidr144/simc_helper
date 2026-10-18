@@ -240,6 +240,63 @@ def generate_variations(item_list, slot_name, config, extra_sockets=None):
             
     return list(dict.fromkeys(variations))
 
+def canonical_item(item):
+    """Normalize SimC item fields so equivalent profiles compare equally."""
+    fields = [field.strip() for field in str(item or "").lstrip(",").split(",") if field.strip()]
+    return ",".join(sorted(fields))
+
+
+def build_combination_copies(selected_by_slot, config, equipped_gear, char_name,
+                             extra_sockets=None, baseline_name=None):
+    """Product of per-slot variation pools + unordered finger/trinket pairs.
+
+    Shared Top-Gear algorithm (TG2-B, extracted verbatim from the CLI main):
+    returns ``(copy_blocks, count)`` where each block is a SimC clone profile
+    ``copy="<char>_Combo_<i>,<clone-target>"`` (sim_helper parses the first
+    comma-field).  ``selected_by_slot`` is keyed by the grouped addon slots
+    (head..off_hand single, finger, trinket); an empty group slot falls back to
+    the equipped item so its enhancements still vary.  Blocks identical to the
+    baseline actor or to an earlier block are skipped (honest-zero contract
+    t_4485565b: zero real variations -> zero copies -> baseline-only file).
+    ``baseline_name`` overrides the clone target (the CLI names its baseline
+    ``<char>_Baseline``); the web path clones the plain character profile.
+    """
+    clone_target = baseline_name or char_name
+    group_slots = ["head", "neck", "shoulder", "back", "chest", "wrist", "hands", "waist", "legs", "feet", "main_hand", "off_hand"]
+    choices = [
+        generate_variations(selected_by_slot.get(slot) or [equipped_gear.get(slot, "")],
+                            slot, config, extra_sockets=extra_sockets)
+        for slot in group_slots
+    ]
+    finger_vars = generate_variations(selected_by_slot.get("finger") or [], "finger", config, extra_sockets=extra_sockets)
+    trinket_vars = generate_variations(selected_by_slot.get("trinket") or [], "trinket", config, extra_sockets=extra_sockets)
+
+    # shortcut: unordered C(n,2) pairs without self-pairing keep the shipped CLI
+    # semantics verbatim (ruling E2); Raidbots' internal pair rule is UNVERIFIED (TGE-1 §2.7).
+    finger_pairs = [(finger_vars[i], finger_vars[j]) for i in range(len(finger_vars)) for j in range(i+1, len(finger_vars))] if len(finger_vars)>=2 else [(finger_vars[0], "")] if len(finger_vars)==1 else [("", "")]
+    trinket_pairs = [(trinket_vars[i], trinket_vars[j]) for i in range(len(trinket_vars)) for j in range(i+1, len(trinket_vars))] if len(trinket_vars)>=2 else [(trinket_vars[0], "")] if len(trinket_vars)==1 else [("", "")]
+
+    baseline_map = {slot: canonical_item(item) for slot, item in equipped_gear.items() if item}
+    seen = {tuple(sorted(baseline_map.items()))}
+    copy_blocks = []
+    for base_config, fingers, trinkets in product(product(*choices), finger_pairs, trinket_pairs):
+        profile_map = dict(baseline_map)
+        lines = []
+        for slot, details in zip(group_slots, base_config):
+            if not details: continue
+            profile_map[slot] = canonical_item(details)
+            lines.append(f"{slot}={details}\n")
+        for slot, details in (("finger1", fingers[0]), ("finger2", fingers[1]), ("trinket1", trinkets[0]), ("trinket2", trinkets[1])):
+            if not details: continue
+            profile_map[slot] = canonical_item(details)
+            lines.append(f"{slot}={details}\n")
+        signature = tuple(sorted(profile_map.items()))
+        if signature in seen: continue
+        seen.add(signature)
+        copy_blocks.append(f'copy="{char_name}_Combo_{len(copy_blocks) + 1},{clone_target}"\n' + "".join(lines) + "\n")
+    return copy_blocks, len(copy_blocks)
+
+
 def select_items_interactive(items_by_slot, item_names, equipped_gear):
     """Prompts user to select which items to include for each slot."""
     selected_items = {}
@@ -283,27 +340,12 @@ def main():
     print(f"Loaded character: {char_name} ({char_class})")
     selected_items_by_slot = select_items_interactive(items_by_slot, item_names, equipped)
     
-    choices = []
-    group_slots = ["head", "neck", "shoulder", "back", "chest", "wrist", "hands", "waist", "legs", "feet", "main_hand", "off_hand"]
-    for slot in group_slots:
-        items = selected_items_by_slot.get(slot, [equipped.get(slot, "")])
-        choices.append(generate_variations(items, slot, config))
+    copy_blocks, count = build_combination_copies(
+        selected_items_by_slot, config, equipped, char_name,
+        baseline_name=f"{char_name}_Baseline")
 
-    finger_vars = generate_variations(selected_items_by_slot.get("finger", []), "finger", config)
-    trinket_vars = generate_variations(selected_items_by_slot.get("trinket", []), "trinket", config)
-
-    # Combinations calculation
-    f_count = max(1, (len(finger_vars)*(len(finger_vars)-1))//2 if len(finger_vars)>=2 else len(finger_vars))
-    t_count = max(1, (len(trinket_vars)*(len(trinket_vars)-1))//2 if len(trinket_vars)>=2 else len(trinket_vars))
-    total_est = 1
-    for c in choices: total_est *= len(c)
-    total_est *= f_count * t_count
-    
-    print(f"\nEstimated combinations: {total_est:,}")
-    if total_est > 100000 and input("WARNING: High combination count. Continue? (y/n): ").lower() != 'y': return
-
-    finger_pairs = [(finger_vars[i], finger_vars[j]) for i in range(len(finger_vars)) for j in range(i+1, len(finger_vars))] if len(finger_vars)>=2 else [(finger_vars[0], "")] if len(finger_vars)==1 else [("", "")]
-    trinket_pairs = [(trinket_vars[i], trinket_vars[j]) for i in range(len(trinket_vars)) for j in range(i+1, len(trinket_vars))] if len(trinket_vars)>=2 else [(trinket_vars[0], "")] if len(trinket_vars)==1 else [("", "")]
+    print(f"\nCombinations: {count:,}")
+    if count > 100000 and input("WARNING: High combination count. Continue? (y/n): ").lower() != 'y': return
 
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write("# Generated Top Gear Sim\n")
@@ -312,16 +354,8 @@ def main():
         f.write(globals_data + "\n")
         for slot in equipped: f.write(f"{slot}={equipped[slot]}\n")
         f.write("\n")
+        f.writelines(copy_blocks)
 
-        for i, (base_config, fingers, trinkets) in enumerate(product(product(*choices), finger_pairs, trinket_pairs), 1):
-            f.write(f"copy=\"Combo_{i},{char_name}_Baseline\"\n")
-            for slot, details in zip(group_slots, base_config):
-                if details: f.write(f"{slot}={details}\n")
-            if fingers[0]: f.write(f"finger1={fingers[0]}\n")
-            if fingers[1]: f.write(f"finger2={fingers[1]}\n")
-            if trinkets[0]: f.write(f"trinket1={trinkets[0]}\n")
-            if trinkets[1]: f.write(f"trinket2={trinkets[1]}\n\n")
-
-    print(f"Success! Created {output_file} with {total_est} combinations.")
+    print(f"Success! Created {output_file} with {count} combinations.")
 
 if __name__ == "__main__": main()

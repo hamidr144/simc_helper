@@ -1292,6 +1292,28 @@ button.slot-toggle-all:not(:disabled):hover {
   box-shadow: none;
 }
 
+/* TG2-A §3.1: enhancement state chips in the slot-group header (echo of
+step-3 selection + jump shortcut). Same chip family as slot-toggle-all. */
+button.enh-chip {
+  background: transparent;
+  border: 1px solid var(--border-hairline);
+  color: var(--text-secondary);
+  font-size: 11px;
+  padding: 4px 10px;
+  min-height: 26px;
+  border-radius: 20px;
+  box-shadow: none;
+  font-family: var(--font-sans);
+  font-weight: 600;
+}
+
+button.enh-chip:hover {
+  color: var(--text-primary);
+  border-color: rgba(157, 156, 255, 0.4);
+  transform: none;
+  box-shadow: none;
+}
+
 /* --- Run progress card (t_2ab8f3be: determinate % bar + stage + ETA) --- */
 .progress-card {
   display: flex;
@@ -1764,6 +1786,10 @@ button.slot-add-toggle { margin-top: 0; padding: 5px 10px; font-size: 11px; }
 .results-table th { color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
 .results-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .results-changes { min-width: 220px; }
+/* Sidegrade band (D6, t_791b16f5): presentation-only statistical tie rows. */
+.results-table tr.is-sidegrade td { background: rgba(251, 191, 36, 0.07); }
+.result-err { color: var(--text-muted); font-size: 11px; white-space: nowrap; }
+.sidegrade-badge { display: inline-block; margin-left: 6px; padding: 1px 7px; border: 1px solid var(--border-hairline); border-radius: 999px; color: var(--text-muted); font-size: 10px; white-space: nowrap; }
 .chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* --- Icon fallback + run-bar pluralization polish --- */

@@ -658,16 +658,24 @@ function estimateCombinations() {
 }
 
 function updateSummary() {
-  const count = estimateCombinations();
+  // t_8bf63ec6: in combinations mode the server count is authoritative —
+  // show '…' until the first generate-simc response replaces the estimate.
+  const combosMode = document.getElementById('compare-mode')?.value === 'combinations';
+  const server = combosMode && generatedInput?.mode === 'combinations' ? generatedInput : null;
+  const count = combosMode && !server ? null : (server ? server.combinations : estimateCombinations());
   const countEl = document.getElementById('combo-count');
   const itemCountEl = document.getElementById('selected-item-count');
   const runButton = document.getElementById('btn-run');
-  if (countEl) countEl.textContent = count.toLocaleString();
+  if (countEl) countEl.textContent = count === null ? '…' : count.toLocaleString();
   if (itemCountEl) itemCountEl.textContent = selectedItemCount().toLocaleString();
   const comboWord = document.getElementById('combo-word');
   const itemWord = document.getElementById('item-word');
   if (comboWord) comboWord.textContent = count === 1 ? 'combination' : 'combinations';
   if (itemWord) itemWord.textContent = selectedItemCount() === 1 ? 'item' : 'items';
+  const estimateEl = document.getElementById('work-estimate');
+  if (estimateEl) estimateEl.textContent = server?.work_estimate_minutes != null && count > 0
+    ? ` · ≈${server.work_estimate_minutes} min stage 1 (est.)`
+    : '';
   // t_4485565b: once a character is loaded, Run is always meaningful — a
   // 0-candidate selection runs the baseline current-gear report.
   if (runButton) runButton.disabled = !(generatedInput || parsedData);
@@ -677,6 +685,7 @@ function updateSummary() {
 function selectionChanged() {
   generatedInput = null;
   updateSummary();
+  syncEnhancementChips();
   clearTimeout(generationTimer);
   // t_4485565b: regenerate even at an estimated 0 combinations so the status
   // line reflects the honest baseline-only state instead of a stale count.
@@ -966,6 +975,50 @@ function wireSlotAddForm(group, slot) {
   });
 }
 
+// TG2-A (design t_0fbfd0bd §3.1): enhancement state chips on the slot-group
+// header — pure state echo of step-3 selections plus a jump-and-open shortcut.
+// No new state: labels recompute from selectedEnchants/selectedGems live.
+// TG2-F (t_61442157): worn items are pre-checked without entering the selected
+// sets, so the chip counts the UNION with the equipped sets to match the
+// step-3 panel's checked count by construction.
+function enhancementChipLabel(kind, slot) {
+  if (kind === 'enchants') {
+    if (!(appConfig.enchantments?.[slot] || []).length) return null;
+    const k = new Set([...(selectedEnchants[slot] || []), ...(equippedEnchants[slot] || [])]).size;
+    const e = equippedEnchants[slot]?.size || 0;
+    return `Enchants: ${k} selected` + (e > 0 && e < k ? ` · worn ${e}` : '');
+  }
+  if (!(appConfig.gems?.standard || []).length) return null;
+  const k = new Set([...selectedGems, ...equippedGems]).size;
+  return k ? `Gems: ${k} selected` : 'Gems: none';
+}
+
+function syncEnhancementChips() {
+  document.querySelectorAll('.enh-chip').forEach(chip => {
+    const label = enhancementChipLabel(chip.dataset.kind, chip.dataset.slot);
+    if (label) chip.textContent = label;
+  });
+}
+
+function jumpToEnhancement(kind, slot) {
+  document.getElementById('step-enhance')?.scrollIntoView({ block: 'start' });
+  // Mirror generate_input.py's off_hand -> main_hand enchant-list fallback.
+  const titles = kind === 'gems'
+    ? ['Flawless gems']
+    : (slot === 'off_hand'
+      ? [`${slot.replace('_', ' ')} enchants`, 'main hand enchants']
+      : [`${slot.replace('_', ' ')} enchants`]);
+  const sections = [...document.querySelectorAll('#enhancement-options .enh-section')];
+  for (const title of titles) {
+    const section = sections.find(s => s.dataset.enhTitle === title);
+    if (section) {
+      section.open = true;
+      section.querySelector('summary')?.focus();
+      return;
+    }
+  }
+}
+
 function renderGear() {
   const grid = document.getElementById('gear-grid');
   if (!grid) return;
@@ -973,8 +1026,18 @@ function renderGear() {
   for (const [slot, items] of Object.entries(parsedData.items_by_slot)) {
     const group = document.createElement('section');
     group.className = 'slot-group';
+    const chipDefs = [['enchants', 'Open enchantment controls in step 3'],
+      ['gems', 'Open gem controls in step 3']];
+    let chipsHtml = '';
+    for (const [kind, hint] of chipDefs) {
+      const chipLabel = enhancementChipLabel(kind, slot);
+      if (chipLabel) {
+        chipsHtml += `<button type="button" class="enh-chip" data-kind="${kind}" ` +
+          `data-slot="${slot}" title="${hint}">${escapeHtml(chipLabel)}</button>`;
+      }
+    }
     group.innerHTML = `<div class="slot-group-header"><h3>${escapeHtml(slot.replace('_', ' '))}</h3>` +
-      `<span class="slot-count"></span>` +
+      `<span class="slot-count"></span>${chipsHtml}` +
       `<select class="slot-sort-select" aria-label="Sort ${escapeHtml(slot)} candidates" ` +
       `title="Sort candidates. 'Stat priority' is a heuristic class weight order, not a sim result.">` +
       `<option value="ilvl">ilvl ↓</option><option value="name">Name</option>` +
@@ -1016,8 +1079,14 @@ function renderGear() {
       slotCountEl.textContent = `${selectedItems[slot].size}/${items.length} selected`;
       slotToggleAll.textContent = items.length && selectedItems[slot].size === items.length
         ? 'Select none' : 'Select all';
+      // §3.3: chips ride the same listener so counts refresh on select-all
+      // or any item toggle without new state.
+      syncEnhancementChips();
     };
     syncSlotHeader();
+    group.querySelectorAll('.enh-chip').forEach(chip => {
+      chip.addEventListener('click', () => jumpToEnhancement(chip.dataset.kind, chip.dataset.slot));
+    });
     slotToggleAll.addEventListener('click', () => {
       const selectAll = !(items.length && selectedItems[slot].size === items.length);
       selectedItems[slot] = new Set(selectAll ? items : []);
@@ -1275,6 +1344,7 @@ function renderEnhancements() {
   const addSection = (title, build) => {
     const section = document.createElement('details');
     section.className = 'enh-section';
+    section.dataset.enhTitle = title; // chips open sections by stable title (§3.1)
     const summary = document.createElement('summary');
     const group = document.createElement('fieldset');
     group.className = 'enhancement-group';
@@ -1375,7 +1445,7 @@ function renderEnhancements() {
 function renderWorkflow() {
   workflowContainer.innerHTML = `
     <section class="panel-card workflow-panel full-width baseline-gear-panel" id="baseline-gear-panel"><div class="step-heading"><span class="num-badge num-badge-lg">2</span><div><h2>Baseline Gear · select candidates for ${escapeHtml(parsedData.char_name)}</h2><small>Grades are inferred from the export and refined with Wowhead. Toggle whole slots with Select all/none.</small></div></div><div id="gear-grid"></div></section>
-    <section class="panel-card workflow-panel full-width" id="step-enhance"><div class="step-heading"><span class="num-badge num-badge-lg">3</span><div><h2>Select gems and enchantments</h2><small>Checked enhancements are included in generated variations; the ones you already wear are pre-checked as the baseline.</small></div></div><div id="enhancement-options" class="enhancement-options"></div></section>
+    <section class="panel-card workflow-panel full-width" id="step-enhance"><div class="step-heading"><span class="num-badge num-badge-lg">3</span><div><h2>Select gems and enchantments</h2><small>Checked enhancements are included in generated variations; the ones you already wear are pre-checked as the baseline. You can also jump here from the chips in each gear slot above.</small></div></div><div id="enhancement-options" class="enhancement-options"></div></section>
     <section class="panel-card workflow-panel run-panel full-width" id="step-run"><div class="step-heading"><span class="num-badge num-badge-lg">4</span><div><h2>Run comparison</h2><small>Combinations update automatically as you change gear. Start the run from the bar at the bottom.</small></div></div><div id="run-progress" hidden><div class="progress-card" aria-live="polite"><div class="progress-head"><span class="progress-elapsed" id="run-elapsed">00:00</span><span class="progress-stage" id="run-stage"></span><span class="progress-eta" id="run-eta" hidden></span><button type="button" id="btn-stop" class="btn-danger">Stop run</button></div><div class="progress-track"><div class="progress-fill" id="run-progress-fill" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Simulation progress"></div></div><span class="progress-meta" id="run-progress-meta">Starting…</span></div></div><div id="run-result" hidden></div><div class="log-toolbar" id="log-toolbar" hidden><label class="log-follow"><input type="checkbox" id="log-follow" checked> Follow log</label><span class="char-count" id="log-lines">0 lines</span><button type="button" id="btn-log-download" class="btn-ghost">Download full log</button></div><pre id="simulation-log" class="simulation-log" role="log" aria-live="off" hidden></pre></section>
   `;
   renderGear();
@@ -1391,6 +1461,7 @@ function renderWorkflow() {
   }
   document.getElementById('btn-run').addEventListener('click', runSimulation);
   document.getElementById('fight-style').addEventListener('change', selectionChanged);
+  document.getElementById('compare-mode').addEventListener('change', selectionChanged);
   document.getElementById('btn-stop').addEventListener('click', stopSimulation);
   document.getElementById('btn-log-download').addEventListener('click', downloadLog);
   wirePopover(document.getElementById('btn-review'),
@@ -1441,6 +1512,7 @@ function buildPayload() {
     char_name: parsedData.char_name,
     base_profile: parsedData.base_profile,
     fight_style: document.getElementById('fight-style')?.value || 'single_boss',
+    mode: document.getElementById('compare-mode')?.value || 'single_swap',
     equipped_gear: parsedData.equipped_gear,
     selected_items: Object.fromEntries(Object.entries(selectedItems).map(([slot, items]) => [slot, Array.from(items)])),
     selected_enchants: enchantPayload,

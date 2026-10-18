@@ -148,6 +148,10 @@ services:
       - WORKER_NAME=${WORKER_NAME:-worker}
       - SIMC_BUILD_JOBS=${SIMC_BUILD_JOBS:-2}
       - SIMC_UPDATE_INTERVAL_SECONDS=${SIMC_UPDATE_INTERVAL_SECONDS:-86400}
+      # t_590f5317 staged precision plan + culling band (empty = code
+      # defaults: 200:1;5000:0.2;20000:0.05 and K=1.0).
+      - SIMC_HELPER_STAGE_PLAN=${SIMC_HELPER_STAGE_PLAN:-}
+      - SIMC_HELPER_CULL_K=${SIMC_HELPER_CULL_K:-}
     volumes:
       # Persist the nightly engine (and, in source mode, the cloned SimC
       # source + compiled engine) across recreates; otherwise every `up -d`

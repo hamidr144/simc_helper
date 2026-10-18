@@ -140,6 +140,22 @@ FIGHT_STYLE_DIRECTIVES = {
     ),
 }
 
+# TG2 generation modes (design §4.1): ``single_swap`` is the shipped behavior;
+# ``combinations`` emits the cross-slot Top Gear product via
+# ``build_combination_copies``.
+MODE_SINGLE_SWAP = "single_swap"
+MODE_COMBINATIONS = "combinations"
+TG_GENERATION_MODES = (MODE_SINGLE_SWAP, MODE_COMBINATIONS)
+# shortcut: combination budget fixed from env at import; upgrade path =
+# POST /api/settings, ruled out of this epic (TG2-ACCEPT Q1, env-only).
+TG_MAX_COMBINATIONS = int(os.environ.get("SIMC_TG_MAX_COMBINATIONS", "5000"))
+# shortcut: 1 it/s is ~10x pessimistic vs the measured ~9.7 it/s reference
+# worker; recalibrate once the TG2 E2E records real throughput (risk R2).
+TG_WORK_ESTIMATE_ITERS_PER_SEC = float(os.environ.get("SIMC_TG_ITERS_PER_SEC", "1"))
+# shortcut: stage-1 iteration cap for the work estimate; rewired to the
+# SIMC_HELPER_STAGE_PLAN knob in TG2-C (t_590f5317).
+TG_STAGE1_ITERATIONS_CAP = 200
+
 
 class GenerateSimcRequest(BaseModel):
     """Payload for ``/api/generate-simc`` – build a SimulationCraft profile."""
@@ -147,6 +163,7 @@ class GenerateSimcRequest(BaseModel):
     char_name: str
     base_profile: str
     fight_style: Optional[str] = FIGHT_STYLE_SINGLE_BOSS
+    mode: str = MODE_SINGLE_SWAP
     equipped_gear: Dict[str, str]
     selected_items: Dict[str, List[str]]
     selected_enchants: Optional[Dict[str, Any]] = {}
@@ -247,6 +264,9 @@ class GenerateSimcResponse(BaseModel):
     input_id: str
     input_url: str
     combinations: int
+    mode: str = MODE_SINGLE_SWAP
+    # Stage-1-only honest lower bound, combinations mode only (design §4.2).
+    work_estimate_minutes: Optional[float] = None
 
 
 class TaskStatusResponse(BaseModel):
@@ -1957,6 +1977,14 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
             status_code=422,
             detail=f"Unknown fight_style '{fight_style}'; expected one of {sorted(FIGHT_STYLE_DIRECTIVES)}",
         )
+    # Ruling E1: mode validation lives OUTSIDE the broad try below (its
+    # HTTPException would otherwise be flattened into a 500).
+    mode = payload.mode
+    if mode not in TG_GENERATION_MODES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown mode '{mode}'; expected one of {list(TG_GENERATION_MODES)}",
+        )
     # t_b3b78acd: snapshot what this run is about for the run_history row.
     # ``source`` keeps whatever the load step recorded (addon/armory); plain
     # paste-in profiles with no load step default to "addon".
@@ -1975,6 +2003,8 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
         from src.cli.generate_input import (
             apply_gear_upgrade,
             apply_item_level,
+            build_combination_copies,
+            canonical_item,
             generate_variations,
             load_config,
         )
@@ -2082,65 +2112,79 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
 
         profile_content += "\n"
         count = 0
+        work_estimate_minutes = None
 
-        def canonical_item(item: str) -> str:
-            """Normalize SimC item fields so equivalent profiles compare equally."""
-            fields = [field.strip() for field in str(item or "").lstrip(",").split(",") if field.strip()]
-            return ",".join(sorted(fields))
+        if mode == MODE_COMBINATIONS:
+            copy_blocks, count = build_combination_copies(
+                items_by_slot, config, equipped_gear, char_name, extra_sockets=extra_sockets)
+            # Budget check before any file write: over-cap requests neither
+            # create an inputs/ file nor touch generated_inputs_by_user.
+            if count > TG_MAX_COMBINATIONS:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"Combination budget exceeded: {count} combinations "
+                        f"(budget {TG_MAX_COMBINATIONS}). Deselect items or enchants, "
+                        "or switch back to 'one swap at a time'."
+                    ),
+                )
+            work_estimate_minutes = round(
+                count * TG_STAGE1_ITERATIONS_CAP / TG_WORK_ESTIMATE_ITERS_PER_SEC / 60, 1)
+            profile_content += "".join(copy_blocks)
+        else:
+            def profile_signature(override_slot: Optional[str] = None, override_item: Optional[str] = None):
+                """Return a stable identity for the baseline or one single-slot override."""
+                profile = {
+                    slot: canonical_item(item)
+                    for slot, item in equipped_gear.items()
+                    if item
+                }
+                if override_slot and override_item:
+                    profile[override_slot] = canonical_item(override_item)
+                return tuple(sorted(profile.items()))
 
-        def profile_signature(override_slot: Optional[str] = None, override_item: Optional[str] = None):
-            """Return a stable identity for the baseline or one single-slot override."""
-            profile = {
-                slot: canonical_item(item)
-                for slot, item in equipped_gear.items()
-                if item
-            }
-            if override_slot and override_item:
-                profile[override_slot] = canonical_item(override_item)
-            return tuple(sorted(profile.items()))
+            def is_equipped_variation(slot: str, variation: str) -> bool:
+                if slot == "finger":
+                    equipped = [equipped_gear.get("finger1"), equipped_gear.get("finger2")]
+                elif slot == "trinket":
+                    equipped = [equipped_gear.get("trinket1"), equipped_gear.get("trinket2")]
+                else:
+                    equipped = [equipped_gear.get(slot)]
+                return canonical_item(variation) in {canonical_item(item) for item in equipped if item}
 
-        def is_equipped_variation(slot: str, variation: str) -> bool:
-            if slot == "finger":
-                equipped = [equipped_gear.get("finger1"), equipped_gear.get("finger2")]
-            elif slot == "trinket":
-                equipped = [equipped_gear.get("trinket1"), equipped_gear.get("trinket2")]
-            else:
-                equipped = [equipped_gear.get(slot)]
-            return canonical_item(variation) in {canonical_item(item) for item in equipped if item}
+            all_slots = set(items_by_slot.keys()) | set(config["enchantments"].keys())
+            if payload.selected_gems:
+                gem_slots = {slot for slot, items in items_by_slot.items() if any("gem_id=" in item for item in items)}
+                gem_slots |= {slot for slot, enabled in extra_sockets.items() if enabled}
+                all_slots |= gem_slots
 
-        all_slots = set(items_by_slot.keys()) | set(config["enchantments"].keys())
-        if payload.selected_gems:
-            gem_slots = {slot for slot, items in items_by_slot.items() if any("gem_id=" in item for item in items)}
-            gem_slots |= {slot for slot, enabled in extra_sockets.items() if enabled}
-            all_slots |= gem_slots
+            seen_profiles = {profile_signature()}
+            for slot in sorted(all_slots):
+                equipped_key = "finger1" if slot == "finger" else "trinket1" if slot == "trinket" else slot
+                item_list = items_by_slot.get(slot)
 
-        seen_profiles = {profile_signature()}
-        for slot in sorted(all_slots):
-            equipped_key = "finger1" if slot == "finger" else "trinket1" if slot == "trinket" else slot
-            item_list = items_by_slot.get(slot)
+                if not item_list:
+                    if slot == "finger": item_list = [equipped_gear.get("finger1"), equipped_gear.get("finger2")]
+                    elif slot == "trinket": item_list = [equipped_gear.get("trinket1"), equipped_gear.get("trinket2")]
+                    else: item_list = [equipped_gear.get(slot)]
 
-            if not item_list:
-                if slot == "finger": item_list = [equipped_gear.get("finger1"), equipped_gear.get("finger2")]
-                elif slot == "trinket": item_list = [equipped_gear.get("trinket1"), equipped_gear.get("trinket2")]
-                else: item_list = [equipped_gear.get(slot)]
+                item_list = [it for it in item_list if it]
+                if not item_list: continue
 
-            item_list = [it for it in item_list if it]
-            if not item_list: continue
-
-            variations = generate_variations(item_list, slot, config, extra_sockets=extra_sockets)
-            for var in variations:
-                # The base actor already represents equipped gear. Do not create
-                # fake candidates that simply reapply an unchanged slot.
-                if is_equipped_variation(slot, var):
-                    continue
-                signature = profile_signature(equipped_key, var)
-                if signature in seen_profiles:
-                    continue
-                seen_profiles.add(signature)
-                if var.startswith("id=") or var.startswith("bonus_id="):
-                    var = "," + var
-                profile_content += f'copy="{char_name}_{slot}_{count},{char_name}"\n{equipped_key}={var}\n\n'
-                count += 1
+                variations = generate_variations(item_list, slot, config, extra_sockets=extra_sockets)
+                for var in variations:
+                    # The base actor already represents equipped gear. Do not create
+                    # fake candidates that simply reapply an unchanged slot.
+                    if is_equipped_variation(slot, var):
+                        continue
+                    signature = profile_signature(equipped_key, var)
+                    if signature in seen_profiles:
+                        continue
+                    seen_profiles.add(signature)
+                    if var.startswith("id=") or var.startswith("bonus_id="):
+                        var = "," + var
+                    profile_content += f'copy="{char_name}_{slot}_{count},{char_name}"\n{equipped_key}={var}\n\n'
+                    count += 1
 
         input_id = str(uuid.uuid4())[:12]
         file_path = os.path.join(INPUTS_DIR, f"{input_id}.simc")
@@ -2163,7 +2207,19 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
         # alternate item profiles were generated. Report the true candidate
         # count (0 allowed) so the UI can label a baseline-only run honestly
         # and sim_helper can take its baseline path (t_4485565b).
-        return {"status": "success", "file_path": file_path, "input_id": input_id, "input_url": record["input_url"], "combinations": count}
+        return {
+            "status": "success",
+            "file_path": file_path,
+            "input_id": input_id,
+            "input_url": record["input_url"],
+            "combinations": count,
+            "mode": mode,
+            "work_estimate_minutes": work_estimate_minutes,
+        }
+    except HTTPException:
+        # Ruling E1: inner HTTPExceptions (e.g. the budget 422) must not be
+        # flattened into 500s by the broad handler below.
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -2473,6 +2529,41 @@ def parse_report_results(html_content: str) -> list:
     return results
 
 
+_PLAYER_BLOCK_RE = re.compile(r"^Player: (\S+)")
+_PLAYER_DPS_RE = re.compile(r"DPS=([\d.]+)[^ ]* DPS-Error=([\d.]+)/([\d.]+)%")
+
+
+def parse_actor_precision(log_path: str) -> dict:
+    """Per-actor ``mean`` / ``error_pct`` from a SimC stage log (D6, t_791b16f5).
+
+    Streams the log: ``Player: <name> ...`` opens an actor block, the next
+    ``DPS=<mean> ... DPS-Error=<abs>/<rel>%`` line closes it. Blocks echo the
+    full APL, so a block whose summary never appears is skipped when the next
+    ``Player:`` line arrives (defensive skip, same spirit as sim_helper's
+    ``filter_best`` streaming loop). Missing/unreadable log -> ``{}`` (legacy
+    runs ship no log; callers treat the fields as absent).
+    """
+    precision: dict = {}
+    pending = None
+    try:
+        with open(log_path, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                m = _PLAYER_BLOCK_RE.match(line)
+                if m:
+                    pending = m.group(1)
+                    continue
+                if pending is None:
+                    continue
+                m = _PLAYER_DPS_RE.search(line)
+                if m:
+                    precision[pending] = {"mean": float(m.group(1)),
+                                          "error_pct": float(m.group(3))}
+                    pending = None
+    except OSError:
+        return {}
+    return precision
+
+
 @app.get("/api/get-results", response_model=GetResultsResponse, tags=["Simulation"])
 async def get_results(task_id: str = Query(default="latest"), user_id: str = Depends(require_session)):
     """Retrieve parsed simulation results (DPS per class, gear data) for a completed task.
@@ -2509,6 +2600,13 @@ async def get_results(task_id: str = Query(default="latest"), user_id: str = Dep
 
         with open(html_path, encoding='utf-8', errors='replace') as f: html_content = f.read()
         results = parse_report_results(html_content)
+        # D6 (t_791b16f5): per-actor precision ships only in the stage-3 log
+        # the worker added to artifacts.zip, extracted next to the report.
+        # No log (legacy runs) -> no merge, response byte-compatible.
+        precision = parse_actor_precision(os.path.join(os.path.dirname(html_path), "stage3.log"))
+        if precision:
+            for item in results:
+                item["mean_error_pct"] = precision.get(item["name"], {}).get("error_pct")
         return {"status": "success", "results": results}
     except HTTPException:
         raise
