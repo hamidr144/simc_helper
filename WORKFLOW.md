@@ -77,3 +77,5 @@ Rollback: `git checkout <last-good-tag>` in the prod worktree, rebuild, `up -d -
 - Branch from `dev`, merge back to `dev` — never branch from or merge into `prod` directly (except leader milestone merges/hotfixes).
 - Prod is never used for testing. Dev system data is disposable; prod data is not.
 - Every prod deploy is from a tagged commit; every tag has a version bump in its merge commit.
+
+<!-- GHWR-6 identity-matrix pilot probe (kanban t_90c9f97a, throwaway docs comment; no content intent). -->
