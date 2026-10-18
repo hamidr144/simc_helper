@@ -38,13 +38,32 @@ function changesFromBaseline(candidate, baseline) {
   const changes = [];
   const slots = new Set([...Object.keys(baseline.gear || {}), ...Object.keys(candidate.gear || {})]);
   for (const slot of slots) {
-    const before = itemId(baseline.gear?.[slot]);
+    const baseItem = baseline.gear?.[slot] || '';
+    const before = itemId(baseItem);
     const after = itemId(candidate.gear?.[slot]);
     if (after && after !== before) {
-      changes.push({ slot: slot.replaceAll('_', ' '), id: after, bonus: itemBonus(candidate.gear[slot]) });
+      // TG3-G gap 5: carry the replaced equipped item so the chip tooltip can
+      // name it (peer pattern: candidate-shown-beside-equipped).
+      changes.push({ slot: slot.replaceAll('_', ' '), id: after, bonus: itemBonus(candidate.gear[slot]), before, beforeBonus: itemBonus(baseItem) });
     }
   }
   return changes;
+}
+
+// TG3-G gap 4: human labels for engine copy names ("<char>_Combo_12" from
+// cli/generate_input.py, "<char>_head_3" from generate-simc single_swap).
+// The machine name stays in the row title tooltip; unknown names
+// (user-embedded copies) fall back verbatim — never fabricate a label.
+function candidateLabel(name) {
+  const text = String(name || '');
+  const combo = text.match(/^.*_Combo_(\d+)(?:,|$)/);
+  if (combo) return `Combination #${combo[1]}`;
+  const swap = text.match(/^(?:.+)_(head|neck|shoulder|shoulders|back|chest|wrist|wrists|hands|waist|legs|feet|finger1?|finger2|trinket1?|trinket2|main_hand|off_hand)_(\d+)$/);
+  if (swap) {
+    const slot = swap[1].replace(/_/g, ' ').replace(/(\d)$/, ' $1').replace(/^./, (c) => c.toUpperCase());
+    return `${slot} swap`;
+  }
+  return text;
 }
 
 // --- item chips: batch-resolve every changed item id (doc 4.4) ---
@@ -55,6 +74,9 @@ async function resolveChips(ranked, baseline) {
   for (const result of ranked) {
     for (const change of changesFromBaseline(result, baseline)) {
       if (change.id && !wanted.has(change.id)) wanted.set(change.id, change.bonus);
+      // Gap 5: the replaced equipped items resolve through the SAME batch path
+      // (their ids join one chunked request) — no new endpoint.
+      if (change.before && !wanted.has(change.before)) wanted.set(change.before, change.beforeBonus);
     }
   }
   if (!wanted.size) return;
@@ -87,8 +109,11 @@ function chipHtml(change) {
   if (!info) {
     return `<span class="chip-pending">${escapeHtml(change.slot)} #${escapeHtml(change.id)}</span>`;
   }
+  // Gap 5: replaces-context in the tooltip, resolved via the same batch path.
+  const base = change.before ? chipInfo.get(change.before) : null;
+  const replaces = base ? ` replaces ${base.name} (ilvl ${base.ilvl ?? '?'})` : '';
   const color = info.quality_color ? ` style="color:${escapeHtml(info.quality_color)}"` : '';
-  return `<a class="item-chip" href="${href}" target="_blank" rel="noopener" title="${escapeHtml(info.name)} (ilvl ${escapeHtml(info.ilvl ?? '?')})">` +
+  return `<a class="item-chip" href="${href}" target="_blank" rel="noopener" title="${escapeHtml(`${info.name} (ilvl ${info.ilvl ?? '?'})${replaces}`)}">` +
     `<img src="api/item-icon/${encodeURIComponent(change.id)}" alt="" loading="lazy">` +
     `<span${color}>${escapeHtml(info.name)}</span><span class="item-chip-slot">${escapeHtml(change.slot)}</span></a>`;
 }
@@ -97,7 +122,15 @@ function deltaHtml(delta) {
   return `<span class="result-delta ${delta >= 0 ? 'positive' : 'negative'}">${delta >= 0 ? '+' : ''}${delta.toLocaleString()}</span>`;
 }
 
-function renderResults(results) {
+// Gap 1: compare-mode indicator. Keys mirror MODE_* in src/web/main.py;
+// unknown/absent modes render no chip (honest absence, no guessing).
+const MODE_LABELS = { single_swap: 'Single swap', combinations: 'Combinations' };
+const MODE_HINTS = {
+  single_swap: 'Each row changes exactly one item in your equipped gear — the delta is that item’s.',
+  combinations: 'Each row simulates a full combination of changed items — the delta belongs to the whole combination.',
+};
+
+function renderResults(results, mode) {
   // Quarantine (doc 4.4): dps<=0 means the sim failed — never rank it, never
   // let it be the baseline.
   const healthy = results.filter(result => result && Number(result.dps) > 0);
@@ -141,23 +174,21 @@ function renderResults(results) {
     : '';
 
   baselineCard.hidden = false;
-  baselineCard.innerHTML = `<div class="baseline-result"><span>${isEquipped ? 'Equipped baseline' : 'Best candidate (no baseline run)'}</span><strong>${baseline.dps.toLocaleString()} DPS</strong><small>${escapeHtml(baseline.name)}</small></div>`;
+  // Gap 1: compare-mode indicator (single source: run metadata from
+  // /api/get-results). Runs generated before TG3-G have no stored mode —
+  // the chip is honestly absent rather than guessed from candidate names.
+  const modeChip = MODE_LABELS[mode]
+    ? `<span class="mode-chip" title="${MODE_HINTS[mode]}">${MODE_LABELS[mode]}</span>`
+    : '';
+  baselineCard.innerHTML = `<div class="baseline-result"><span>${isEquipped ? 'Equipped baseline' : 'Best candidate (no baseline run)'}</span><strong>${baseline.dps.toLocaleString()} DPS</strong><small>${escapeHtml(baseline.name)}</small>${modeChip}</div>`;
 
   if (!ranked.length) {
     resultList.innerHTML = `<section class="panel-card empty-results"><h2>No alternatives to rank</h2><p>Select another item, enchant, gem, grade, or socket before running a comparison.</p>${quarantineHtml}</section>`;
     return;
   }
 
-  const top = ranked.slice(0, 3);
-  const topCards = top.map((result, index) => {
-    const delta = result.dps - baseline.dps;
-    return `<article class="panel-card result-card ${index === 0 ? 'best-result' : ''}">
-      <div class="result-rank">#${index + 1}${index === 0 ? ' · Best' : ''}</div>
-      <div class="result-score"><strong>${result.dps.toLocaleString()}</strong><span>DPS</span></div>
-      <div class="result-delta ${delta >= 0 ? 'positive' : 'negative'}">${delta >= 0 ? '+' : ''}${delta.toLocaleString()} vs equipped</div>
-      <div class="result-changes"><b>Changes</b><p class="chip-row">${result.changes.map(chipHtml).join('')}</p></div>
-    </article>`;
-  }).join('');
+  // Gap 2 (t_54bad356): the old top-3 card block rendered rows 1-3 a second
+  // time verbatim; the ranked table is now the single render layer.
 
   const tableRows = ranked.map((result, index) => {
     const delta = result.dps - baseline.dps;
@@ -166,21 +197,25 @@ function renderResults(results) {
     const err = typeof result.mean_error_pct === 'number'
       ? ` <span class="result-err">± ${result.mean_error_pct}%</span>` : '';
     const vsBest = `${((result.dps - topRow.dps) / topRow.dps * 100).toFixed(2)}%`;
+    // Gap 3: Δ vs equipped is the one primary number; DPS and % vs best are
+    // demoted to the Δ-cell tooltip but stay in the DOM (sr-only spans) so
+    // the table keeps its full semantics for assistive tech.
+    const detail = `${result.dps.toLocaleString()} DPS${typeof result.mean_error_pct === 'number' ? ` ± ${result.mean_error_pct}%` : ''} · ${vsBest} vs best`;
     return `<tr${tie ? ' class="is-sidegrade"' : ''}>
       <td class="results-num">${index + 1}</td>
-      <td>${escapeHtml(result.name)}${tie ? '<span class="sidegrade-badge">≈ best (statistical tie)</span>' : ''}</td>
-      <td class="results-num">${result.dps.toLocaleString()}${err}</td>
-      <td class="results-num">${deltaHtml(delta)}</td>
-      <td class="results-num">${vsBest}</td>
+      <td><span class="candidate-label" title="${escapeHtml(result.name)}">${escapeHtml(candidateLabel(result.name))}</span>${tie ? '<span class="sidegrade-badge">≈ best (statistical tie)</span>' : ''}</td>
+      <td class="results-num results-secondary"><span class="sr-only">${result.dps.toLocaleString()}${err}</span></td>
+      <td class="results-num" title="${escapeHtml(detail)}">${deltaHtml(delta)}</td>
+      <td class="results-num results-secondary"><span class="sr-only">${vsBest}</span></td>
       <td class="results-changes">${result.changes.map(chipHtml).join('')}</td>
     </tr>`;
   }).join('');
 
-  resultList.innerHTML = `${topCards}
+  resultList.innerHTML = `
     <section class="panel-card full-width results-table-card">
       <table class="results-table">
-        <caption class="sr-only">Best combinations, ranked by DPS</caption>
-        <thead><tr><th scope="col">&nbsp;</th><th scope="col">Candidate</th><th scope="col">DPS</th><th scope="col">Δ vs equipped</th><th scope="col">% vs best</th><th scope="col">Changes</th></tr></thead>
+        <caption class="sr-only">Best candidates, ranked by DPS</caption>
+        <thead><tr><th scope="col">&nbsp;</th><th scope="col">Candidate</th><th scope="col" class="results-secondary"><span class="sr-only">DPS</span></th><th scope="col">Δ vs equipped</th><th scope="col" class="results-secondary"><span class="sr-only">% vs best</span></th><th scope="col">Changes</th></tr></thead>
         <tbody>${tableRows}</tbody>
       </table>
       ${quarantineHtml}
@@ -238,7 +273,7 @@ async function fetchResults(attempt = 0) {
       const baseline = pickBaseline(healthy).baseline;
       const ranked = healthy.filter(result => result !== baseline);
       await resolveChips(ranked, baseline);
-      return renderResults(data.results);
+      return renderResults(data.results, data.mode);
     }
     if (attempt < 5) return setTimeout(() => fetchResults(attempt + 1), 1200);
     subtitle.textContent = data.message || 'The report could not be loaded.';

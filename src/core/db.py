@@ -459,6 +459,20 @@ def task_owner_load() -> Dict[str, Dict[str, Any]]:
     finally:
         conn.close()
 
+def task_owner_meta_json(task_id: str) -> Optional[str]:
+    """Return the persisted run-meta JSON string for *task_id* (None when
+    unknown). TG3-G: /api/get-results reads the generation mode here because
+    the done hook pops the in-memory task_meta_map before results are viewed.
+    """
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT meta FROM task_owner WHERE task_id = ?", (task_id,)
+        ).fetchone()
+        return row[0] if row else None
+    finally:
+        conn.close()
+
 def task_owner_prune_older_than(cutoff: float) -> None:
     """Delete owner rows created before *cutoff* (runs finish in minutes;
     the row only needs to outlive a master restart, not a week)."""

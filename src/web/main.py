@@ -101,6 +101,7 @@ from src.core.db import (
     session_get,
     session_set,
     task_owner_load,
+    task_owner_meta_json,
     task_owner_prune_older_than,
     task_owner_upsert,
     user_create,
@@ -299,6 +300,10 @@ class GetResultsResponse(BaseModel):
     status: str
     results: Optional[List[Dict[str, Any]]] = None
     message: Optional[str] = None
+    # TG3-G (t_54bad356): generation mode that produced this run
+    # (``single_swap`` | ``combinations``); None for runs generated before
+    # the mode was recorded or when unavailable (additive, old clients unaffected).
+    mode: Optional[str] = None
 
 
 class WorkerUploadFileResponse(BaseModel):
@@ -2011,6 +2016,9 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
         {
             "fighting_style": fight_style,
             "char_name": payload.char_name,
+            # TG3-G (t_54bad356): freeze the compare mode so /api/get-results
+            # can state which mode produced the run (audit gap 4.2).
+            "mode": mode,
             "spec": _extract_spec(payload.base_profile) or _gen_meta.get("spec"),
         }
     )
@@ -2597,6 +2605,25 @@ def parse_actor_precision(log_path: str) -> dict:
     return precision
 
 
+def _task_mode(task_dir: str) -> Optional[str]:
+    """TG3-G (t_54bad356): the generation mode recorded for the run whose
+    report lives in *task_dir* (dir name == task id). In-memory meta first
+    (pre-done runs), persisted ``task_owner`` meta as fallback (the done hook
+    pops the in-memory map before the results page loads). None for runs
+    generated before mode recording — honest absence, never guessed.
+    """
+    tid = os.path.basename(task_dir)
+    meta = task_meta_map.get(tid)
+    if meta is None:
+        raw = task_owner_meta_json(tid)
+        try:
+            meta = json.loads(raw) if raw else {}
+        except ValueError:
+            meta = {}
+    mode = meta.get("mode")
+    return mode if mode in TG_GENERATION_MODES else None
+
+
 @app.get("/api/get-results", response_model=GetResultsResponse, tags=["Simulation"])
 async def get_results(task_id: str = Query(default="latest"), user_id: str = Depends(require_session)):
     """Retrieve parsed simulation results (DPS per class, gear data) for a completed task.
@@ -2640,7 +2667,7 @@ async def get_results(task_id: str = Query(default="latest"), user_id: str = Dep
         if precision:
             for item in results:
                 item["mean_error_pct"] = precision.get(item["name"], {}).get("error_pct")
-        return {"status": "success", "results": results}
+        return {"status": "success", "results": results, "mode": _task_mode(os.path.dirname(html_path))}
     except HTTPException:
         raise
     except Exception as e:
