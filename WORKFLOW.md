@@ -130,3 +130,5 @@ Rollback: `git checkout <last-good-tag>` in the prod worktree, rebuild, `docker 
 - CI runs on every PR (dev and prod bases included); no checks ≠ passing checks.
 - Prod is never used for testing, and no prod ship without explicit approval. Dev system data is disposable; prod data is not.
 - Every prod deploy is from a tagged commit; every tag is a merge commit on its branch, with a version bump in its PR branch.
+
+<!-- GHWR-6 identity-matrix pilot probe (kanban t_90c9f97a, throwaway docs comment; no content intent). -->
