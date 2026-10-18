@@ -6,7 +6,7 @@ Two long-lived branches, two systems, one rule: **nothing reaches `prod` without
 
 | Branch | Deploys to | Version scheme |
 |--------|-----------|----------------|
-| `prod` | Production system (http://127.0.0.1:8000; external TLS front is host infra, not in this repo) | `vMAJOR.MINOR.PATCH` (e.g. `v1.1.0`), tagged on every merge |
+| `prod` | Production system (http://127.0.0.1:8000; external TLS front is host infra, not in this repo) | `vMAJOR.MINOR.PATCH` (e.g. `v1.1.0`), tagged on every merged milestone PR |
 | `dev`  | Dev/test system (http://127.0.0.1:8001) | `vMAJOR.MINOR.PATCH-dev.N` (e.g. `v1.2.0-dev.3`), tag each test deploy |
 | `feature/<kanban-id>-<slug>` | — (cut from `dev`, short-lived) | — |
 
@@ -16,34 +16,54 @@ Version format is [Semantic Versioning](https://semver.org):
 - **PATCH** — hotfix on prod, or fix before next milestone
 - **`-dev.N`** — SemVer prerelease; the dev line advances N with each deploy to the test system. When dev merges to prod, the version drops the suffix (`1.2.0-dev.7` → `v1.2.0`).
 
-The current release version lives in `pyproject.toml` (`version = ...`) and is bumped in the same merge commit that goes to the target branch. The dev line's baseline is `1.0.0-dev.0` (the `0.1.x` releases predate this scheme): the next dev deploy is `1.0.0-dev.1`, and the first milestone merged from this line ships prod as `v1.0.0`.
+The current release version lives in `pyproject.toml` (`version = ...`). Every PR that changes code (or anything that ships) carries the version bump as its **last commit before final review**, made in the PR branch against a freshly fetched `origin/dev` — never in the merge commit on the target branch. Docs-only PRs are version-exempt: no bump, no tag, no deploy. The dev line's baseline is `1.0.0-dev.0` (the `0.1.x` releases predate this scheme): the next dev deploy is `1.0.0-dev.1`, and the first milestone merged from this line ships prod as `v1.0.0`.
 
 ## Day-to-day: change → dev
+
+All changes reach `dev` (and `prod`) **only through a GitHub PR merged via `gh`**. Branch protection on both branches rejects direct pushes and force-pushes server-side — there is no local `git merge` into `dev`/`prod` and no `git push origin dev` anymore; don't try, it fails (`GH006: Protected branch update failed`).
 
 1. `git switch dev && git pull`
 2. `git switch -c feature/t_xxxxx-slug` — **one Kanban task, one branch.** Never commit directly to `dev` or `prod`.
 3. Implement, add/adjust tests.
 4. Test on the **dev system** (see below). Never test on prod.
-5. Open PR `feature/... → dev`. Reviewer approval + tests green required (author never approves own work).
-6. Merge to `dev` — the merge commit bumps `pyproject.toml` to the next dev version `X.Y.Z-dev.N` (N increments once per dev deploy) and is tagged `vX.Y.Z-dev.N`; push with `git push origin dev --follow-tags`. Then deploy to the dev system (below) → tester verifies acceptance criteria on the running system.
-7. Delete the feature branch.
+5. Push the branch and open the PR:
+   ```bash
+   git push -u origin feature/t_xxxxx-slug
+   gh pr create --base dev --title "t_xxxxx: <summary>" --body "<kanban task id, changes, test evidence>"
+   ```
+6. Review happens **on the PR**. Reviewer: `gh pr view <pr>` / `gh pr diff <pr>`, then leave findings with `gh pr review <pr> --comment` or `--request-changes` — inline comments (`--file path:line=feedback`) expected. Author addresses **every** comment with follow-up commits pushed to the same branch and replies on the PR (`gh pr comment --reply-to <id>…`), then requests re-review.
+7. **Version bump:** as the last commit before requesting final review, `git fetch origin dev` and bump `pyproject.toml` to the next `X.Y.Z-dev.N` — recompute N from the freshly fetched tip at that moment (another PR may have merged while you worked). Docs-only PR: skip (version-exempt).
+8. Once approved (see single-account rule below), the merging worker merges: `gh pr merge <pr> --merge --delete-branch`.
+9. Tag + deploy: the merging worker tags the merge commit `vX.Y.Z-dev.N` and pushes the tag explicitly. The merge commit exists only on the remote, and `dev` itself needs no push (the merge already updated it; pushing it would hit protection anyway):
+   ```bash
+   git fetch origin dev                      # brings the merge commit into origin/dev
+   git tag vX.Y.Z-dev.N refs/remotes/origin/dev && git push origin vX.Y.Z-dev.N
+   # one-shot without fetching: git push origin <merge-sha>:refs/tags/vX.Y.Z-dev.N
+   ```
+   Note `git push --follow-tags` does not work here: it skips lightweight tags and your local repo doesn't have the merge commit yet. Then deploy to the dev system (below) → tester verifies acceptance criteria on the running system.
+
+### Review verdicts: the single-account limitation
+
+All team bots share one GitHub account (`hamidr144`), and GitHub rejects self-approval, so an approving review button-press is impossible for anyone here. Instead the reviewer posts a **comment-type review** (`gh pr review --comment`) whose **first line is exactly `VERDICT: APPROVE` or `VERDICT: REQUEST-CHANGES`**; the merging worker treats `VERDICT: APPROVE` as the approval. The Hermes kanban reviewer card remains the binding process record — the GitHub review is its mirror.
 
 ## Milestone: dev → prod
 
 A milestone is ready when the main feature is **completed, tested on the dev system, documented (README/docs updated), and approved by the leader.**
 
-**Mandatory pre-merge step (before any git commands):** prepare the `CHANGELOG.md` entry for the new version — regenerate/append from `git log --oneline prod..dev`, consolidate to user-visible changes categorized under `### Features` / `### Improvements` / `### Bug fixes` (security fixes go under Bug fixes), and get reviewer approval on the entry set. The `CHANGELOG.md` update ships in the same merge commit that bumps the version and tag.
+**Mandatory pre-merge step (before opening the PR):** prepare the `CHANGELOG.md` entry for the new version — regenerate/append from `git log --oneline prod..dev`, consolidate to user-visible changes categorized under `### Features` / `### Improvements` / `### Bug fixes` (security fixes go under Bug fixes), and get reviewer approval on the entry set. The `CHANGELOG.md` update ships in the milestone PR branch together with the version bump.
 
-Only the leader merges `dev → prod`:
+Only the leader opens and merges the `dev → prod` PR:
 
 ```bash
-git switch prod && git merge --no-ff dev   # bump version + changelog in merge
-git tag v<NEW.VERSION>
-git push origin prod --follow-tags
+# version bump + changelog go in a branch cut from dev (same bump rule as day-to-day), pushed:
+gh pr create --base prod --head milestone/<version> --title "milestone: v<NEW.VERSION>" --body "<milestone summary>"
+# leader merges once approved, then tags the merge commit (same tag mechanics as day-to-day):
+gh pr merge <pr> --merge
+git fetch origin prod && git tag vX.Y.Z refs/remotes/origin/prod && git push origin vX.Y.Z
 # deploy prod system (see below) and verify /health
 ```
 
-Every merged milestone bumps the prod version (MINOR for features, MAJOR for breaking, PATCH for prod hotfixes — hotfixes are also cherry-picked back to `dev`).
+Every merged milestone bumps the prod version (MINOR for features, MAJOR for breaking, PATCH for prod hotfixes — hotfixes are also cherry-picked back to `dev` through a normal PR).
 
 ## The two systems
 
@@ -56,7 +76,7 @@ Every merged milestone bumps the prod version (MINOR for features, MAJOR for bre
 
 Always pass `-p` explicitly on deploy commands. The main checkout's directory name (`simc_helper`) equals the prod compose project name, so an unqualified `docker compose` command run there targets the **prod** volumes whenever `.env` is missing or stale. `-p` overrides `COMPOSE_PROJECT_NAME` from `.env`; the `.env` values (`simc-dev` / `simc_helper`) stay as the safety net for interactive commands.
 
-### Deploy dev system (after merge to `dev`)
+### Deploy dev system (after merged + tagged PR)
 
 ```bash
 cd ~/Hermes-work/simc_helper
@@ -66,7 +86,7 @@ docker compose -p simc-dev up -d --force-recreate simc-master simc-worker
 curl -s http://127.0.0.1:8001/health
 ```
 
-### Deploy prod system (after leader-approved milestone merge)
+### Deploy prod system (after leader-approved milestone PR merge)
 
 ```bash
 cd ~/Hermes-work/simc_helper-prod
@@ -80,6 +100,6 @@ Rollback: `git checkout <last-good-tag>` in the prod worktree, rebuild, `docker 
 
 ## Quick rules
 
-- Branch from `dev`, merge back to `dev` — never branch from or merge into `prod` directly (except leader milestone merges/hotfixes).
+- Branch from `dev`, open PRs back to `dev` — direct push to `dev`/`prod` is blocked server-side; hotfixes reach prod through a PR too (then cherry-pick back to `dev` through a PR).
 - Prod is never used for testing. Dev system data is disposable; prod data is not.
-- Every prod deploy is from a tagged commit; every tag has a version bump in its merge commit.
+- Every prod deploy is from a tagged commit; every tag has a version bump in its PR branch.
