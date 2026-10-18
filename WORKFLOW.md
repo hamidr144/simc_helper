@@ -132,3 +132,4 @@ Rollback: `git checkout <last-good-tag>` in the prod worktree, rebuild, `docker 
 - Every prod deploy is from a tagged commit; every tag is a merge commit on its branch, with a version bump in its PR branch.
 
 <!-- GHWR-6 (e)-drill throwaway probe (kanban t_90c9f97a, run 3; no content intent). -->
+<!-- GHWR-6 run-4 staleness drill: dismiss_stale_reviews_on_push proof (t_90c9f97a); throwaway, PR closes unmerged -->
