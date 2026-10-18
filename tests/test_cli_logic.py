@@ -265,7 +265,7 @@ head=id=12345
 finger1=id=111
 # Ring 1
 ### Gear from Bags
-# Girdle of Giant Strength
+# Girdle of Giant Strength (100)
 # waist=id=67890
 # Another Ring
 # finger=id=333
@@ -281,7 +281,7 @@ finger1=id=111
     assert equipped["head"] == "id=12345"
     assert "waist" in items_by_slot
     assert items_by_slot["waist"][0] == "id=67890"
-    assert item_names["id=67890"] == "Girdle of Giant Strength"
+    assert item_names["id=67890"] == "Girdle of Giant Strength (100)"
     assert "finger" in items_by_slot
     assert "id=111" in items_by_slot["finger"]
     assert "id=333" in items_by_slot["finger"]

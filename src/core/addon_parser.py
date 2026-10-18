@@ -27,6 +27,12 @@ CLASSES = {
 _UPGRADE_COMMENT_RE = re.compile(r"^#\s*upgrade_levels=(.*)$")
 _UPGRADE_COST_RE = re.compile(r"^([ci])#(\d+)#(\d+)#([01])$")
 
+# t_41a02993: simc-addon emits the real item name as "# Name (ilvl)" above
+# each item line; a pure-number paren group is the only shape a name comment
+# has, so export meta comments ("# fighting style: single boss (5 min fixed
+# fight)", "# Saved Loadout: ...") never become name candidates.
+_ITEM_NAME_PAREN_RE = re.compile(r"\(\d+\)")
+
 # ---------------------------------------------------------------------------
 # WoW: Forever export detection
 #
@@ -261,7 +267,8 @@ def parse_addon_lines(lines: List[str]) -> Tuple[str, Dict[str, str], Dict[str, 
             current_upgrade = parse_upgrade_levels(upgrade_match.group(1))
             continue
         if line_strip.startswith("# ") and not re.match(r"^#\s+\w+=", line_strip):
-            current_name_comment = line_strip[2:]
+            if _ITEM_NAME_PAREN_RE.search(line_strip):
+                current_name_comment = line_strip[2:]
             current_upgrade = None
 
         name_match = re.match(r"^(\w+)=[\"']?([^\"'\s,]+)[\"']?$", line_strip)
@@ -289,6 +296,7 @@ def parse_addon_lines(lines: List[str]) -> Tuple[str, Dict[str, str], Dict[str, 
                     if details not in items_by_slot[norm_slot]:
                         items_by_slot[norm_slot].append(details)
                         item_names[details] = current_name_comment
+                        current_name_comment = ""
                     if current_upgrade:
                         item_upgrades.setdefault(details, current_upgrade)
                 current_upgrade = None
@@ -304,6 +312,7 @@ def parse_addon_lines(lines: List[str]) -> Tuple[str, Dict[str, str], Dict[str, 
                     if details not in items_by_slot[norm_slot]:
                         items_by_slot[norm_slot].append(details)
                         item_names[details] = current_name_comment
+                        current_name_comment = ""
                     if current_upgrade:
                         item_upgrades.setdefault(details, current_upgrade)
                 current_upgrade = None
