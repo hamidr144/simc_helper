@@ -246,6 +246,45 @@ def canonical_item(item):
     return ",".join(sorted(fields))
 
 
+def _combination_pools(selected_by_slot, config, equipped_gear, extra_sockets=None):
+    """Per-slot variation pools + finger/trinket variation pools.
+
+    Shared by ``build_combination_copies`` and ``count_combination_copies``
+    (TG3-I) so the cheap pre-build count sees exactly the product the builder
+    iterates.
+    """
+    group_slots = ["head", "neck", "shoulder", "back", "chest", "wrist", "hands", "waist", "legs", "feet", "main_hand", "off_hand"]
+    choices = [
+        generate_variations(selected_by_slot.get(slot) or [equipped_gear.get(slot, "")],
+                            slot, config, extra_sockets=extra_sockets)
+        for slot in group_slots
+    ]
+    finger_vars = generate_variations(selected_by_slot.get("finger") or [], "finger", config, extra_sockets=extra_sockets)
+    trinket_vars = generate_variations(selected_by_slot.get("trinket") or [], "trinket", config, extra_sockets=extra_sockets)
+    return choices, finger_vars, trinket_vars
+
+
+def _pair_pool_count(n):
+    """len(build's unordered pair list): C(n,2), or the single as-is pair when n < 2."""
+    return n * (n - 1) // 2 if n >= 2 else 1
+
+
+def count_combination_copies(selected_by_slot, config, equipped_gear, extra_sockets=None):
+    """Pre-dedup iteration count of ``build_combination_copies`` without
+    materializing any copy block (TG3-I, t_acfe75a9).
+
+    The built (deduped) count is always <= this product, so rejecting when
+    this exceeds the budget keeps the dispatch budget-safe.  Building first to
+    count was what OOM-killed the master on over-cap products.
+    """
+    choices, finger_vars, trinket_vars = _combination_pools(
+        selected_by_slot, config, equipped_gear, extra_sockets=extra_sockets)
+    total = 1
+    for pool in choices:
+        total *= len(pool)
+    return total * _pair_pool_count(len(finger_vars)) * _pair_pool_count(len(trinket_vars))
+
+
 def build_combination_copies(selected_by_slot, config, equipped_gear, char_name,
                              extra_sockets=None, baseline_name=None):
     """Product of per-slot variation pools + unordered finger/trinket pairs.
@@ -263,13 +302,8 @@ def build_combination_copies(selected_by_slot, config, equipped_gear, char_name,
     """
     clone_target = baseline_name or char_name
     group_slots = ["head", "neck", "shoulder", "back", "chest", "wrist", "hands", "waist", "legs", "feet", "main_hand", "off_hand"]
-    choices = [
-        generate_variations(selected_by_slot.get(slot) or [equipped_gear.get(slot, "")],
-                            slot, config, extra_sockets=extra_sockets)
-        for slot in group_slots
-    ]
-    finger_vars = generate_variations(selected_by_slot.get("finger") or [], "finger", config, extra_sockets=extra_sockets)
-    trinket_vars = generate_variations(selected_by_slot.get("trinket") or [], "trinket", config, extra_sockets=extra_sockets)
+    choices, finger_vars, trinket_vars = _combination_pools(
+        selected_by_slot, config, equipped_gear, extra_sockets=extra_sockets)
 
     # shortcut: unordered C(n,2) pairs without self-pairing keep the shipped CLI
     # semantics verbatim (ruling E2); Raidbots' internal pair rule is UNVERIFIED (TGE-1 §2.7).

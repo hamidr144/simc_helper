@@ -67,9 +67,11 @@ from pydantic import BaseModel, Field
 
 from src.core.addon_parser import (
     FOREVER_EXPORT_MESSAGE,
+    count_embedded_copies,
     forever_export_warnings,
     is_forever_export,
     parse_addon_lines,
+    strip_embedded_copies,
 )
 from src.core import armory as armory_source
 from src.core.armory import (
@@ -99,6 +101,7 @@ from src.core.db import (
     session_get,
     session_set,
     task_owner_load,
+    task_owner_meta_json,
     task_owner_prune_older_than,
     task_owner_upsert,
     user_create,
@@ -251,9 +254,15 @@ class WowheadUpgradeInfo(BaseModel):
 
 
 class WowheadUpgradesResponse(BaseModel):
-    """Response from ``/api/wowhead-upgrades``."""
+    """Response from ``/api/wowhead-upgrades``.
+
+    ``two_handed`` lists, per slot, the items whose Wowhead inventorySlot is
+    Two-Hand (TG3-C slot-conflict hint for the client; empty until Wowhead
+    resolved the item).
+    """
     status: str
     gear_upgrades: Dict[str, Dict[str, WowheadUpgradeInfo]]
+    two_handed: Dict[str, List[str]] = {}
     errors: List[str]
 
 
@@ -267,6 +276,8 @@ class GenerateSimcResponse(BaseModel):
     mode: str = MODE_SINGLE_SWAP
     # Stage-1-only honest lower bound, combinations mode only (design §4.2).
     work_estimate_minutes: Optional[float] = None
+    # TG3-D2: copy= blocks stripped from the caller's base profile.
+    embedded_copies: int = 0
 
 
 class TaskStatusResponse(BaseModel):
@@ -295,6 +306,10 @@ class GetResultsResponse(BaseModel):
     status: str
     results: Optional[List[Dict[str, Any]]] = None
     message: Optional[str] = None
+    # TG3-G (t_54bad356): generation mode that produced this run
+    # (``single_swap`` | ``combinations``); None for runs generated before
+    # the mode was recorded or when unavailable (additive, old clients unaffected).
+    mode: Optional[str] = None
 
 
 class WorkerUploadFileResponse(BaseModel):
@@ -472,6 +487,9 @@ def _restore_task_owner_maps() -> None:
 task_owner_prune_older_than(time.time() - 86400)
 _restore_task_owner_maps()
 wowhead_upgrade_cache = {}
+# TG3-C: inventorySlot DBC id (17 = two-hand weapon) per item XML URL, cached
+# alongside the upgrade lookup (the same response feeds both parses).
+wowhead_invslot_cache: Dict[str, Optional[int]] = {}
 wowhead_icon_cache: Dict[str, tuple[bytes, str]] = {}
 wowhead_tooltip_script_cache: Optional[bytes] = None
 
@@ -716,10 +734,20 @@ class _SessionStaticFiles(StaticFiles):
     """SEC-5 (t_28df6d81): reports are per-user sim output, so the mount
     demands the same session the API endpoints demand (require_session is
     resolved at request time; the AUTHENTICATION_ENABLED kill switch still
-    bypasses it, returning "anonymous")."""
+    bypasses it, returning "anonymous").
+
+    TG3-SECFIX (t_71013ac2): session existence alone leaked any user's
+    reports to any logged-in caller who knew the URL. With auth enabled the
+    first path segment (``<user_dir>/...``, as normalized by
+    ``StaticFiles.get_path``) must equal the caller's own report directory —
+    the same rule as ``_task_access_ok``. Non-owners get the mount's own 404,
+    never a 403, so foreign report URLs are indistinguishable from missing
+    ones (no existence oracle)."""
 
     async def get_response(self, path: str, scope):
-        require_session(Request(scope))
+        user_id = require_session(Request(scope))
+        if authentication_enabled() and path.split("/", 1)[0] != _user_report_dir(user_id):
+            raise HTTPException(status_code=404)
         return await super().get_response(path, scope)
 
 
@@ -1168,6 +1196,22 @@ def parse_wowhead_upgrade(xml_text: str) -> Optional[Dict[str, Any]]:
         "rank": int(match.group(2)),
         "item_level": int(item_level) if item_level and item_level.isdigit() else None,
     }
+
+
+WOWHEAD_INV_SLOT_TWO_HAND = 17  # Wowhead <inventorySlot id="17">Two-Hand</inventorySlot>
+
+
+def parse_wowhead_inventory_slot(xml_text: str) -> Optional[int]:
+    """InventorySlot DBC id from a Wowhead item XML (17 = two-handed weapon)."""
+    try:
+        root = ElementTree.fromstring(xml_text)
+    except ElementTree.ParseError:
+        return None
+    node = root.find("item/inventorySlot")
+    if node is None:
+        return None
+    raw = node.get("id")
+    return int(raw) if raw and raw.isdigit() else None
 
 
 def parse_wowhead_icon_name(xml_text: str) -> Optional[str]:
@@ -1620,7 +1664,59 @@ async def fetch_wowhead_upgrade(item: str) -> Optional[Dict[str, Any]]:
         response.raise_for_status()
     upgrade = parse_wowhead_upgrade(response.text)
     wowhead_upgrade_cache[url] = upgrade
+    wowhead_invslot_cache[url] = parse_wowhead_inventory_slot(response.text)
     return upgrade
+
+
+async def fetch_wowhead_inventory_slot(item: str) -> Optional[int]:
+    """InventorySlot DBC id for a SimC item string (17 = two-handed weapon).
+
+    Same cached Wowhead XML as ``fetch_wowhead_upgrade`` — the upgrade lookup
+    that already runs at gear-load time warms this cache for the same item
+    strings. Fail-soft like the other Wowhead helpers: an error resolves to
+    None (treated as not-two-handed).
+    """
+    url = wowhead_xml_url(item)
+    if not url:
+        return None
+    if url in wowhead_invslot_cache:
+        return wowhead_invslot_cache[url]
+    try:
+        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True, headers={"User-Agent": "simc-helper/1.0"}) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.warning("Wowhead inventory lookup failed for %s: %s", item, exc)
+        return None
+    invslot = parse_wowhead_inventory_slot(response.text)
+    wowhead_invslot_cache[url] = invslot
+    return invslot
+
+
+async def find_two_hand_slot_conflict(items_by_slot: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Detect a two-handed weapon selected alongside an opposite-hand weapon.
+
+    The only mutually-exclusive combination the addon candidate lists actually
+    make reachable (TG3-C; Wowhead's planner models the same exclusivity and
+    auto-removes the off-hand — this app rejects with a message instead).
+    Other reachable pairs are commented in the guard call and NOT handled here
+    on purpose — this is a guard, not a rule engine.
+    """
+    main = [i for i in items_by_slot.get("main_hand") or [] if isinstance(i, str)]
+    off = [i for i in items_by_slot.get("off_hand") or [] if isinstance(i, str)]
+    if not main or not off:
+        return None
+    candidates = list(dict.fromkeys(main + off))
+    invslots = await asyncio.gather(*(fetch_wowhead_inventory_slot(i) for i in candidates))
+    for item, invslot in zip(candidates, invslots):
+        if invslot == WOWHEAD_INV_SLOT_TWO_HAND:
+            two_handed_slot = "main_hand" if item in main else "off_hand"
+            return {
+                "slot": two_handed_slot,
+                "other_slot": "off_hand" if two_handed_slot == "main_hand" else "main_hand",
+                "item": item,
+            }
+    return None
 
 
 @app.get("/api/state", response_model=StateResponse, tags=["System"])
@@ -1839,7 +1935,19 @@ async def get_wowhead_upgrades(payload: WowheadUpgradesRequest):
                 continue
             results.setdefault(slot, {})[item] = upgrade
 
-    return {"status": "success", "gear_upgrades": results, "errors": errors}
+    # TG3-C client hint: which looked-up items are two-handed weapons (the
+    # inventorySlot parse comes for free from the same XML response — cache
+    # read only, never a second fetch).
+    two_handed = {}
+    for slot, items in items_by_slot.items():
+        if not isinstance(items, list):
+            continue
+        hits = [item for item in items if isinstance(item, str)
+                and wowhead_invslot_cache.get(wowhead_xml_url(item) or "") == WOWHEAD_INV_SLOT_TWO_HAND]
+        if hits:
+            two_handed[slot] = hits
+
+    return {"status": "success", "gear_upgrades": results, "two_handed": two_handed, "errors": errors}
 
 @app.post("/api/parse-addon", response_model=ParseAddonResponse, tags=["Addons"])
 async def parse_addon_text(request: Request, payload: ParseAddonRequest, current_user: str = Depends(require_session)):
@@ -1863,6 +1971,18 @@ async def parse_addon_text(request: Request, payload: ParseAddonRequest, current
     if is_forever_export(lines):
         raise HTTPException(status_code=400, detail=FOREVER_EXPORT_MESSAGE)
     warnings = forever_export_warnings(lines)
+    embedded = count_embedded_copies(lines)
+    if embedded:
+        # TG3-D2: re-uploaded app output carries copy= blocks from the
+        # previous generation; parse_addon_lines now drops them from the
+        # baseline (their gear still lands in the slot groups).
+        warnings = warnings + [
+            f"The uploaded profile carries {embedded} embedded copy "
+            f"block{'' if embedded == 1 else 's'} from a previous generation. "
+            "They are not simulated as-is and do not change your equipped "
+            "baseline; their items are available in the slot choices — "
+            "select the ones you want to compare."
+        ]
     base_profile, equipped_gear, items_by_slot, item_names, char_name, char_class, item_upgrades = parse_addon_lines(lines)
     if char_class == "Unknown":
         # t_0cb6af81 (E2E-9/LIFE-8): every real /simc export starts with a
@@ -1970,6 +2090,8 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
     Applies enchantments, gems, item-level overrides, midnight-track upgrades,
     and voidforge modifiers to build a full set of simc profiles (one per
     gear combination).  Writes the result to ``inputs/<input_id>.simc``.
+    Rejects HTTP 400 when a two-handed weapon is selected together with an
+    off-hand selection (TG3-C slot-conflict guard, before any file write).
     """
     fight_style = payload.fight_style or FIGHT_STYLE_SINGLE_BOSS
     if fight_style not in FIGHT_STYLE_DIRECTIVES:
@@ -1995,6 +2117,9 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
         {
             "fighting_style": fight_style,
             "char_name": payload.char_name,
+            # TG3-G (t_54bad356): freeze the compare mode so /api/get-results
+            # can state which mode produced the run (audit gap 4.2).
+            "mode": mode,
             "spec": _extract_spec(payload.base_profile) or _gen_meta.get("spec"),
         }
     )
@@ -2005,6 +2130,7 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
             apply_item_level,
             build_combination_copies,
             canonical_item,
+            count_combination_copies,
             generate_variations,
             load_config,
         )
@@ -2053,6 +2179,29 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
         gear_upgrades = payload.gear_upgrades or {}
         voidforged_items = payload.voidforged_items or {}
 
+        # TG3-C slot-conflict guard: reject two-handed weapon + opposite-hand
+        # weapon selection BEFORE any dispatch or file write (live repro on
+        # :8001 showed SimC silently dropping the shield -> Combo with the
+        # baseline's DPS ranked as an "upgrade"). Validated on the raw
+        # selection: the apply_level_override rewrite below changes bonus
+        # ids but never the weapon's slot. Not covered on purpose (guard,
+        # not rule engine): a 2H main_hand candidate against a BASELINE-
+        # equipped off_hand (test spec accepts it: "2H alone" = accepted),
+        # and any pair the candidate lists cannot produce (no ranged slot
+        # in addon_parser.SLOTS).
+        conflict = await find_two_hand_slot_conflict(items_by_slot)
+        if conflict:
+            ident = parse_simc_item_identity(conflict["item"]) or {}
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Slot conflict: item {ident.get('id', '?')} in {conflict['slot']} is a "
+                    f"two-handed weapon and cannot be combined with a {conflict['other_slot']} "
+                    "selection — a two-hander occupies both weapon slots. Deselect one of the "
+                    "two slots."
+                ),
+            )
+
         def apply_level_override(slot, item, baseline=False):
             if not item:
                 return item
@@ -2096,7 +2245,12 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
         }
         extra_sockets = payload.extra_sockets or {}
 
-        profile_content = payload.base_profile + "\n"
+        # TG3-D2: copy= blocks carried in the caller's base profile must not
+        # reach the output — SimC would bind the baseline gear block appended
+        # below to the last clone instead of the character (last-actor
+        # semantics), so the real actor simulates gearless.
+        base_profile, embedded_copies = strip_embedded_copies(payload.base_profile)
+        profile_content = base_profile + "\n"
 
         # Fighting-style overrides go after the base profile so they win over
         # any duration/time_to_die the addon export carried, and before the
@@ -2115,19 +2269,32 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
         work_estimate_minutes = None
 
         if mode == MODE_COMBINATIONS:
-            copy_blocks, count = build_combination_copies(
-                items_by_slot, config, equipped_gear, char_name, extra_sockets=extra_sockets)
-            # Budget check before any file write: over-cap requests neither
-            # create an inputs/ file nor touch generated_inputs_by_user.
-            if count > TG_MAX_COMBINATIONS:
+            # TG3-I (t_acfe75a9): budget check on the cheap pre-dedup product
+            # BEFORE any copy block is materialized — building the full list to
+            # count it OOM-killed the master on over-cap products before 422
+            # could fire. The built (deduped) count is always <= this product,
+            # so passing this gate makes the post-build dispatch budget-safe
+            # without a second check.
+            # TG3-D2: embedded copies from the uploaded profile count toward
+            # the budget even though strip_embedded_copies drops them from the
+            # dispatch (an over-cap upload needs honest re-selection).
+            count = count_combination_copies(
+                items_by_slot, config, equipped_gear, extra_sockets=extra_sockets)
+            if count + embedded_copies > TG_MAX_COMBINATIONS:
+                embedded_part = (
+                    f" + {embedded_copies} embedded copies from the uploaded profile"
+                    if embedded_copies else ""
+                )
                 raise HTTPException(
                     status_code=422,
                     detail=(
-                        f"Combination budget exceeded: {count} combinations "
+                        f"Combination budget exceeded: {count} combinations{embedded_part} "
                         f"(budget {TG_MAX_COMBINATIONS}). Deselect items or enchants, "
                         "or switch back to 'one swap at a time'."
                     ),
                 )
+            copy_blocks, count = build_combination_copies(
+                items_by_slot, config, equipped_gear, char_name, extra_sockets=extra_sockets)
             work_estimate_minutes = round(
                 count * TG_STAGE1_ITERATIONS_CAP / TG_WORK_ESTIMATE_ITERS_PER_SEC / 60, 1)
             profile_content += "".join(copy_blocks)
@@ -2215,6 +2382,7 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
             "combinations": count,
             "mode": mode,
             "work_estimate_minutes": work_estimate_minutes,
+            "embedded_copies": embedded_copies,
         }
     except HTTPException:
         # Ruling E1: inner HTTPExceptions (e.g. the budget 422) must not be
@@ -2483,6 +2651,10 @@ _REPORT_DPS_RE = re.compile(
 )
 _REPORT_NAME_TRAILER_RE = re.compile(r'(?:&#160;|&nbsp;|\s)+$')
 _REPORT_SLOT_MAP = {"Head": "head", "Neck": "neck", "Shoulders": "shoulder", "Back": "back", "Chest": "chest", "Wrists": "wrist", "Hands": "hands", "Waist": "waist", "Legs": "legs", "Feet": "feet", "Finger 1": "finger1", "Finger 2": "finger2", "Trinket 1": "trinket1", "Trinket 2": "trinket2", "Main Hand": "main_hand", "Off Hand": "off_hand"}
+# Nightly emits gear labels "Finger1"/"Trinket2" (no space) where older builds
+# emitted "Finger 1" (D1 t_ebcd03f1); whitespace-and-case-insensitive lookup
+# parses both report generations.
+_REPORT_SLOT_BY_LABEL = {re.sub(r"\s+", "", k).lower(): v for k, v in _REPORT_SLOT_MAP.items()}
 
 
 def parse_report_results(html_content: str) -> list:
@@ -2512,7 +2684,7 @@ def parse_report_results(html_content: str) -> list:
         if gt_match:
             rows = re.finditer(r'<th[^>]*>\s*([^<]+)\s*</th>\s*<td[^>]*>\s*<a[^>]+href="([^"]+)"', gt_match.group(1), re.IGNORECASE)
             for r in rows:
-                simc_slot = _REPORT_SLOT_MAP.get(r.group(1).strip())
+                simc_slot = _REPORT_SLOT_BY_LABEL.get(re.sub(r"\s+", "", r.group(1)).lower())
                 if simc_slot:
                     href = r.group(2)
                     id_match = re.search(r'item=([0-9]+)', href)
@@ -2564,6 +2736,25 @@ def parse_actor_precision(log_path: str) -> dict:
     return precision
 
 
+def _task_mode(task_dir: str) -> Optional[str]:
+    """TG3-G (t_54bad356): the generation mode recorded for the run whose
+    report lives in *task_dir* (dir name == task id). In-memory meta first
+    (pre-done runs), persisted ``task_owner`` meta as fallback (the done hook
+    pops the in-memory map before the results page loads). None for runs
+    generated before mode recording — honest absence, never guessed.
+    """
+    tid = os.path.basename(task_dir)
+    meta = task_meta_map.get(tid)
+    if meta is None:
+        raw = task_owner_meta_json(tid)
+        try:
+            meta = json.loads(raw) if raw else {}
+        except ValueError:
+            meta = {}
+    mode = meta.get("mode")
+    return mode if mode in TG_GENERATION_MODES else None
+
+
 @app.get("/api/get-results", response_model=GetResultsResponse, tags=["Simulation"])
 async def get_results(task_id: str = Query(default="latest"), user_id: str = Depends(require_session)):
     """Retrieve parsed simulation results (DPS per class, gear data) for a completed task.
@@ -2607,7 +2798,7 @@ async def get_results(task_id: str = Query(default="latest"), user_id: str = Dep
         if precision:
             for item in results:
                 item["mean_error_pct"] = precision.get(item["name"], {}).get("error_pct")
-        return {"status": "success", "results": results}
+        return {"status": "success", "results": results, "mode": _task_mode(os.path.dirname(html_path))}
     except HTTPException:
         raise
     except Exception as e:

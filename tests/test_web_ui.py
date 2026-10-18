@@ -408,7 +408,9 @@ def test_report_separates_baseline_and_only_lists_combo_differences():
 def test_results_page_is_a_dedicated_user_friendly_view():
     response = client.get("/results?task_id=test")
     assert response.status_code == 200
-    assert "Best combinations" in response.text
+    # TG3-G (t_54bad356): h1 is mode-neutral now; the compare mode is stated
+    # by the mode chip rendered from run metadata.
+    assert "Best upgrades" in response.text
     assert "results.js" in response.text
 
 

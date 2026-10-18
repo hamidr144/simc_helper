@@ -108,9 +108,9 @@ talents=0-0-531
 # Off Hand
 ### Gear from Bags
 # head=id=100100
-# Should of Valor
+# Should of Valor (246)
 # shoulder=id=100200
-# Neck of Valor
+# Neck of Valor (246)
 # neck=id=100300
 # Back of Valor
 # back=id=100400
@@ -161,8 +161,8 @@ class TestParseAddonE2E:
         assert "id=100100" in data["items_by_slot"]["head"]
         assert "id=100200" in data["items_by_slot"]["shoulder"]
         # Item names from comments
-        assert data["item_names"].get("id=100200") == "Should of Valor"
-        assert data["item_names"].get("id=100300") == "Neck of Valor"
+        assert data["item_names"].get("id=100200") == "Should of Valor (246)"
+        assert data["item_names"].get("id=100300") == "Neck of Valor (246)"
 
     def test_parse_addon_with_empty_text(self, client):
         """Empty addon text is not a SimC export and gets a 400 (t_0cb6af81)."""

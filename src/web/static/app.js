@@ -102,6 +102,9 @@ let extraSockets = {};
 let slotSorts = {};
 let statScores = {};
 let addedItems = new Map();
+/* Item strings Wowhead resolves to a two-handed weapon (TG3-C slot-conflict
+   hint; filled by hydrateWowheadUpgrades from the upgrades lookup). */
+let twoHandedItems = new Set();
 const STAT_SORT_BATCH = 40;
 let generatedInput = null;
 let generationTimer = null;
@@ -424,8 +427,16 @@ function updateRunEta() {
   eta.textContent = remainSec < 60 ? `~${remainSec}s left` : `~${Math.round(remainSec / 60)} min left`;
 }
 
+// t_5c33fefb: single write path so the clamped (2-line) status line's title
+// always carries the full message; textContent stays full for aria-live.
+function setWorkflowStatus(text) {
+  const s = document.getElementById('workflow-status');
+  if (!s) return;
+  s.textContent = text;
+  s.title = text;
+}
+
 async function stopSimulation() {
-  const status = document.getElementById('workflow-status');
   let token = window.localStorage.getItem('simc-admin-token') || '';
   const entered = window.prompt(
     'Stopping a simulation requires the master admin token (ADMIN_TOKEN):', token);
@@ -436,15 +447,15 @@ async function stopSimulation() {
       method: 'POST', headers: { 'X-Admin-Token': token }
     });
     if (response.status === 403) {
-      status.textContent = 'The admin token was rejected.';
+      setWorkflowStatus('The admin token was rejected.');
       window.localStorage.removeItem('simc-admin-token');
       return;
     }
     const data = await response.json();
     window.localStorage.setItem('simc-admin-token', token);
-    status.textContent = data.message || 'Stop requested.';
+    setWorkflowStatus(data.message || 'Stop requested.');
   } catch (error) {
-    status.textContent = `Could not stop simulation: ${error.message}`;
+    setWorkflowStatus(`Could not stop simulation: ${error.message}`);
   }
 }
 
@@ -576,6 +587,7 @@ function isAlreadyVoidforgedItem(slot, item, label = '') {
 
 function initializeSelections() {
   selectedItems = {};
+  twoHandedItems = new Set();
   selectedEnchants = {};
   selectedGems = new Set();
   equippedEnchants = {};
@@ -689,8 +701,8 @@ function selectionChanged() {
   clearTimeout(generationTimer);
   // t_4485565b: regenerate even at an estimated 0 combinations so the status
   // line reflects the honest baseline-only state instead of a stale count.
-  const status = document.getElementById('workflow-status');
-  if (status) status.textContent = 'Updating comparison…';
+  setWorkflowStatus('Updating comparison…');
+  renderSlotConflict();
   generationTimer = setTimeout(() => generateInput(true), 250);
 }
 
@@ -853,7 +865,6 @@ async function ensureStatScores(slot, items, selectEl) {
   const pending = items.filter(item => !(item in statScores) && parseItemParams(item).id);
   if (!pending.length) return;
   if (selectEl) { selectEl.disabled = true; selectEl.classList.add('is-scoring'); }
-  const status = document.getElementById('workflow-status');
   try {
     for (let start = 0; start < pending.length; start += STAT_SORT_BATCH) {
       const chunk = pending.slice(start, start + STAT_SORT_BATCH);
@@ -875,10 +886,7 @@ async function ensureStatScores(slot, items, selectEl) {
       });
     }
   } catch (error) {
-    if (status) {
-      status.textContent =
-        `Stat-priority sort unavailable (${error.message}) — sorted by ilvl instead.`;
-    }
+    setWorkflowStatus(`Stat-priority sort unavailable (${error.message}) — sorted by ilvl instead.`);
     if (slotSorts[slot] === 'priority') slotSorts[slot] = 'ilvl';
   } finally {
     if (selectEl) { selectEl.disabled = false; selectEl.classList.remove('is-scoring'); }
@@ -1026,6 +1034,7 @@ function renderGear() {
   for (const [slot, items] of Object.entries(parsedData.items_by_slot)) {
     const group = document.createElement('section');
     group.className = 'slot-group';
+    group.dataset.slot = slot;
     const chipDefs = [['enchants', 'Open enchantment controls in step 3'],
       ['gems', 'Open gem controls in step 3']];
     let chipsHtml = '';
@@ -1103,10 +1112,12 @@ function renderGear() {
       const level = itemLevelFromLabel(label) || Number(params.ilevel) || null;
       const card = document.createElement('article');
       card.className = `item-option gear-card ${selectedItems[slot].has(item) ? 'is-selected' : ''}`;
+      card.dataset.slot = slot;
+      card.dataset.item = item;
       card.innerHTML = `
         <label class="item-select-row">
           <input type="checkbox" class="item-select-input" ${selectedItems[slot].has(item) ? 'checked' : ''}>
-          <span class="gear-card-info">${createWowheadIconLink(params.id, params.bonus_id, `<span class="item-option-name gear-card-name">${escapeHtml(label.replace(/\s*\(\d+\)/, ''))}</span>`)}${addedItems.has(item) ? '<span class="added-badge">Added</span>' : ''}<span class="gear-card-slot"><span>Item level</span><span class="gear-card-slot-ilvl">${level ? level : '—'}</span></span></span>
+          <span class="gear-card-info">${createWowheadIconLink(params.id, params.bonus_id, `<span class="item-option-name gear-card-name">${escapeHtml(label.replace(/\s*\(\d+\)/, ''))}</span>`)}${addedItems.has(item) ? '<span class="added-badge">Added</span>' : ''}<span class="gear-card-slot"><span>ilvl</span><span class="gear-card-slot-ilvl">${level ? level : '—'}</span></span></span>
         </label>
         ${cardBadges(slot, item)}
         ${upgradePopoverMarkup(slot, item)}
@@ -1241,6 +1252,7 @@ function renderGear() {
     grid.appendChild(group);
   }
   refreshWowheadLinks();
+  renderSlotConflict();
 }
 
 // t_2ab8f3be: shared popover behavior (gear upgrade + pre-run diff, doc 5):
@@ -1486,6 +1498,9 @@ async function hydrateWowheadUpgrades(itemsBySlot) {
     });
     if (!response.ok) return;
     const data = await response.json();
+    for (const items of Object.values(data.two_handed || {})) {
+      for (const item of items) twoHandedItems.add(item);
+    }
     for (const [slot, itemUpgrades] of Object.entries(data.gear_upgrades || {})) {
       for (const [item, upgrade] of Object.entries(itemUpgrades)) {
         if (parsedData?.item_upgrades?.[item]) continue;
@@ -1500,6 +1515,42 @@ async function hydrateWowheadUpgrades(itemsBySlot) {
   } catch (error) {
     console.warn('Could not refine item grades from Wowhead', error);
   }
+}
+
+/* TG3-C slot conflict (design contract t_784b91c7 §3.4): inline role="alert"
+   line under each conflicting weapon card (card grows only while shown) plus
+   the aggregate line in #workflow-status. The authoritative rejection is the
+   server-side 400 from generate-simc, which generateInput() surfaces here too;
+   this is the pre-submit hint mirroring it — we never auto-remove selections. */
+const SLOT_LABELS = { main_hand: 'Main Hand', off_hand: 'Off Hand' };
+
+function twoHandedConflict() {
+  const main = selectedItems.main_hand || new Set();
+  const off = selectedItems.off_hand || new Set();
+  if (!main.size || !off.size) return null;
+  for (const item of main) if (twoHandedItems.has(item)) return { slot: 'main_hand', other: 'off_hand' };
+  for (const item of off) if (twoHandedItems.has(item)) return { slot: 'off_hand', other: 'main_hand' };
+  return null;
+}
+
+function renderSlotConflict() {
+  document.querySelectorAll('.gear-conflict').forEach(el => el.remove());
+  const conflict = twoHandedConflict();
+  if (!conflict) return;
+  const mark = (slot, text) => {
+    for (const card of document.querySelectorAll(`.slot-group[data-slot="${slot}"] .gear-card.is-selected`)) {
+      if (slot === conflict.slot && !twoHandedItems.has(card.dataset.item || '')) continue;
+      const line = document.createElement('p');
+      line.className = 'gear-conflict';
+      line.setAttribute('role', 'alert');
+      line.textContent = text;
+      card.appendChild(line);
+    }
+  };
+  mark(conflict.slot, `Two-handed weapon — cannot be combined with ${SLOT_LABELS[conflict.other]}.`);
+  mark(conflict.other, `Conflicts with the two-handed weapon in ${SLOT_LABELS[conflict.slot]}.`);
+  setWorkflowStatus(
+    `Slot conflict: ${SLOT_LABELS[conflict.slot]} and ${SLOT_LABELS[conflict.other]} cannot be equipped together — a two-handed weapon occupies both weapon slots. Deselect one of the two slots.`);
 }
 
 function buildPayload() {
@@ -1527,8 +1578,7 @@ function buildPayload() {
 }
 
 async function generateInput(quiet = false) {
-  const status = document.getElementById('workflow-status');
-  if (!quiet) status.textContent = 'Preparing comparison…';
+  if (!quiet) setWorkflowStatus('Preparing comparison…');
   try {
     const response = await apiFetch('api/generate-simc', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1539,12 +1589,17 @@ async function generateInput(quiet = false) {
     generatedInput = data;
     document.getElementById('combo-count').textContent = data.combinations.toLocaleString();
     // t_4485565b: 0 candidates is a valid baseline run, not a doomed job.
-    status.textContent = data.combinations === 0
+    let statusText = data.combinations === 0
       ? 'Ready to run a baseline current-gear report. Select gear changes, gems, or enchants to compare candidates.'
       : `Ready to run ${data.combinations.toLocaleString()} candidate ${data.combinations === 1 ? 'combination' : 'combinations'}.`;
+    if (data.embedded_copies) {
+      // TG3-D2: never let carried copy= blocks disappear silently.
+      statusText += ` Removed ${data.embedded_copies} embedded ${data.embedded_copies === 1 ? 'copy' : 'copies'} carried by the uploaded profile (their gear stays selectable).`;
+    }
+    setWorkflowStatus(statusText);
   } catch (error) {
     generatedInput = null;
-    status.textContent = `Could not generate input: ${error.message}`;
+    setWorkflowStatus(`Could not generate input: ${error.message}`);
   } finally {
     updateSummary();
   }
@@ -1555,14 +1610,13 @@ async function runSimulation() {
   // 0-candidate input is a valid baseline current-gear run.
   if (!generatedInput) await generateInput();
   if (!generatedInput) return;
-  const status = document.getElementById('workflow-status');
   const log = document.getElementById('simulation-log');
-  status.textContent = 'Looking for an idle worker…';
+  setWorkflowStatus('Looking for an idle worker…');
   try {
     const response = await apiFetch(`api/run-simulation?input_id=${encodeURIComponent(generatedInput.input_id)}`, { method: 'POST' });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || 'Simulation could not start');
-    status.textContent = `Simulation ${data.task_id} is running on worker ${data.worker_id}.`;
+    setWorkflowStatus(`Simulation ${data.task_id} is running on worker ${data.worker_id}.`);
     currentTaskId = data.task_id;
     log.hidden = false;
     log.textContent = '';
@@ -1598,14 +1652,13 @@ async function runSimulation() {
     };
     events.onerror = () => { events.close(); stopRunProgress(); };
   } catch (error) {
-    status.textContent = `Could not start simulation: ${error.message}`;
+    setWorkflowStatus(`Could not start simulation: ${error.message}`);
   }
 }
 
 // t_2ab8f3be: the run ends on a card the user acts on — the old code yanked
 // the browser to the results page mid-view (auto-redirect removed).
 async function showRunResultCard(message) {
-  const status = document.getElementById('workflow-status');
   const slot = document.getElementById('run-result');
   const baseline = parsedData?.char_name || '';
   const resultsHref = `results?task_id=${encodeURIComponent(message.task_id)}&baseline=${encodeURIComponent(baseline)}`;
@@ -1632,7 +1685,7 @@ async function showRunResultCard(message) {
       }
     }
   } catch (e) { /* best-line is best-effort */ }
-  status.textContent = 'Run complete.';
+  setWorkflowStatus('Run complete.');
   if (!slot) return;
   slot.hidden = false;
   slot.innerHTML = `<div class="success-card"><span class="success-icon" aria-hidden="true">\u2713</span><div><h3>Done in ${escapeHtml(formatElapsed(Date.now() - runStartedAt))}</h3><p>${escapeHtml(bestLine)}</p><div class="success-actions"><a class="btn" href="${resultsHref}">Open results</a>${reportHref ? ` <a class="btn-ghost" href="${escapeHtml(reportHref)}" target="_blank">Open full report</a>` : ''}<button type="button" data-back-gear class="btn-ghost">Back to gear</button></div></div></div>`;
@@ -1642,7 +1695,7 @@ async function showRunResultCard(message) {
 function showRunFailureCard(message) {
   const status = document.getElementById('workflow-status');
   const slot = document.getElementById('run-result');
-  status.textContent = message.text || 'The simulation stopped unexpectedly.';
+  setWorkflowStatus(message.text || 'The simulation stopped unexpectedly.');
   status.classList.add('error');
   if (!slot) return;
   const tail = logLines.slice(-12).join('\n');

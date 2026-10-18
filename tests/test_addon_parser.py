@@ -13,8 +13,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from src.core.addon_parser import (
     CLASSES,
     SLOTS,
+    count_embedded_copies,
     parse_addon_lines,
     parse_upgrade_levels,
+    strip_embedded_copies,
 )
 
 
@@ -185,18 +187,18 @@ class TestNameComments:
     """Test that name comments from bag items are captured."""
 
     def test_item_names_captured_from_preceding_comment(self):
-        """A comment line before a gear item should be captured."""
+        """A "Name (ilvl)" comment line before a bag item should be captured."""
         lines = [
             "paladin=Test",
             "### Gear from Bags",
-            "# This is a comment for the next item",
+            "# This is a comment (100) for the next item",
             "# head=id=100",
             "### Additional Character Info",
         ]
         _, _, _, item_names, _, _, _ = parse_addon_lines(lines)
-        # current_name_comment should be "This is a comment for the next item"
+        # t_41a02993: only "Name (ilvl)" comments are name candidates.
         assert "id=100" in item_names
-        assert item_names["id=100"] == "This is a comment for the next item"
+        assert item_names["id=100"] == "This is a comment (100) for the next item"
 
     def test_no_preceding_comment_yields_empty_name(self):
         """No preceding comment means empty item name."""
@@ -445,3 +447,98 @@ class TestUpgradeLevelsComment:
         ]
         *_, item_upgrades = parse_addon_lines(lines)
         assert set(item_upgrades) == {"id=456"}
+
+
+class TestEmbeddedCopyBlocks:
+    """TG3-D2: copy= blocks carried in an uploaded profile belong to the
+    candidate clone they define, never to the equipped baseline."""
+
+    SEED = [
+        "paladin=TestChar",
+        "spec=retribution",
+        "head=id=100",
+        'copy="TestChar_hd1,TestChar"',
+        "head=id=901",
+        "",
+        'copy="TestChar_hd2,TestChar"',
+        "head=id=902",
+        "finger1=id=903",
+        "",
+        "simulate 200",
+    ]
+
+    def test_copy_lines_excluded_from_base_profile(self):
+        base_profile, *_ = parse_addon_lines(self.SEED)
+        assert "copy=" not in base_profile
+        assert "simulate 200" in base_profile
+
+    def test_copy_gear_feeds_slot_groups_without_equipping(self):
+        _, equipped, items_by_slot, _, _, _, _ = parse_addon_lines(self.SEED)
+        assert equipped == {"head": "id=100"}
+        assert items_by_slot["head"] == ["id=100", "id=901", "id=902"]
+        assert items_by_slot["finger"] == ["id=903"]
+
+    def test_count_embedded_copies(self):
+        assert count_embedded_copies(self.SEED) == 2
+        assert count_embedded_copies(["paladin=Test"]) == 0
+
+    def test_strip_embedded_copies(self):
+        text = "\n".join(self.SEED)
+        clean, count = strip_embedded_copies(text)
+        assert count == 2
+        assert "copy=" not in clean
+        assert "id=901" not in clean and "id=902" not in clean and "id=903" not in clean
+        assert "paladin=TestChar" in clean and "head=id=100" in clean
+        assert "simulate 200" in clean
+
+    def test_strip_is_identity_without_copies(self):
+        assert strip_embedded_copies("paladin=Test\nsimulate 10000\n") == (
+            "paladin=Test\nsimulate 10000\n", 0)
+
+
+class TestNameCommentPoisoning:
+    """t_41a02993 (bug t_f3a2ec36): stacked export meta comments must never
+    be consumed as item names, and a consumed comment must never leak onto
+    a second item."""
+
+    def test_stacked_meta_comments_leave_items_unnamed(self):
+        """Meta comments before two item lines must not poison either name."""
+        lines = [
+            "paladin=Test",
+            "### Gear from Bags",
+            "# fighting style: single boss (5 min fixed fight)",
+            "# duration: 300",
+            "# head=id=100",
+            "# neck=id=200",
+            "### Additional Character Info",
+        ]
+        _, _, _, item_names, _, _, _ = parse_addon_lines(lines)
+        assert item_names == {"id=100": "", "id=200": ""}
+
+    def test_real_name_comment_consumed_by_one_item_only(self):
+        """A real "# Name (ilvl)" comment is assigned once; next item is ""."""
+        lines = [
+            "paladin=Test",
+            "### Gear from Bags",
+            "# Serrated Blade of Deliberation (291)",
+            "# head=id=100",
+            "# neck=id=200",
+            "### Additional Character Info",
+        ]
+        _, _, _, item_names, _, _, _ = parse_addon_lines(lines)
+        assert item_names["id=100"] == "Serrated Blade of Deliberation (291)"
+        assert item_names["id=200"] == ""
+
+    def test_canonical_export_has_no_meta_poisoned_names(self):
+        """Real canonical export (sha256 65839e76...): 226 deduped items, no
+        'fighting style' leak, names are not one poisoned constant."""
+        fixture = os.path.join(
+            os.path.dirname(__file__), "fixtures", "addon_export_canonical.simc"
+        )
+        with open(fixture) as f:
+            lines = f.readlines()
+        _, _, _, item_names, _, _, _ = parse_addon_lines(lines)
+        assert len(item_names) == 226
+        assert not any("fighting style" in v for v in item_names.values())
+        assert len(set(item_names.values())) > 1
+

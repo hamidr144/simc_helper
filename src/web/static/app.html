@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SimulationCraft Helper GUI</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23191a1b'/%3E%3Cpath d='M16 6.5l8 4.6v9.8l-8 4.6-8-4.6v-9.8z' fill='none' stroke='%237170ff' stroke-width='2' stroke-linejoin='round'/%3E%3Ccircle cx='16' cy='16' r='3.2' fill='%237170ff'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="static/style.css?v=20261018-merge-1">
+  <link rel="stylesheet" href="static/style.css?v=20261018-tg3f2-1">
 </head>
 <body class="app-shell">
   <a class="skip-link" href="#main">Skip to content</a>
@@ -90,11 +90,13 @@
       </div>
       <div class="fight-style-control">
         <label class="fight-style-label" for="compare-mode">Compare</label>
-        <select id="compare-mode" class="fight-style-select" title="Which gear changes are simulated">
+        <!-- TG3-D §3.2 (leader ruling Q2): helper wording moved to title +
+             sr-only span; selection state, counts and cost stay ink-visible. -->
+        <select id="compare-mode" class="fight-style-select" title="Which gear changes are simulated. Combination mode simulates every selected item of every slot together, like Raidbots Top Gear." aria-describedby="compare-mode-help">
           <option value="single_swap" selected>one swap at a time</option>
           <option value="combinations">all combinations (Top Gear)</option>
         </select>
-        <small>Combination mode simulates every selected item of every slot together, like Raidbots Top Gear.</small>
+        <span id="compare-mode-help" class="sr-only">Combination mode simulates every selected item of every slot together, like Raidbots Top Gear.</span>
       </div>
       <div class="popover-host run-review-host">
         <button id="btn-review" type="button" class="btn-ghost" aria-expanded="false" aria-haspopup="dialog">Review changes</button>
@@ -105,7 +107,7 @@
     </div>
   </main>
 
-  <script src="static/api-fetch.js?v=20261018-merge-1"></script>
-  <script src="static/app.js?v=20261018-merge-1"></script>
+  <script src="static/api-fetch.js?v=20261018-tg3f2-1"></script>
+  <script src="static/app.js?v=20261018-tg3f2-1"></script>
 </body>
 </html>
