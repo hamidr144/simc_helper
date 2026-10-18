@@ -372,6 +372,19 @@ button:not(:disabled):active {
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
 }
 
+/* TG3-C slot-conflict hint (design contract t_784b91c7 §3.4): inline row
+   shown only while the card participates in a 2H + off-hand conflict. */
+.gear-conflict {
+  margin: 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--danger);
+  background: rgba(248, 113, 113, 0.08);
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--danger);
+}
+
 .gear-card-header {
   display: flex;
   align-items: center;

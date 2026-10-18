@@ -102,6 +102,9 @@ let extraSockets = {};
 let slotSorts = {};
 let statScores = {};
 let addedItems = new Map();
+/* Item strings Wowhead resolves to a two-handed weapon (TG3-C slot-conflict
+   hint; filled by hydrateWowheadUpgrades from the upgrades lookup). */
+let twoHandedItems = new Set();
 const STAT_SORT_BATCH = 40;
 let generatedInput = null;
 let generationTimer = null;
@@ -576,6 +579,7 @@ function isAlreadyVoidforgedItem(slot, item, label = '') {
 
 function initializeSelections() {
   selectedItems = {};
+  twoHandedItems = new Set();
   selectedEnchants = {};
   selectedGems = new Set();
   equippedEnchants = {};
@@ -691,6 +695,7 @@ function selectionChanged() {
   // line reflects the honest baseline-only state instead of a stale count.
   const status = document.getElementById('workflow-status');
   if (status) status.textContent = 'Updating comparison…';
+  renderSlotConflict();
   generationTimer = setTimeout(() => generateInput(true), 250);
 }
 
@@ -1026,6 +1031,7 @@ function renderGear() {
   for (const [slot, items] of Object.entries(parsedData.items_by_slot)) {
     const group = document.createElement('section');
     group.className = 'slot-group';
+    group.dataset.slot = slot;
     const chipDefs = [['enchants', 'Open enchantment controls in step 3'],
       ['gems', 'Open gem controls in step 3']];
     let chipsHtml = '';
@@ -1103,6 +1109,8 @@ function renderGear() {
       const level = itemLevelFromLabel(label) || Number(params.ilevel) || null;
       const card = document.createElement('article');
       card.className = `item-option gear-card ${selectedItems[slot].has(item) ? 'is-selected' : ''}`;
+      card.dataset.slot = slot;
+      card.dataset.item = item;
       card.innerHTML = `
         <label class="item-select-row">
           <input type="checkbox" class="item-select-input" ${selectedItems[slot].has(item) ? 'checked' : ''}>
@@ -1241,6 +1249,7 @@ function renderGear() {
     grid.appendChild(group);
   }
   refreshWowheadLinks();
+  renderSlotConflict();
 }
 
 // t_2ab8f3be: shared popover behavior (gear upgrade + pre-run diff, doc 5):
@@ -1486,6 +1495,9 @@ async function hydrateWowheadUpgrades(itemsBySlot) {
     });
     if (!response.ok) return;
     const data = await response.json();
+    for (const items of Object.values(data.two_handed || {})) {
+      for (const item of items) twoHandedItems.add(item);
+    }
     for (const [slot, itemUpgrades] of Object.entries(data.gear_upgrades || {})) {
       for (const [item, upgrade] of Object.entries(itemUpgrades)) {
         if (parsedData?.item_upgrades?.[item]) continue;
@@ -1500,6 +1512,43 @@ async function hydrateWowheadUpgrades(itemsBySlot) {
   } catch (error) {
     console.warn('Could not refine item grades from Wowhead', error);
   }
+}
+
+/* TG3-C slot conflict (design contract t_784b91c7 §3.4): inline role="alert"
+   line under each conflicting weapon card (card grows only while shown) plus
+   the aggregate line in #workflow-status. The authoritative rejection is the
+   server-side 400 from generate-simc, which generateInput() surfaces here too;
+   this is the pre-submit hint mirroring it — we never auto-remove selections. */
+const SLOT_LABELS = { main_hand: 'Main Hand', off_hand: 'Off Hand' };
+
+function twoHandedConflict() {
+  const main = selectedItems.main_hand || new Set();
+  const off = selectedItems.off_hand || new Set();
+  if (!main.size || !off.size) return null;
+  for (const item of main) if (twoHandedItems.has(item)) return { slot: 'main_hand', other: 'off_hand' };
+  for (const item of off) if (twoHandedItems.has(item)) return { slot: 'off_hand', other: 'main_hand' };
+  return null;
+}
+
+function renderSlotConflict() {
+  document.querySelectorAll('.gear-conflict').forEach(el => el.remove());
+  const conflict = twoHandedConflict();
+  if (!conflict) return;
+  const mark = (slot, text) => {
+    for (const card of document.querySelectorAll(`.slot-group[data-slot="${slot}"] .gear-card.is-selected`)) {
+      if (slot === conflict.slot && !twoHandedItems.has(card.dataset.item || '')) continue;
+      const line = document.createElement('p');
+      line.className = 'gear-conflict';
+      line.setAttribute('role', 'alert');
+      line.textContent = text;
+      card.appendChild(line);
+    }
+  };
+  mark(conflict.slot, `Two-handed weapon — cannot be combined with ${SLOT_LABELS[conflict.other]}.`);
+  mark(conflict.other, `Conflicts with the two-handed weapon in ${SLOT_LABELS[conflict.slot]}.`);
+  const status = document.getElementById('workflow-status');
+  if (status) status.textContent =
+    `Slot conflict: ${SLOT_LABELS[conflict.slot]} and ${SLOT_LABELS[conflict.other]} cannot be equipped together — a two-handed weapon occupies both weapon slots. Deselect one of the two slots.`;
 }
 
 function buildPayload() {
