@@ -2483,6 +2483,10 @@ _REPORT_DPS_RE = re.compile(
 )
 _REPORT_NAME_TRAILER_RE = re.compile(r'(?:&#160;|&nbsp;|\s)+$')
 _REPORT_SLOT_MAP = {"Head": "head", "Neck": "neck", "Shoulders": "shoulder", "Back": "back", "Chest": "chest", "Wrists": "wrist", "Hands": "hands", "Waist": "waist", "Legs": "legs", "Feet": "feet", "Finger 1": "finger1", "Finger 2": "finger2", "Trinket 1": "trinket1", "Trinket 2": "trinket2", "Main Hand": "main_hand", "Off Hand": "off_hand"}
+# Nightly emits gear labels "Finger1"/"Trinket2" (no space) where older builds
+# emitted "Finger 1" (D1 t_ebcd03f1); whitespace-and-case-insensitive lookup
+# parses both report generations.
+_REPORT_SLOT_BY_LABEL = {re.sub(r"\s+", "", k).lower(): v for k, v in _REPORT_SLOT_MAP.items()}
 
 
 def parse_report_results(html_content: str) -> list:
@@ -2512,7 +2516,7 @@ def parse_report_results(html_content: str) -> list:
         if gt_match:
             rows = re.finditer(r'<th[^>]*>\s*([^<]+)\s*</th>\s*<td[^>]*>\s*<a[^>]+href="([^"]+)"', gt_match.group(1), re.IGNORECASE)
             for r in rows:
-                simc_slot = _REPORT_SLOT_MAP.get(r.group(1).strip())
+                simc_slot = _REPORT_SLOT_BY_LABEL.get(re.sub(r"\s+", "", r.group(1)).lower())
                 if simc_slot:
                     href = r.group(2)
                     id_match = re.search(r'item=([0-9]+)', href)
