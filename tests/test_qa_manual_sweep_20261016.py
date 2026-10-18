@@ -687,3 +687,26 @@ def test_sec2b_task_status_scoped_to_owner(auth_on, monkeypatch):
     finally:
         master.task_user_map.pop(task_id, None)
         master.task_status_store.pop(task_id, None)
+
+# ---------------------------------------------------------------- D1 (t_ebcd03f1)
+
+def test_d1_nightly_finger_trinket_gear_labels_parse():
+    """BUG D1: nightly SimC report gear rows are labelled "Finger1",
+    "Trinket2" (no space) where the map keys carry spaces, so finger1/2 +
+    trinket1/2 never parsed from any nightly report and the results page
+    quarantined every ring/trinket candidate as "(no gear difference)".
+    Fixture = two gear tables trimmed out of the real nightly run
+    3cf94798 (report_20261018_051024.html)."""
+    import os
+    fx = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                      "fixtures", "simc_nightly_report_slots15.html")
+    with open(fx, encoding="utf-8") as f:
+        results = master.parse_report_results(f.read())
+    assert results, "nightly fixture parsed back to nothing"
+    expect = sorted(set(master._REPORT_SLOT_MAP.values()) - {"off_hand"})
+    assert len(expect) == 15
+    for r in results:
+        assert sorted(r["gear"]) == expect, (
+            f"{r['name']}: missing slots {set(expect) - set(r['gear'])}")
+        assert r["gear"]["finger1"].startswith("id=")
+        assert r["gear"]["trinket2"].startswith("id=")
