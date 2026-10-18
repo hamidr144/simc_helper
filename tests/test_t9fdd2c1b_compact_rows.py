@@ -61,7 +61,19 @@ def test_run_bar_compaction_rules():
     # two-line conflict aggregate (TG3-C §3.4 real estate).
     bar = CSS.split(".run-bar {", 1)[1].split("}", 1)[0]
     assert "padding: 10px 24px;" in bar
-    assert ".run-bar .workflow-status { margin-top: 0; min-height: 0; min-width: 0; flex: 1; font-size: 13px; }" in CSS
+    status = CSS.split(".run-bar .workflow-status {", 1)[1].split("}", 1)[0]
+    assert "margin-top: 0; min-height: 0; min-width: 0; flex: 1; font-size: 13px;" in status
+
+
+def test_run_bar_status_clamped_to_two_lines():
+    # t_5c33fefb (bug t_da6227d7): the slot-conflict / generate-error aggregate
+    # must never grow the sticky run-bar past the G2 110px cap — 2-line clamp
+    # + ellipsis; full text stays in textContent (aria-live) and is mirrored
+    # to title by setWorkflowStatus.
+    status = CSS.split(".run-bar .workflow-status {", 1)[1].split("}", 1)[0]
+    assert "-webkit-line-clamp: 2;" in status
+    assert "line-clamp: 2;" in status
+    assert "overflow: hidden;" in status
 
 
 def test_group_chrome_gaps_match_contract():
