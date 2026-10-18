@@ -77,8 +77,9 @@ def test_cache_bust_token_everywhere():
     # t_5e099a0a: sweep extended to all pages; pins track the current token
     # (t_8bf63ec6 TG2-B sweep to 20261018-mean-err-1, t_61442157 TG2-F sweep
     # to 20261018-chip-worn-1, t_4d8563f2 merge sweep to 20261018-merge-1,
-    # t_9fdd2c1b TG3-D compact-rows sweep to 20261018-tg3d-1).
+    # t_9fdd2c1b TG3-D compact-rows sweep to 20261018-tg3d-1,
+    # t_5c33fefb runbar-clamp sweep to 20261018-runbar-clamp).
     for page in PAGES:
         html = Path(f"src/web/static/{page}").read_text()
-        assert "20261018-tg3d-1" in html, page
+        assert "20261018-runbar-clamp" in html, page
         assert "20261017-enh-chips" not in html, page

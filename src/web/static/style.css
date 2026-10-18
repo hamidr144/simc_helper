@@ -1265,7 +1265,7 @@ button.btn-ghost:not(:disabled):hover {
 
 .run-bar-summary span { color: var(--text-secondary); font-size: 13px; }
 
-.run-bar .workflow-status { margin-top: 0; min-height: 0; min-width: 0; flex: 1; font-size: 13px; }
+.run-bar .workflow-status { margin-top: 0; min-height: 0; min-width: 0; flex: 1; font-size: 13px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 
 .run-bar button { margin-top: 0; min-height: 44px; }
 
