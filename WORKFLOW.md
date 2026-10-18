@@ -24,13 +24,17 @@ Tags always point at the **merge commit** on the target branch, never at a pre-m
 
 ## Identity and permissions
 
-All automation runs under identities the user controls; there is no per-profile GitHub identity.
+Three GitHub App bots, three roles (GHWR-5 identity matrix, user-approved 2026-10-18). The personal account and the old shared fine-grained PAT are **out of the daily flow** (PAT = break-glass until the GHWR-6 pilot is green, then it is revoked).
 
-- **Target identity: the GitHub App bot.** The user created a dedicated GitHub App for the team; it becomes the bot identity (short-lived installation tokens) for push, PR, review, merge and tag operations.
-- **Fallback identity while the App is being wired up: the shared fine-grained PAT** — one GitHub account (`hamidr144`), held in the macOS keyring by every Hermes profile. Minimum matrix on it, repo-scoped to `simc_helper`: **Contents: RW, Pull requests: RW, Checks/Actions: read, Metadata: read** — and **no `Administration`** once protection has converged (below). Ruleset/branch-protection/default-branch edits then happen **in the browser by the user**.
-- **The account cannot approve its own PRs** — GitHub rejects self-approval by design ([about pull request reviews](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/reviewing-changes-in-pull-requests/about-pull-request-reviews)). Required-approval-count settings are therefore never used; the `VERDICT:` comment convention below carries reviews.
+| Role | App (id) | Held by | May |
+|------|----------|---------|-----|
+| CODING | Hamidr144's Hermes Agent (5371925) | every worker profile (developer, frontend, tester, writer, devops, architect, researcher) | push branches, commit, open PRs, push review fixes |
+| REVIEW | Hermes Agent Reviewer (5372752) | reviewer profile only | post review threads + real `APPROVE`/`REQUEST_CHANGES` **state** reviews; cannot push or merge by construction (no `contents:write`) |
+| MERGE | Hermes Agent Leader (5372784) | leader profile only | merge PRs, repo management incl. the only protection-write grant; never pushes branches and never reviews |
 
-**Protection truth:** the repository ruleset `pr-only-dev-prod` (targeting `refs/heads/dev` and `refs/heads/prod`) is the single protection mechanism: PR required with no approval count, updates restricted (admin bypass allowed *via pull requests only*), deletions blocked, force-pushes blocked. **Agents never create, edit or delete rulesets or branch protection — the user does that in the browser.** The older classic branch protection on `dev`/`prod` is removed only after the ruleset carries the deletion and force-push rules too (no window of weakness); until that convergence completes both layers may still exist, and all applicable rules stack, most-restrictive wins ([about rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets)).
+- **Auth plumbing:** every `gh`/`git push` runs on a freshly minted 1h installation token: `GH_TOKEN=$(~/.hermes/bin/gh-mint) gh ...` (helper resolves the app from `$HERMES_PROFILE`: leader→MERGE, reviewer→REVIEW, anything else→CODING). Tokens never touch disk or logs; **never** persist one with `gh auth login`. Keys: `~/.hermes/secrets/*.pem` chmod 600. Gotcha: the mint JWT `alg` must be exactly `RS256` (GitHub's own docs' `Rs256` casing returns 401 on every endpoint).
+- **Cross-app approval is the mechanism:** PR authors are always the CODING app; GitHub forbids self-approval, so the REVIEW app — a *different* app — casts the approving review. The ruleset (below) requires **1 approving review** server-side before any merge can land, so a real `APPROVE` state review at the current head — not `VERDICT:` prose alone — is what gates merges.
+- **Protection truth:** the repository ruleset `pr-only-dev-prod` (targeting `refs/heads/dev` and `refs/heads/prod`) is the single protection mechanism: updates restricted, deletions blocked, force-pushes blocked, PR required **with 1 approving review**, and **no bypass actors** — nobody, repo owner included, merges or pushes past these requirements. Agents never create, edit or delete rulesets or branch protection except on an explicitly leader-authorized card (precedents: GHWR-2, GHWR-5) and then only with the MERGE app's token; the user remains the ultimate authority via the browser.
 
 ## Day-to-day: change → dev
 
@@ -42,22 +46,23 @@ All changes reach `dev` (and `prod`) **only through a GitHub PR merged by the le
 2. `git switch -c feature/t_xxxxx-slug` — **one Kanban task, one branch.** Never commit directly to `dev` or `prod`.
 3. Implement, add/adjust tests.
 4. Test on the **dev system** (see below). Never test on prod.
-5. Push the branch and open the PR:
+5. Push the branch and open the PR (as the CODING bot — see Identity above):
    ```bash
+   export GH_TOKEN=$(~/.hermes/bin/gh-mint)   # fresh 1h token; re-mint on 401
    git push -u origin feature/t_xxxxx-slug
    gh pr create --base dev --title "t_xxxxx: <summary>" --body "<kanban task id, changes, test evidence>"
    ```
-6. Review happens **on the PR**. Reviewer: `gh pr view <pr>` / `gh pr diff <pr>`, then posts findings as a comment-type review — `gh pr review <pr> --repo hamidr144/simc_helper --comment -b "VERDICT: APPROVE|REQUEST-CHANGES — <summary>"` (see the single-account section below: only comment-type reviews go through for this account, and its `VERDICT:` first line carries the verdict). Inline comments go through the API — `gh pr review` has no inline-comment support:
+6. Review happens **on the PR as the REVIEW bot** (`GH_TOKEN=$(~/.hermes/bin/gh-mint) gh pr review <pr> --repo hamidr144/simc_helper --approve|--request-changes -b "VERDICT: APPROVE|REQUEST-CHANGES — <summary>"` — keep the `VERDICT:` first line for humans; the review *state* is what the ruleset counts). Pin the review to the exact head via the API when combining inline comments — `gh pr review` has no inline-comment support:
    ```bash
-   gh api repos/hamidr144/simc_helper/pulls/<pr>/reviews --method POST --input review.json
-   # review.json: {"commit_id":"<head-sha>","event":"COMMENT","body":"<summary>",
+   GH_TOKEN=$(~/.hermes/bin/gh-mint) gh api repos/hamidr144/simc_helper/pulls/<pr>/reviews --method POST --input review.json
+   # review.json: {"commit_id":"<head-sha>","event":"APPROVE|REQUEST_CHANGES","body":"VERDICT: ...",
    #   "comments":[{"path":"<file>","line":<N>,"side":"RIGHT","body":"<note>"}]}
    ```
    (`line` must fall inside a diff hunk or the whole call 422s.) Author addresses **every** comment with follow-up commits pushed to the same branch and replies on each inline thread (`gh api repos/hamidr144/simc_helper/pulls/<pr>/comments/<comment-id>/replies -f body="…"`), then requests re-review.
 7. **Version bump:** as the last commit before requesting final review, `git fetch origin dev` and bump `pyproject.toml` to the next `X.Y.Z-dev.N` — recompute N from the freshly fetched tip at that moment (another PR may have merged while you worked). Docs-only PR: skip (version-exempt).
-8. Once approved (see single-account rule below) and CI has run, **the leader merges. The author never merges their own PR; workers never merge.** The rule is process-enforced (identities may share one token), so honor it even when the API would let you:
+8. Once **1 approving review from the REVIEW bot sits at the current head** (the ruleset rejects the merge server-side otherwise — no identity can bypass it, see Identity above) and CI has run, **the leader merges with the MERGE identity. The author never merges their own PR; workers never merge:**
    ```bash
-   gh pr merge <pr> --merge --delete-branch   # leader only
+   GH_TOKEN=$(~/.hermes/bin/gh-mint) gh pr merge <pr> --merge --delete-branch   # leader profile only
    ```
 9. Tag + deploy: **the leader** tags the merge commit `vX.Y.Z-dev.N` and pushes the tag explicitly. The merge commit exists only on the remote, and `dev` itself needs no push (the merge already updated it; pushing it would hit protection anyway):
    ```bash
@@ -67,9 +72,9 @@ All changes reach `dev` (and `prod`) **only through a GitHub PR merged by the le
    ```
    Note `git push --follow-tags` does not work here: it skips lightweight tags and your local repo doesn't have the merge commit yet. Then deploy to the dev system (below) → tester verifies acceptance criteria on the running system.
 
-### Review verdicts: the single-account limitation
+### Review verdicts
 
-All team bots share one GitHub identity, and GitHub rejects self-approval, so an approving review button-press is impossible for anyone here. Instead the reviewer posts a **comment-type review** (`gh pr review --comment`) whose **first line is exactly `VERDICT: APPROVE` or `VERDICT: REQUEST-CHANGES`**; the leader treats `VERDICT: APPROVE` as the approval. The Hermes kanban reviewer card remains the binding process record — the GitHub review is its mirror.
+Reviews are **real state reviews** cast by the REVIEW app (see Identity above): GitHub's cross-app approval satisfies the ruleset's required-approvals gate. The ruleset does **not** auto-dismiss approvals on new pushes, so drift discipline stays manual: the reviewer pins the review to the exact head (`commit_id`) and the leader verifies the merge commit contains exactly the reviewed head before merging (GHWR-4 practice). Keep the first body line as `VERDICT: APPROVE` / `VERDICT: REQUEST-CHANGES` for human and Kanban parity. The Hermes kanban reviewer card remains the binding process record — the GitHub review is its mirror.
 
 ## Milestone: dev → prod
 
@@ -126,7 +131,7 @@ Rollback: `git checkout <last-good-tag>` in the prod worktree, rebuild, `docker 
 ## Quick rules
 
 - Branch from `dev`, open PRs back to `dev` — direct push to `dev`/`prod` is blocked server-side for every push class, PR-head shas included (`GH013`/`GH006`); hotfixes reach prod through a PR too (then cherry-pick back to `dev` through a PR).
-- **The leader merges; the author never merges their own work; workers never merge and never touch branch protection or rulesets** (the user edits those in the browser).
+- **The leader merges (MERGE identity, 1 approving review required server-side); the author never merges their own work; workers never merge and never touch branch protection or rulesets** (only leader-authorized protection cards do, via the Leader app token; the user via browser remains ultimate authority).
 - CI runs on every PR (dev and prod bases included); no checks ≠ passing checks.
 - Prod is never used for testing, and no prod ship without explicit approval. Dev system data is disposable; prod data is not.
 - Every prod deploy is from a tagged commit; every tag is a merge commit on its branch, with a version bump in its PR branch.
