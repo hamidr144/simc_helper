@@ -245,6 +245,7 @@ def parse_addon_lines(lines: List[str]) -> Tuple[str, Dict[str, str], Dict[str, 
     current_name_comment = ""
     current_upgrade: Optional[Dict[str, Any]] = None
     in_bags = False
+    in_copy = False
     valid_slots = set(SLOTS) | {"finger", "trinket"}
 
     def preserve_line(raw_line: str) -> str:
@@ -252,7 +253,16 @@ def parse_addon_lines(lines: List[str]) -> Tuple[str, Dict[str, str], Dict[str, 
 
     for line in lines:
         line_strip = line.strip()
+        if line_strip.startswith("copy="):
+            # TG3-D2: an embedded copy= block is a candidate from a previous
+            # generation, not baseline state. Keep it out of base_profile and
+            # equipped_gear; its gear lines still feed items_by_slot below
+            # (SimC binds directives after copy= to the clone, last-actor
+            # semantics — carrying them over hijacks the baseline).
+            in_copy = True
+            continue
         if not line_strip:
+            in_copy = False
             continue
         upgrade_match = _UPGRADE_COMMENT_RE.match(line_strip)
         if upgrade_match:
@@ -283,7 +293,8 @@ def parse_addon_lines(lines: List[str]) -> Tuple[str, Dict[str, str], Dict[str, 
             if match:
                 slot, details = match.groups()
                 if slot in SLOTS:
-                    equipped_gear[slot] = details
+                    if not in_copy:
+                        equipped_gear[slot] = details
                     norm_slot = "finger" if slot.startswith("finger") else "trinket" if slot.startswith("trinket") else slot
                     items_by_slot.setdefault(norm_slot, [])
                     if details not in items_by_slot[norm_slot]:
@@ -292,7 +303,7 @@ def parse_addon_lines(lines: List[str]) -> Tuple[str, Dict[str, str], Dict[str, 
                     if current_upgrade:
                         item_upgrades.setdefault(details, current_upgrade)
                 current_upgrade = None
-            if not any(line_strip.startswith(s + "=") for s in SLOTS):
+            if not in_copy and not any(line_strip.startswith(s + "=") for s in SLOTS):
                 base_profile.append(preserve_line(line))
         else:
             match = re.match(r"^#\s+(\w+)=(.+)$", line_strip)
@@ -309,3 +320,36 @@ def parse_addon_lines(lines: List[str]) -> Tuple[str, Dict[str, str], Dict[str, 
                 current_upgrade = None
 
     return "".join(base_profile), equipped_gear, items_by_slot, item_names, char_name, char_class, item_upgrades
+
+
+def count_embedded_copies(lines: List[str]) -> int:
+    """Number of embedded ``copy=`` blocks in raw upload text."""
+    return sum(1 for line in lines if line.strip().startswith("copy="))
+
+
+def strip_embedded_copies(text: str) -> Tuple[str, int]:
+    """Drop ``copy=`` lines and their override lines from a profile body.
+
+    TG3-D2: SimC binds directives after a ``copy=`` line to that clone
+    (last-actor semantics), so embedded copies carried in a caller-supplied
+    base profile would hijack the baseline gear block generate-simc appends.
+    Returns ``(clean_text, count)``. Blocks end at the next blank line — the
+    format the app itself emits; a copy block without trailing blank line
+    swallows its directives only, which is still the safe bound.
+    """
+    lines = text.splitlines(keepends=True)
+    count = count_embedded_copies(lines)
+    if not count:
+        return text, 0
+    kept: List[str] = []
+    in_copy = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("copy="):
+            in_copy = True
+            continue
+        if in_copy:
+            in_copy = bool(stripped)
+            continue
+        kept.append(line)
+    return "".join(kept), count

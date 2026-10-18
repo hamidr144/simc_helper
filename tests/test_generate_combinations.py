@@ -8,12 +8,13 @@ on the file at ``response.json()["file_path"]``).
 import os
 import re
 import sys
+import time
 
 from fastapi.testclient import TestClient
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 import web.main as master
-from cli.generate_input import build_combination_copies
+from cli.generate_input import build_combination_copies, count_combination_copies
 from web.main import app
 
 client = TestClient(app)
@@ -243,3 +244,92 @@ def test_app_js_sends_mode_and_replaces_estimate_with_server_count():
     assert "generatedInput?.mode === 'combinations'" in js
     assert "count === null ? '…'" in js
     assert "min stage 1 (est.)" in js
+
+
+# ------------------------------------------------- TG3-D2 carried copy= blocks
+
+CARRIED_PROFILE = (
+    'warrior=Test\nsimulate 10000\n'
+    'copy="Test_Old_1,Test"\nhead=id=999,ilevel=252\n'
+    '\n'
+    'copy="Test_Old_2,Test"\nchest=id=998,ilevel=252\n'
+)
+
+
+def _carried(**overrides):
+    return _generate(base_profile=CARRIED_PROFILE, **overrides)
+
+
+def test_generate_strips_carried_copy_blocks_from_output():
+    """TG3-D2: embedded copies from an uploaded profile must never reach the
+    dispatch — SimC last-actor semantics would bind the appended baseline
+    gear block to the last clone instead of the character."""
+    data, text = _carried(mode="combinations")
+    assert data["embedded_copies"] == 2
+    assert data["combinations"] == 4  # product math unchanged
+    assert 'copy="Test_Old' not in text
+    assert "id=999" not in text and "id=998" not in text
+    assert 'copy="Test_Combo_1,Test"' in text  # fresh copies still emitted
+    assert "head=,id=100,ilevel=250" in text  # baseline block intact
+
+
+def test_budget_counts_carried_embedded_copies(monkeypatch):
+    """TG3-D2 (b): carried copies count toward the combinations budget, so an
+    over-cap upload is rejected instead of silently inflating the dispatch."""
+    monkeypatch.setattr(master, "TG_MAX_COMBINATIONS", 4)
+    ok = client.post("/api/generate-simc", json={**BASE_PAYLOAD, **COMBINATIONS})
+    assert ok.status_code == 200  # 4 alone fits the budget
+    response = client.post(
+        "/api/generate-simc",
+        json={**BASE_PAYLOAD, **COMBINATIONS, "base_profile": CARRIED_PROFILE},
+    )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "4 combinations + 2 embedded copies from the uploaded profile" in detail
+    assert "(budget 4)" in detail
+
+
+# ------------------------------------------------- TG3-I pre-build budget guard
+
+def _wide_selection(items=10, slots=9):
+    """10 selected items in each of 9 slots, no enchants/gems configured ->
+    pool sizes == item counts, product 10**9 (would materialize 1e9 blocks)."""
+    keys = ("head", "neck", "shoulder", "back", "chest",
+            "wrist", "hands", "waist", "legs", "feet")[:slots]
+    return {slot: [f"id={1000 + idx * 31 + sidx}" for sidx in range(items)]
+            for idx, slot in enumerate(keys)}
+
+
+def test_count_combination_copies_is_cheap_exact_product():
+    """TG3-I (t_acfe75a9): the pre-build count returns the builder's pre-dedup
+    product mock-free and instantly (1e9 shape, nothing materialized), and
+    matches the built count on a small non-deduping shape."""
+    assert count_combination_copies(_wide_selection(), {}, EQUIPPED) == 10 ** 9
+    sel = {"finger": ["id=1,ilevel=252", "id=2,ilevel=252", "id=3,ilevel=252"]}
+    equipped = {"finger1": "id=8,ilevel=250", "finger2": "id=9,ilevel=250"}
+    _, built = build_combination_copies(sel, {}, equipped, "X")
+    assert count_combination_copies(sel, {}, equipped) == built == 3
+
+
+def test_budget_cap_rejects_over_cap_product_before_materializing(monkeypatch):
+    """TG3-I (t_acfe75a9): an over-cap combinations request is 422'd from the
+    per-slot pool sizes BEFORE any copy block is built (building first OOM-
+    killed the master); no inputs/ file, no user record, answer is fast."""
+    monkeypatch.setattr(master, "TG_MAX_COMBINATIONS", 5000)
+    inputs_dir = master.INPUTS_DIR
+    files_before = set(os.listdir(inputs_dir)) if os.path.isdir(inputs_dir) else set()
+    record_before = dict(master.generated_inputs_by_user)
+
+    t0 = time.perf_counter()
+    response = client.post("/api/generate-simc", json={
+        **BASE_PAYLOAD, **COMBINATIONS, "selected_items": _wide_selection()})
+    elapsed = time.perf_counter() - t0
+    assert response.status_code == 422
+    assert elapsed < 2.0  # pre-build gate; building 1e9 blocks never starts
+    detail = response.json()["detail"]
+    assert "1000000000 combinations" in detail
+    assert "(budget 5000)" in detail
+    assert "one swap at a time" in detail
+    files_after = set(os.listdir(inputs_dir)) if os.path.isdir(inputs_dir) else set()
+    assert files_after == files_before
+    assert dict(master.generated_inputs_by_user) == record_before

@@ -687,3 +687,83 @@ def test_sec2b_task_status_scoped_to_owner(auth_on, monkeypatch):
     finally:
         master.task_user_map.pop(task_id, None)
         master.task_status_store.pop(task_id, None)
+
+# ---------------------------------------------------------------- D1 (t_ebcd03f1)
+
+def test_d1_nightly_finger_trinket_gear_labels_parse():
+    """BUG D1: nightly SimC report gear rows are labelled "Finger1",
+    "Trinket2" (no space) where the map keys carry spaces, so finger1/2 +
+    trinket1/2 never parsed from any nightly report and the results page
+    quarantined every ring/trinket candidate as "(no gear difference)".
+    Fixture = two gear tables trimmed out of the real nightly run
+    3cf94798 (report_20261018_051024.html)."""
+    import os
+    fx = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                      "fixtures", "simc_nightly_report_slots15.html")
+    with open(fx, encoding="utf-8") as f:
+        results = master.parse_report_results(f.read())
+    assert results, "nightly fixture parsed back to nothing"
+    expect = sorted(set(master._REPORT_SLOT_MAP.values()) - {"off_hand"})
+    assert len(expect) == 15
+    for r in results:
+        assert sorted(r["gear"]) == expect, (
+            f"{r['name']}: missing slots {set(expect) - set(r['gear'])}")
+        assert r["gear"]["finger1"].startswith("id=")
+        assert r["gear"]["trinket2"].startswith("id=")
+
+# ------------------------------------------------- TG3-SECFIX (t_71013ac2)
+
+def test_secfix_reports_mount_per_owner_authz(auth_on, monkeypatch):
+    """BUG TG3-SECFIX (t_71013ac2, found by t_6a3b5ebb): the /reports mount
+    gated only on session EXISTENCE — any authenticated user who knew a
+    report URL read another user's sim output byte-identical. Owner must get
+    200 (this same fetch is what the results-page iframe does), logged-out
+    401, and a non-owner the mount's own 404 — never 403 and byte-identical
+    to a missing path in the caller's own dir (no existence oracle).
+    AUTHENTICATION_ENABLED=false must keep serving anonymously (single-
+    operator mode)."""
+    import os
+    import shutil
+
+    mount = next(r for r in master.app.routes
+                 if getattr(r, "name", None) == "reports")
+    root = mount.app.directory  # the dir the mount actually serves
+    v = _login(f"secfix-v-{uuid.uuid4().hex[:6]}")
+    b = _login(f"secfix-b-{uuid.uuid4().hex[:6]}")
+    task = uuid.uuid4().hex[:8]
+    vdir = os.path.join(root, master._user_report_dir(v.user_id), task)
+    os.makedirs(vdir)
+    body = '<h2 class="toggle">VictimChar : 9999 dps</h2>'
+    with open(os.path.join(vdir, "report_20261018_000000.html"), "w",
+              encoding="utf-8") as f:
+        f.write(body)
+    url = (f"/reports/{master._user_report_dir(v.user_id)}/{task}/"
+           "report_20261018_000000.html")
+    try:
+        r = TestClient(app).get(url)
+        assert r.status_code == 401, f"logged-out fetch: {r.status_code}"
+        rf = b.get(url)
+        assert rf.status_code == 404, (
+            f"cross-user fetch returned {rf.status_code} — leak open "
+            f"(403 would also be wrong: existence oracle)")
+        assert rf.text not in body
+        # No existence oracle: foreign 404 == missing-path 404 byte-for-byte.
+        own_missing = b.get(
+            f"/reports/{master._user_report_dir(b.user_id)}/{task}/"
+            "report_20261018_000000.html")
+        assert own_missing.status_code == 404
+        assert rf.status_code == own_missing.status_code
+        assert rf.content == own_missing.content, (
+            f"oracle: foreign={rf.content!r} missing={own_missing.content!r}")
+        # No over-block: owner still loads their report (iframe path).
+        rv = v.get(url)
+        assert rv.status_code == 200 and rv.text == body, \
+            f"owner blocked from own report: {rv.status_code}"
+        # Kill switch: auth disabled -> anonymous passthrough intact.
+        monkeypatch.setattr(master, "authentication_enabled", lambda: False)
+        r = TestClient(app).get(url)
+        assert r.status_code == 200 and r.text == body, (
+            f"anonymous-mode passthrough broken: {r.status_code}")
+    finally:
+        shutil.rmtree(os.path.join(
+            root, master._user_report_dir(v.user_id)), ignore_errors=True)
