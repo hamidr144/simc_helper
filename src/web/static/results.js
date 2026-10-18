@@ -22,6 +22,18 @@ function itemBonus(item) {
   return match ? match[1] : '';
 }
 
+// TG3-D2 baseline pick: prefer the actor named in ?baseline (the real
+// character with equipped gear). When the report has no such run, fall back
+// to the HIGHEST-DPS healthy actor — never the name-sorted first row — and
+// let the caller label the card honestly (no baseline run => say so).
+function pickBaseline(healthy) {
+  const equipped = healthy.find(result => result.name === baselineName);
+  if (equipped) return { baseline: equipped, isEquipped: true };
+  if (!healthy.length) return { baseline: null, isEquipped: false };
+  const top = healthy.reduce((best, r) => (Number(r.dps) > Number(best.dps) ? r : best));
+  return { baseline: top, isEquipped: false };
+}
+
 function changesFromBaseline(candidate, baseline) {
   const changes = [];
   const slots = new Set([...Object.keys(baseline.gear || {}), ...Object.keys(candidate.gear || {})]);
@@ -90,7 +102,7 @@ function renderResults(results) {
   // let it be the baseline.
   const healthy = results.filter(result => result && Number(result.dps) > 0);
   const failed = results.filter(result => !result || !(Number(result.dps) > 0));
-  const baseline = healthy.find(result => result.name === baselineName) || healthy[0];
+  const { baseline, isEquipped } = pickBaseline(healthy);
   if (!baseline) {
     subtitle.textContent = 'The report could not be loaded.';
     return;
@@ -114,8 +126,8 @@ function renderResults(results) {
   const sidegrades = band === null ? 0 : ranked.filter((r, i) => i > 0 && r.dps >= band).length;
 
   subtitle.textContent = ranked.length
-    ? `${ranked.length} alternatives ranked against your equipped gear.`
-    : 'Only your equipped baseline was simulated.';
+    ? `${ranked.length} alternatives ranked against ${isEquipped ? 'your equipped gear' : 'the top candidate'}.`
+    : (isEquipped ? 'Only your equipped baseline was simulated.' : 'No equipped baseline run was found in the report.');
   if (sidegrades > 0) subtitle.textContent += ` ${sidegrades} sidegrades within 2× error of best.`;
 
   const quarantined = [
@@ -129,7 +141,7 @@ function renderResults(results) {
     : '';
 
   baselineCard.hidden = false;
-  baselineCard.innerHTML = `<div class="baseline-result"><span>Equipped baseline</span><strong>${baseline.dps.toLocaleString()} DPS</strong><small>${escapeHtml(baseline.name)}</small></div>`;
+  baselineCard.innerHTML = `<div class="baseline-result"><span>${isEquipped ? 'Equipped baseline' : 'Best candidate (no baseline run)'}</span><strong>${baseline.dps.toLocaleString()} DPS</strong><small>${escapeHtml(baseline.name)}</small></div>`;
 
   if (!ranked.length) {
     resultList.innerHTML = `<section class="panel-card empty-results"><h2>No alternatives to rank</h2><p>Select another item, enchant, gem, grade, or socket before running a comparison.</p>${quarantineHtml}</section>`;
@@ -223,7 +235,7 @@ async function fetchResults(attempt = 0) {
     const data = await response.json();
     if (response.ok && data.status === 'success' && data.results?.length) {
       const healthy = data.results.filter(result => result && Number(result.dps) > 0);
-      const baseline = healthy.find(result => result.name === baselineName) || healthy[0];
+      const baseline = pickBaseline(healthy).baseline;
       const ranked = healthy.filter(result => result !== baseline);
       await resolveChips(ranked, baseline);
       return renderResults(data.results);

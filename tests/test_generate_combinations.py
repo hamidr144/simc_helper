@@ -243,3 +243,46 @@ def test_app_js_sends_mode_and_replaces_estimate_with_server_count():
     assert "generatedInput?.mode === 'combinations'" in js
     assert "count === null ? '…'" in js
     assert "min stage 1 (est.)" in js
+
+
+# ------------------------------------------------- TG3-D2 carried copy= blocks
+
+CARRIED_PROFILE = (
+    'warrior=Test\nsimulate 10000\n'
+    'copy="Test_Old_1,Test"\nhead=id=999,ilevel=252\n'
+    '\n'
+    'copy="Test_Old_2,Test"\nchest=id=998,ilevel=252\n'
+)
+
+
+def _carried(**overrides):
+    return _generate(base_profile=CARRIED_PROFILE, **overrides)
+
+
+def test_generate_strips_carried_copy_blocks_from_output():
+    """TG3-D2: embedded copies from an uploaded profile must never reach the
+    dispatch — SimC last-actor semantics would bind the appended baseline
+    gear block to the last clone instead of the character."""
+    data, text = _carried(mode="combinations")
+    assert data["embedded_copies"] == 2
+    assert data["combinations"] == 4  # product math unchanged
+    assert 'copy="Test_Old' not in text
+    assert "id=999" not in text and "id=998" not in text
+    assert 'copy="Test_Combo_1,Test"' in text  # fresh copies still emitted
+    assert "head=,id=100,ilevel=250" in text  # baseline block intact
+
+
+def test_budget_counts_carried_embedded_copies(monkeypatch):
+    """TG3-D2 (b): carried copies count toward the combinations budget, so an
+    over-cap upload is rejected instead of silently inflating the dispatch."""
+    monkeypatch.setattr(master, "TG_MAX_COMBINATIONS", 4)
+    ok = client.post("/api/generate-simc", json={**BASE_PAYLOAD, **COMBINATIONS})
+    assert ok.status_code == 200  # 4 alone fits the budget
+    response = client.post(
+        "/api/generate-simc",
+        json={**BASE_PAYLOAD, **COMBINATIONS, "base_profile": CARRIED_PROFILE},
+    )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "4 combinations + 2 embedded copies from the uploaded profile" in detail
+    assert "(budget 4)" in detail
