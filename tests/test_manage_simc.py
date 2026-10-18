@@ -46,6 +46,8 @@ def test_get_build_jobs_respects_valid_override(monkeypatch):
 
 def test_get_build_jobs_rejects_invalid_override(monkeypatch):
     monkeypatch.setenv("SIMC_BUILD_JOBS", "0")
+    # min() with cpu_count caps the fallback on low-core CI runners; pin it so the assertion is hardware-independent.
+    monkeypatch.setattr(manage_simc.multiprocessing, "cpu_count", lambda: 99)
     assert manage_simc.get_build_jobs() == manage_simc.DEFAULT_SIMC_BUILD_JOBS
 
 
