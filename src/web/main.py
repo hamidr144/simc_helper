@@ -2039,6 +2039,7 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
             apply_item_level,
             build_combination_copies,
             canonical_item,
+            count_combination_copies,
             generate_variations,
             load_config,
         )
@@ -2154,13 +2155,17 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
         work_estimate_minutes = None
 
         if mode == MODE_COMBINATIONS:
-            copy_blocks, count = build_combination_copies(
-                items_by_slot, config, equipped_gear, char_name, extra_sockets=extra_sockets)
-            # Budget check before any file write: over-cap requests neither
-            # create an inputs/ file nor touch generated_inputs_by_user.
+            # TG3-I (t_acfe75a9): budget check on the cheap pre-dedup product
+            # BEFORE any copy block is materialized — building the full list to
+            # count it OOM-killed the master on over-cap products before 422
+            # could fire. The built (deduped) count is always <= this product,
+            # so passing this gate makes the post-build dispatch budget-safe
+            # without a second check.
             # TG3-D2: embedded copies from the uploaded profile count toward
-            # the budget even though strip_embedded_copies drops them from
-            # the dispatch (an over-cap upload needs honest re-selection).
+            # the budget even though strip_embedded_copies drops them from the
+            # dispatch (an over-cap upload needs honest re-selection).
+            count = count_combination_copies(
+                items_by_slot, config, equipped_gear, extra_sockets=extra_sockets)
             if count + embedded_copies > TG_MAX_COMBINATIONS:
                 embedded_part = (
                     f" + {embedded_copies} embedded copies from the uploaded profile"
@@ -2174,6 +2179,8 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
                         "or switch back to 'one swap at a time'."
                     ),
                 )
+            copy_blocks, count = build_combination_copies(
+                items_by_slot, config, equipped_gear, char_name, extra_sockets=extra_sockets)
             work_estimate_minutes = round(
                 count * TG_STAGE1_ITERATIONS_CAP / TG_WORK_ESTIMATE_ITERS_PER_SEC / 60, 1)
             profile_content += "".join(copy_blocks)
