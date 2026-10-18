@@ -720,10 +720,20 @@ class _SessionStaticFiles(StaticFiles):
     """SEC-5 (t_28df6d81): reports are per-user sim output, so the mount
     demands the same session the API endpoints demand (require_session is
     resolved at request time; the AUTHENTICATION_ENABLED kill switch still
-    bypasses it, returning "anonymous")."""
+    bypasses it, returning "anonymous").
+
+    TG3-SECFIX (t_71013ac2): session existence alone leaked any user's
+    reports to any logged-in caller who knew the URL. With auth enabled the
+    first path segment (``<user_dir>/...``, as normalized by
+    ``StaticFiles.get_path``) must equal the caller's own report directory —
+    the same rule as ``_task_access_ok``. Non-owners get the mount's own 404,
+    never a 403, so foreign report URLs are indistinguishable from missing
+    ones (no existence oracle)."""
 
     async def get_response(self, path: str, scope):
-        require_session(Request(scope))
+        user_id = require_session(Request(scope))
+        if authentication_enabled() and path.split("/", 1)[0] != _user_report_dir(user_id):
+            raise HTTPException(status_code=404)
         return await super().get_response(path, scope)
 
 
