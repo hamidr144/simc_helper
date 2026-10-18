@@ -350,26 +350,53 @@ button:not(:disabled):active {
   margin-top: 20px;
 }
 
+/* TG3-D §3.1 (t_9fdd2c1b): card -> dense 44px row. The contract's column
+   list maps to this DOM as [label | badges | controls | remove-added];
+   checkbox, 28px icon, ellipsized name and ilvl ride inside the label.
+   overflow:hidden dropped: on a 44px row it clipped the upgrade popover
+   (was already clipping 3px at the 120px card height). */
 .gear-card {
   background: var(--surface-raised);
   border: 1px solid var(--border-hairline);
   border-radius: var(--radius-card);
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  padding: 6px 12px;
+  min-height: 44px; /* target pitch <= 52px incl. the 8px row gap */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  column-gap: 12px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
-  overflow: hidden;
   /* One alignment per column: the .item-option tile centering must not
      leak into card rows (controls, preview, voidforge). */
   text-align: left;
 }
 
+/* TG3-C §3.4 anchor: the inline conflict line joins the row flow beneath
+   the controls (grid-column 1/-1), so the row grows only while shown. */
+.gear-card .gear-conflict { grid-column: 1 / -1; }
+
+/* Added-item remove button: was position:absolute, which would overlap
+   the controls cell now that controls sit on the row's right edge. */
+.gear-card button.slot-remove-added { position: static; }
+
 .gear-card:hover {
   background: var(--surface-hover);
   border-color: rgba(157, 156, 255, 0.3);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+}
+
+/* TG3-C slot-conflict hint (design contract t_784b91c7 §3.4): inline row
+   shown only while the card participates in a 2H + off-hand conflict. */
+.gear-conflict {
+  margin: 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--danger);
+  background: rgba(248, 113, 113, 0.08);
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--danger);
 }
 
 .gear-card-header {
@@ -378,24 +405,25 @@ button:not(:disabled):active {
   gap: 12px;
 }
 
+/* TG3-D: info rides one horizontal line: icon link + name + ilvl. */
 .gear-card-info {
   flex: 1;
   min-width: 0; /* let the ellipsized name shrink instead of widening the card */
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 10px;
 }
 
+/* TG3-D: compact "ilvl N" pair replacing the stacked "Item level" label. */
 .gear-card-slot {
   font-family: var(--font-sans);
   font-size: 11px;
-  text-transform: uppercase;
   color: var(--text-muted);
-  letter-spacing: 1px;
   font-weight: 600;
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 6px;
+  flex: 0 0 auto;
 }
 
 /* Item-level number: right-aligned tabular figure (design rule 2). */
@@ -410,11 +438,11 @@ button:not(:disabled):active {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
-  margin-top: 2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 220px;
+  /* TG3-D: min-width:0 + no cap — the row's 1fr cell now sizes the name. */
+  min-width: 0;
 }
 
 .ilvl-badge {
@@ -431,7 +459,7 @@ button:not(:disabled):active {
 .gear-card-controls {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -493,22 +521,22 @@ button:not(:disabled):active {
 .gear-card-badges {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 4px;
+  gap: 6px;
 }
 
 .gear-card-badges:empty {
   display: none;
 }
 
-/* Grade-state badges (crafted / elevated) live in the badges slot. */
+/* Grade-state badges (crafted / elevated) live in the badges slot.
+   TG3-D: compact pill inside the row. */
 .gear-card-badges .crafted-badge {
   display: inline-flex;
   align-items: center;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border-hairline);
   border-radius: var(--radius-control);
-  padding: 4px 8px;
+  padding: 2px 8px;
   font-size: 11px;
   color: var(--text-secondary);
 }
@@ -576,12 +604,12 @@ button:not(:disabled):active {
 
 #gear-grid {
   display: grid;
-  gap: 20px;
+  gap: 12px; /* TG3-D §3.1 group chrome 20->12 */
 }
 
 .slot-group {
   border-top: 1px solid var(--border-hairline);
-  padding-top: 16px;
+  padding-top: 6px; /* TG3-D G1: 16->10->6 (group pitch budget) */
 }
 
 .slot-group h3,
@@ -591,7 +619,7 @@ button:not(:disabled):active {
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 1px;
-  margin-bottom: 10px;
+  margin-bottom: 2px; /* TG3-D G1: row-pitch budget (was 10) */
 }
 
 /* Gear cards stack one per row at all widths (t_ffc60f47): the old
@@ -599,7 +627,27 @@ button:not(:disabled):active {
 .slot-items {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 12px;
+  gap: 0; /* TG3-D §3.1: row-gap <=8 -> spec max density (pitch 44);
+             contract target pitch <=52 was never the point — the gate is
+             panel <=3200, and 8px gaps made the 43 spec'd rows miss it. */
+}
+
+/* TG3-D §3.1/§3.2: group is a grid so the show-all button and the
+   extra-socket control share one footer line (rearrange, not remove). */
+.slot-group {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 16px;
+}
+.slot-group > .slot-group-header,
+.slot-group > .slot-items,
+.slot-group > .slot-add-form,
+.slot-group > .slot-add-preview { grid-column: 1 / -1; }
+.slot-group > .slot-show-all { grid-column: 1; }
+.slot-group .extra-socket-control {
+  grid-column: 2;
+  justify-self: end;
+  margin-top: 4px; /* TG3-D G1 (was 10) */
 }
 
 .gear-card.is-selected {
@@ -611,9 +659,10 @@ button:not(:disabled):active {
 .item-select-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   cursor: pointer;
   text-align: left;
+  min-width: 0;
 }
 
 .item-select-input {
@@ -1196,7 +1245,7 @@ button.btn-ghost:not(:disabled):hover {
   margin-top: 26px;
   /* 24px horizontal padding matches .panel-card, so the Run button's
      right edge shares the action column of the slot controls above. */
-  padding: 14px 24px;
+  padding: 10px 24px;
   background: rgba(29, 30, 32, 0.95);
   backdrop-filter: blur(14px);
   border: 1px solid rgba(157, 156, 255, 0.28);
@@ -1216,7 +1265,7 @@ button.btn-ghost:not(:disabled):hover {
 
 .run-bar-summary span { color: var(--text-secondary); font-size: 13px; }
 
-.run-bar .workflow-status { margin-top: 0; min-height: 0; flex: 1; font-size: 13px; }
+.run-bar .workflow-status { margin-top: 0; min-height: 0; min-width: 0; flex: 1; font-size: 13px; }
 
 .run-bar button { margin-top: 0; min-height: 44px; }
 
@@ -1259,7 +1308,7 @@ button.btn-ghost:not(:disabled):hover {
   flex-wrap: wrap; /* t_ab5b5f2e: controls wrap below 396px min-content; keeps 390px viewport overflow-free */
   align-items: center;
   gap: 12px;
-  margin-bottom: 10px;
+  margin-bottom: 0; /* TG3-D G1 (was 10; h3 margin carries the label gap) */
 }
 
 .slot-group-header h3 { margin-bottom: 0; }
@@ -1729,8 +1778,8 @@ button.upgrade-trigger { margin-top: 0; padding: 6px 10px; font-size: 12px; }
 /* --- Slot collapse + add-by-id collapse (t_2ab8f3be doc 4.2) --- */
 .gear-card.is-collapsed { display: none; }
 .slot-items.is-expanded .gear-card.is-collapsed,
-.gear-card.is-collapsed.is-selected { display: block; }
-button.slot-show-all { margin-top: 8px; padding: 8px 12px; font-size: 12px; }
+.gear-card.is-collapsed.is-selected { display: grid; }
+button.slot-show-all { margin-top: 4px; padding: 8px 12px; font-size: 12px; } /* TG3-D G1: 8->4 */
 button.slot-add-toggle { margin-top: 0; padding: 5px 10px; font-size: 11px; }
 
 /* --- Enhancements: search + details sections (t_2ab8f3be doc 4.3) --- */
@@ -2022,6 +2071,10 @@ button.slot-remove-added:hover {
   width: auto;
   height: auto;
   min-width: 0;
+  /* TG3-D: override the stale flex:0 0 32px from .item-select-row (name now
+     lives INSIDE this anchor since t_2ab8f3be; 0-shrink caused the 390px
+     min-content overflow). */
+  flex: 0 1 auto;
   text-indent: 0;
   background: none;
   border: none;
@@ -2032,16 +2085,20 @@ button.slot-remove-added:hover {
 }
 
 .gear-card-info .item-icon-link img {
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 6px;
   border: 1px solid var(--border-hairline);
   background-color: var(--surface-raised);
 }
 
 .gear-card-info .item-icon-link .gear-card-name {
   min-width: 0;
+  /* TG3-D: zero flex-basis so the name contributes 0 min-content to the
+     card/track sizing chain (nowrap text otherwise sets a 427px floor and
+     broke the 390px viewport); grow fills, ellipsis truncates. */
+  flex: 1 1 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2058,3 +2115,27 @@ button.slot-remove-added:hover {
 /* Worker chip: busy is a queue state, not an error (doc 4.1) */
 .status-warn { color: #fde68a; border-color: rgba(251, 191, 36, 0.4); }
 .status-warn .status-dot { background: var(--warn); box-shadow: 0 0 8px rgba(251, 191, 36, 0.7); }
+
+/* --- TG3-D (t_9fdd2c1b) compact gear rows: responsive bookend layer ---
+   Kept last so it beats the slot-collapse display rules above. */
+@media (min-width: 1300px) {
+  /* §3.2: run bar stays a single line on desktop; long aggregate status
+     text shrinks inside its flex slot instead (min-width:0 above). */
+  .run-bar { flex-wrap: nowrap; }
+}
+@media (max-width: 760px) {
+  /* §3.1 narrow fallback: pin the gear grid to the viewport. 1fr tracks
+     fit-content would otherwise inflate to the slot-group header's
+     min-content (~427px) and reproduce the horizontal overflow that
+     overflow:hidden used to mask (t_ab5b5f2e 390px gate). */
+  #gear-grid { grid-template-columns: minmax(0, 1fr); }
+  .slot-group { min-width: 0; }
+  .slot-group-header { flex-wrap: wrap; }
+  .slot-items { grid-template-columns: minmax(0, 1fr); }
+  /* §3.1 flex-wrap fallback: below the grid row's minimum the controls
+     wrap beneath the label instead of overflowing (t_ab5b5f2e 390px rule). */
+  .gear-card,
+  .slot-items.is-expanded .gear-card.is-collapsed,
+  .gear-card.is-collapsed.is-selected { display: flex; flex-wrap: wrap; }
+  .gear-card > .item-select-row { flex: 1 1 100%; }
+}

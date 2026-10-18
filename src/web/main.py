@@ -251,9 +251,15 @@ class WowheadUpgradeInfo(BaseModel):
 
 
 class WowheadUpgradesResponse(BaseModel):
-    """Response from ``/api/wowhead-upgrades``."""
+    """Response from ``/api/wowhead-upgrades``.
+
+    ``two_handed`` lists, per slot, the items whose Wowhead inventorySlot is
+    Two-Hand (TG3-C slot-conflict hint for the client; empty until Wowhead
+    resolved the item).
+    """
     status: str
     gear_upgrades: Dict[str, Dict[str, WowheadUpgradeInfo]]
+    two_handed: Dict[str, List[str]] = {}
     errors: List[str]
 
 
@@ -472,6 +478,9 @@ def _restore_task_owner_maps() -> None:
 task_owner_prune_older_than(time.time() - 86400)
 _restore_task_owner_maps()
 wowhead_upgrade_cache = {}
+# TG3-C: inventorySlot DBC id (17 = two-hand weapon) per item XML URL, cached
+# alongside the upgrade lookup (the same response feeds both parses).
+wowhead_invslot_cache: Dict[str, Optional[int]] = {}
 wowhead_icon_cache: Dict[str, tuple[bytes, str]] = {}
 wowhead_tooltip_script_cache: Optional[bytes] = None
 
@@ -1170,6 +1179,22 @@ def parse_wowhead_upgrade(xml_text: str) -> Optional[Dict[str, Any]]:
     }
 
 
+WOWHEAD_INV_SLOT_TWO_HAND = 17  # Wowhead <inventorySlot id="17">Two-Hand</inventorySlot>
+
+
+def parse_wowhead_inventory_slot(xml_text: str) -> Optional[int]:
+    """InventorySlot DBC id from a Wowhead item XML (17 = two-handed weapon)."""
+    try:
+        root = ElementTree.fromstring(xml_text)
+    except ElementTree.ParseError:
+        return None
+    node = root.find("item/inventorySlot")
+    if node is None:
+        return None
+    raw = node.get("id")
+    return int(raw) if raw and raw.isdigit() else None
+
+
 def parse_wowhead_icon_name(xml_text: str) -> Optional[str]:
     """Extract a safe icon name from a Wowhead item XML response."""
     try:
@@ -1620,7 +1645,59 @@ async def fetch_wowhead_upgrade(item: str) -> Optional[Dict[str, Any]]:
         response.raise_for_status()
     upgrade = parse_wowhead_upgrade(response.text)
     wowhead_upgrade_cache[url] = upgrade
+    wowhead_invslot_cache[url] = parse_wowhead_inventory_slot(response.text)
     return upgrade
+
+
+async def fetch_wowhead_inventory_slot(item: str) -> Optional[int]:
+    """InventorySlot DBC id for a SimC item string (17 = two-handed weapon).
+
+    Same cached Wowhead XML as ``fetch_wowhead_upgrade`` — the upgrade lookup
+    that already runs at gear-load time warms this cache for the same item
+    strings. Fail-soft like the other Wowhead helpers: an error resolves to
+    None (treated as not-two-handed).
+    """
+    url = wowhead_xml_url(item)
+    if not url:
+        return None
+    if url in wowhead_invslot_cache:
+        return wowhead_invslot_cache[url]
+    try:
+        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True, headers={"User-Agent": "simc-helper/1.0"}) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.warning("Wowhead inventory lookup failed for %s: %s", item, exc)
+        return None
+    invslot = parse_wowhead_inventory_slot(response.text)
+    wowhead_invslot_cache[url] = invslot
+    return invslot
+
+
+async def find_two_hand_slot_conflict(items_by_slot: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Detect a two-handed weapon selected alongside an opposite-hand weapon.
+
+    The only mutually-exclusive combination the addon candidate lists actually
+    make reachable (TG3-C; Wowhead's planner models the same exclusivity and
+    auto-removes the off-hand — this app rejects with a message instead).
+    Other reachable pairs are commented in the guard call and NOT handled here
+    on purpose — this is a guard, not a rule engine.
+    """
+    main = [i for i in items_by_slot.get("main_hand") or [] if isinstance(i, str)]
+    off = [i for i in items_by_slot.get("off_hand") or [] if isinstance(i, str)]
+    if not main or not off:
+        return None
+    candidates = list(dict.fromkeys(main + off))
+    invslots = await asyncio.gather(*(fetch_wowhead_inventory_slot(i) for i in candidates))
+    for item, invslot in zip(candidates, invslots):
+        if invslot == WOWHEAD_INV_SLOT_TWO_HAND:
+            two_handed_slot = "main_hand" if item in main else "off_hand"
+            return {
+                "slot": two_handed_slot,
+                "other_slot": "off_hand" if two_handed_slot == "main_hand" else "main_hand",
+                "item": item,
+            }
+    return None
 
 
 @app.get("/api/state", response_model=StateResponse, tags=["System"])
@@ -1839,7 +1916,19 @@ async def get_wowhead_upgrades(payload: WowheadUpgradesRequest):
                 continue
             results.setdefault(slot, {})[item] = upgrade
 
-    return {"status": "success", "gear_upgrades": results, "errors": errors}
+    # TG3-C client hint: which looked-up items are two-handed weapons (the
+    # inventorySlot parse comes for free from the same XML response — cache
+    # read only, never a second fetch).
+    two_handed = {}
+    for slot, items in items_by_slot.items():
+        if not isinstance(items, list):
+            continue
+        hits = [item for item in items if isinstance(item, str)
+                and wowhead_invslot_cache.get(wowhead_xml_url(item) or "") == WOWHEAD_INV_SLOT_TWO_HAND]
+        if hits:
+            two_handed[slot] = hits
+
+    return {"status": "success", "gear_upgrades": results, "two_handed": two_handed, "errors": errors}
 
 @app.post("/api/parse-addon", response_model=ParseAddonResponse, tags=["Addons"])
 async def parse_addon_text(request: Request, payload: ParseAddonRequest, current_user: str = Depends(require_session)):
@@ -1970,6 +2059,8 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
     Applies enchantments, gems, item-level overrides, midnight-track upgrades,
     and voidforge modifiers to build a full set of simc profiles (one per
     gear combination).  Writes the result to ``inputs/<input_id>.simc``.
+    Rejects HTTP 400 when a two-handed weapon is selected together with an
+    off-hand selection (TG3-C slot-conflict guard, before any file write).
     """
     fight_style = payload.fight_style or FIGHT_STYLE_SINGLE_BOSS
     if fight_style not in FIGHT_STYLE_DIRECTIVES:
@@ -2052,6 +2143,29 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
         item_levels = payload.item_levels or {}
         gear_upgrades = payload.gear_upgrades or {}
         voidforged_items = payload.voidforged_items or {}
+
+        # TG3-C slot-conflict guard: reject two-handed weapon + opposite-hand
+        # weapon selection BEFORE any dispatch or file write (live repro on
+        # :8001 showed SimC silently dropping the shield -> Combo with the
+        # baseline's DPS ranked as an "upgrade"). Validated on the raw
+        # selection: the apply_level_override rewrite below changes bonus
+        # ids but never the weapon's slot. Not covered on purpose (guard,
+        # not rule engine): a 2H main_hand candidate against a BASELINE-
+        # equipped off_hand (test spec accepts it: "2H alone" = accepted),
+        # and any pair the candidate lists cannot produce (no ranged slot
+        # in addon_parser.SLOTS).
+        conflict = await find_two_hand_slot_conflict(items_by_slot)
+        if conflict:
+            ident = parse_simc_item_identity(conflict["item"]) or {}
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Slot conflict: item {ident.get('id', '?')} in {conflict['slot']} is a "
+                    f"two-handed weapon and cannot be combined with a {conflict['other_slot']} "
+                    "selection — a two-hander occupies both weapon slots. Deselect one of the "
+                    "two slots."
+                ),
+            )
 
         def apply_level_override(slot, item, baseline=False):
             if not item:
