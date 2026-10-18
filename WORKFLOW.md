@@ -20,7 +20,7 @@ The current release version lives in `pyproject.toml` (`version = ...`). Every P
 
 ## Day-to-day: change → dev
 
-All changes reach `dev` (and `prod`) **only through a GitHub PR merged via `gh`**. Branch protection on both branches rejects direct pushes and force-pushes server-side — there is no local `git merge` into `dev`/`prod` and no `git push origin dev` anymore; don't try, it fails (`GH006: Protected branch update failed`).
+All changes reach `dev` (and `prod`) **only through a GitHub PR merged via `gh`**. A repository ruleset (`pr-only-dev-prod`, update rule on `refs/heads/dev` + `refs/heads/prod`, admins bypass only via pull requests) rejects **every** direct push to these branches — including pushing the exact head sha of an open PR, which legacy protection alone used to silently accept and auto-merge the PR (t_5f7990f2). The legacy PR-required protection stays enabled as a second layer. There is no local `git merge` into `dev`/`prod` and no `git push origin dev` anymore; don't try, it fails (`GH013: Cannot update this protected ref` / `GH006: Protected branch update failed`).
 
 1. `git switch dev && git pull`
 2. `git switch -c feature/t_xxxxx-slug` — **one Kanban task, one branch.** Never commit directly to `dev` or `prod`.
@@ -106,6 +106,6 @@ Rollback: `git checkout <last-good-tag>` in the prod worktree, rebuild, `docker 
 
 ## Quick rules
 
-- Branch from `dev`, open PRs back to `dev` — direct push to `dev`/`prod` is blocked server-side; hotfixes reach prod through a PR too (then cherry-pick back to `dev` through a PR).
+- Branch from `dev`, open PRs back to `dev` — direct push to `dev`/`prod` is blocked server-side for every push class, PR-head shas included (`GH013`/`GH006`); hotfixes reach prod through a PR too (then cherry-pick back to `dev` through a PR).
 - Prod is never used for testing. Dev system data is disposable; prod data is not.
 - Every prod deploy is from a tagged commit; every tag has a version bump in its PR branch.
