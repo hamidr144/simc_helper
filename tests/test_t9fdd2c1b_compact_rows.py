@@ -66,5 +66,9 @@ def test_run_bar_compaction_rules():
 
 def test_group_chrome_gaps_match_contract():
     assert "#gear-grid {\n  display: grid;\n  gap: 12px;" in CSS
-    assert ".slot-group {\n  border-top: 1px solid var(--border-hairline);\n  padding-top: 10px;" in CSS
-    assert "grid-template-columns: 1fr;\n  gap: 8px;" in CSS
+    assert ".slot-group {\n  border-top: 1px solid var(--border-hairline);\n  padding-top: 6px;" in CSS
+    assert "grid-template-columns: 1fr;\n  gap: 0;" in CSS  # TG3-D: pitch 44 (spec row-gap <=8, max density for G1)
+    # footer merge: show-all + extra-socket share one grid line
+    assert ".slot-group > .slot-show-all { grid-column: 1; }" in CSS
+    socket_block = CSS.split(".slot-group .extra-socket-control {", 1)[1].split("}", 1)[0]
+    assert "grid-column: 2;" in socket_block and "justify-self: end;" in socket_block

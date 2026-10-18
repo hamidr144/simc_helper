@@ -609,7 +609,7 @@ button:not(:disabled):active {
 
 .slot-group {
   border-top: 1px solid var(--border-hairline);
-  padding-top: 10px; /* TG3-D §3.1: 16->10 */
+  padding-top: 6px; /* TG3-D G1: 16->10->6 (group pitch budget) */
 }
 
 .slot-group h3,
@@ -619,7 +619,7 @@ button:not(:disabled):active {
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 1px;
-  margin-bottom: 10px;
+  margin-bottom: 2px; /* TG3-D G1: row-pitch budget (was 10) */
 }
 
 /* Gear cards stack one per row at all widths (t_ffc60f47): the old
@@ -627,7 +627,27 @@ button:not(:disabled):active {
 .slot-items {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 8px; /* TG3-D §3.1: row-gap <=8 -> pitch <=52 with the 44px row */
+  gap: 0; /* TG3-D §3.1: row-gap <=8 -> spec max density (pitch 44);
+             contract target pitch <=52 was never the point — the gate is
+             panel <=3200, and 8px gaps made the 43 spec'd rows miss it. */
+}
+
+/* TG3-D §3.1/§3.2: group is a grid so the show-all button and the
+   extra-socket control share one footer line (rearrange, not remove). */
+.slot-group {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 16px;
+}
+.slot-group > .slot-group-header,
+.slot-group > .slot-items,
+.slot-group > .slot-add-form,
+.slot-group > .slot-add-preview { grid-column: 1 / -1; }
+.slot-group > .slot-show-all { grid-column: 1; }
+.slot-group .extra-socket-control {
+  grid-column: 2;
+  justify-self: end;
+  margin-top: 4px; /* TG3-D G1 (was 10) */
 }
 
 .gear-card.is-selected {
@@ -1288,7 +1308,7 @@ button.btn-ghost:not(:disabled):hover {
   flex-wrap: wrap; /* t_ab5b5f2e: controls wrap below 396px min-content; keeps 390px viewport overflow-free */
   align-items: center;
   gap: 12px;
-  margin-bottom: 10px;
+  margin-bottom: 0; /* TG3-D G1 (was 10; h3 margin carries the label gap) */
 }
 
 .slot-group-header h3 { margin-bottom: 0; }
@@ -1759,7 +1779,7 @@ button.upgrade-trigger { margin-top: 0; padding: 6px 10px; font-size: 12px; }
 .gear-card.is-collapsed { display: none; }
 .slot-items.is-expanded .gear-card.is-collapsed,
 .gear-card.is-collapsed.is-selected { display: grid; }
-button.slot-show-all { margin-top: 8px; padding: 8px 12px; font-size: 12px; }
+button.slot-show-all { margin-top: 4px; padding: 8px 12px; font-size: 12px; } /* TG3-D G1: 8->4 */
 button.slot-add-toggle { margin-top: 0; padding: 5px 10px; font-size: 11px; }
 
 /* --- Enhancements: search + details sections (t_2ab8f3be doc 4.3) --- */
