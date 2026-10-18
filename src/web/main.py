@@ -67,9 +67,11 @@ from pydantic import BaseModel, Field
 
 from src.core.addon_parser import (
     FOREVER_EXPORT_MESSAGE,
+    count_embedded_copies,
     forever_export_warnings,
     is_forever_export,
     parse_addon_lines,
+    strip_embedded_copies,
 )
 from src.core import armory as armory_source
 from src.core.armory import (
@@ -267,6 +269,8 @@ class GenerateSimcResponse(BaseModel):
     mode: str = MODE_SINGLE_SWAP
     # Stage-1-only honest lower bound, combinations mode only (design §4.2).
     work_estimate_minutes: Optional[float] = None
+    # TG3-D2: copy= blocks stripped from the caller's base profile.
+    embedded_copies: int = 0
 
 
 class TaskStatusResponse(BaseModel):
@@ -1863,6 +1867,18 @@ async def parse_addon_text(request: Request, payload: ParseAddonRequest, current
     if is_forever_export(lines):
         raise HTTPException(status_code=400, detail=FOREVER_EXPORT_MESSAGE)
     warnings = forever_export_warnings(lines)
+    embedded = count_embedded_copies(lines)
+    if embedded:
+        # TG3-D2: re-uploaded app output carries copy= blocks from the
+        # previous generation; parse_addon_lines now drops them from the
+        # baseline (their gear still lands in the slot groups).
+        warnings = warnings + [
+            f"The uploaded profile carries {embedded} embedded copy "
+            f"block{'' if embedded == 1 else 's'} from a previous generation. "
+            "They are not simulated as-is and do not change your equipped "
+            "baseline; their items are available in the slot choices — "
+            "select the ones you want to compare."
+        ]
     base_profile, equipped_gear, items_by_slot, item_names, char_name, char_class, item_upgrades = parse_addon_lines(lines)
     if char_class == "Unknown":
         # t_0cb6af81 (E2E-9/LIFE-8): every real /simc export starts with a
@@ -2096,7 +2112,12 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
         }
         extra_sockets = payload.extra_sockets or {}
 
-        profile_content = payload.base_profile + "\n"
+        # TG3-D2: copy= blocks carried in the caller's base profile must not
+        # reach the output — SimC would bind the baseline gear block appended
+        # below to the last clone instead of the character (last-actor
+        # semantics), so the real actor simulates gearless.
+        base_profile, embedded_copies = strip_embedded_copies(payload.base_profile)
+        profile_content = base_profile + "\n"
 
         # Fighting-style overrides go after the base profile so they win over
         # any duration/time_to_die the addon export carried, and before the
@@ -2119,11 +2140,18 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
                 items_by_slot, config, equipped_gear, char_name, extra_sockets=extra_sockets)
             # Budget check before any file write: over-cap requests neither
             # create an inputs/ file nor touch generated_inputs_by_user.
-            if count > TG_MAX_COMBINATIONS:
+            # TG3-D2: embedded copies from the uploaded profile count toward
+            # the budget even though strip_embedded_copies drops them from
+            # the dispatch (an over-cap upload needs honest re-selection).
+            if count + embedded_copies > TG_MAX_COMBINATIONS:
+                embedded_part = (
+                    f" + {embedded_copies} embedded copies from the uploaded profile"
+                    if embedded_copies else ""
+                )
                 raise HTTPException(
                     status_code=422,
                     detail=(
-                        f"Combination budget exceeded: {count} combinations "
+                        f"Combination budget exceeded: {count} combinations{embedded_part} "
                         f"(budget {TG_MAX_COMBINATIONS}). Deselect items or enchants, "
                         "or switch back to 'one swap at a time'."
                     ),
@@ -2215,6 +2243,7 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
             "combinations": count,
             "mode": mode,
             "work_estimate_minutes": work_estimate_minutes,
+            "embedded_copies": embedded_copies,
         }
     except HTTPException:
         # Ruling E1: inner HTTPExceptions (e.g. the budget 422) must not be

@@ -1542,6 +1542,10 @@ async function generateInput(quiet = false) {
     status.textContent = data.combinations === 0
       ? 'Ready to run a baseline current-gear report. Select gear changes, gems, or enchants to compare candidates.'
       : `Ready to run ${data.combinations.toLocaleString()} candidate ${data.combinations === 1 ? 'combination' : 'combinations'}.`;
+    if (data.embedded_copies) {
+      // TG3-D2: never let carried copy= blocks disappear silently.
+      status.textContent += ` Removed ${data.embedded_copies} embedded ${data.embedded_copies === 1 ? 'copy' : 'copies'} carried by the uploaded profile (their gear stays selectable).`;
+    }
   } catch (error) {
     generatedInput = null;
     status.textContent = `Could not generate input: ${error.message}`;
