@@ -31,7 +31,13 @@ All changes reach `dev` (and `prod`) **only through a GitHub PR merged via `gh`*
    git push -u origin feature/t_xxxxx-slug
    gh pr create --base dev --title "t_xxxxx: <summary>" --body "<kanban task id, changes, test evidence>"
    ```
-6. Review happens **on the PR**. Reviewer: `gh pr view <pr>` / `gh pr diff <pr>`, then leave findings with `gh pr review <pr> --comment` or `--request-changes` — inline comments (`--file path:line=feedback`) expected. Author addresses **every** comment with follow-up commits pushed to the same branch and replies on the PR (`gh pr comment --reply-to <id>…`), then requests re-review.
+6. Review happens **on the PR**. Reviewer: `gh pr view <pr>` / `gh pr diff <pr>`, then posts findings as a comment-type review — `gh pr review <pr> --repo hamidr144/simc_helper --comment -b "VERDICT: APPROVE|REQUEST-CHANGES — <summary>"` (see the single-account section below: only comment-type reviews go through for this account, and its `VERDICT:` first line carries the verdict). Inline comments go through the API — `gh pr review` has no inline-comment support:
+   ```bash
+   gh api repos/hamidr144/simc_helper/pulls/<pr>/reviews --method POST --input review.json
+   # review.json: {"commit_id":"<head-sha>","event":"COMMENT","body":"<summary>",
+   #   "comments":[{"path":"<file>","line":<N>,"side":"RIGHT","body":"<note>"}]}
+   ```
+   (`line` must fall inside a diff hunk or the whole call 422s.) Author addresses **every** comment with follow-up commits pushed to the same branch and replies on each inline thread (`gh api repos/hamidr144/simc_helper/pulls/<pr>/comments/<comment-id>/replies -f body="…"`), then requests re-review.
 7. **Version bump:** as the last commit before requesting final review, `git fetch origin dev` and bump `pyproject.toml` to the next `X.Y.Z-dev.N` — recompute N from the freshly fetched tip at that moment (another PR may have merged while you worked). Docs-only PR: skip (version-exempt).
 8. Once approved (see single-account rule below), the merging worker merges: `gh pr merge <pr> --merge --delete-branch`.
 9. Tag + deploy: the merging worker tags the merge commit `vX.Y.Z-dev.N` and pushes the tag explicitly. The merge commit exists only on the remote, and `dev` itself needs no push (the merge already updated it; pushing it would hit protection anyway):
@@ -57,7 +63,7 @@ Only the leader opens and merges the `dev → prod` PR:
 ```bash
 # version bump + changelog go in a branch cut from dev (same bump rule as day-to-day), pushed:
 gh pr create --base prod --head milestone/<version> --title "milestone: v<NEW.VERSION>" --body "<milestone summary>"
-# leader merges once approved, then tags the merge commit (same tag mechanics as day-to-day):
+# leader merges once approved (no --delete-branch: the milestone head is a protected long-lived branch — gh would try to delete it), then tags the merge commit (same tag mechanics as day-to-day):
 gh pr merge <pr> --merge
 git fetch origin prod && git tag vX.Y.Z refs/remotes/origin/prod && git push origin vX.Y.Z
 # deploy prod system (see below) and verify /health
