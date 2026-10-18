@@ -765,20 +765,16 @@ button.slot-add-confirm:disabled {
 .results-hero h1 { font-family: var(--font-sans); font-size: clamp(30px, 5vw, 46px); margin: 6px 0; }
 /* Sentence case, body size — the global uppercase p rule made this shout too (D10 pattern). */
 #results-subtitle { font-size: 13px; line-height: 1.5; letter-spacing: normal; text-transform: none; }
-.eyebrow, .result-rank { color: var(--accent-text); font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+.eyebrow { color: var(--accent-text); font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
 .baseline-result { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; }
 .baseline-result span, .baseline-result small { color: var(--text-secondary); }
 .baseline-result strong { font-family: var(--font-sans); font-size: 26px; }
+/* TG3-G gap 1 (t_54bad356): compare-mode chip on the baseline card. */
+.mode-chip { align-self: center; margin-left: auto; padding: 3px 12px; border: 1px solid var(--panel-border); border-radius: 999px; color: var(--text-secondary); font-size: 12px; white-space: nowrap; cursor: help; }
 #result-list { display: grid; gap: 12px; }
-.result-card { display: grid; grid-template-columns: 100px minmax(150px, 1fr) minmax(160px, 1fr) minmax(240px, 2fr); gap: 18px; align-items: center; }
-.best-result { border-color: var(--accent-text); box-shadow: 0 0 0 1px rgba(157, 156, 255, 0.3), 0 12px 30px rgba(74, 73, 200, .15); }
-.result-score strong { display: block; font-family: var(--font-sans); font-size: 28px; }
-.result-score span, .result-changes p { color: var(--text-secondary); font-size: 13px; }
 .result-delta.positive { color: var(--ok); }
 .result-delta.negative { color: var(--danger); }
-.result-changes p { margin: 5px 0 0; }
 .empty-results h2 { font-family: var(--font-sans); }
-@media (max-width: 760px) { .result-card { grid-template-columns: 1fr; gap: 7px; } }
 
 /* ============================================================
    Redesign 2026-10: rail stepper, run bar, progress, polish
@@ -1790,7 +1786,10 @@ button.slot-add-toggle { margin-top: 0; padding: 5px 10px; font-size: 11px; }
 .results-table tr.is-sidegrade td { background: rgba(251, 191, 36, 0.07); }
 .result-err { color: var(--text-muted); font-size: 11px; white-space: nowrap; }
 .sidegrade-badge { display: inline-block; margin-left: 6px; padding: 1px 7px; border: 1px solid var(--border-hairline); border-radius: 999px; color: var(--text-muted); font-size: 10px; white-space: nowrap; }
-.chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+/* TG3-G gap 3 (t_54bad356): DPS and % vs best stay in the DOM (sr-only cell
+   content) but collapse visually — one primary number per row (delta), the
+   demoted values live in the delta cell's tooltip. */
+.results-table .results-secondary { width: 0; padding: 0; border-bottom: none; }
 
 /* --- Icon fallback + run-bar pluralization polish --- */
 .item-icon-link.icon-missing img { display: none; }
