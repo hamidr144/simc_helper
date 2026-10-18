@@ -530,11 +530,15 @@ def test_enhancement_state_chips_on_slot_headers():
     js = client.get("/static/app.js").text
     assert js, "app.js must be served"
 
-    # Chip markup + label strings.
+    # Chip markup + label strings. TG2-F (t_61442157): chips count the UNION
+    # of the selected and equipped sets — worn items are pre-checked in the
+    # step-3 panel without entering the selected sets.
     assert 'class="enh-chip"' in js
     assert "Enchants: ${k} selected" in js
     assert "· worn ${e}" in js
-    assert "`Gems: ${selectedGems.size} selected`" in js
+    assert "new Set([...(selectedEnchants[slot] || []), ...(equippedEnchants[slot] || [])]).size" in js
+    assert "new Set([...selectedGems, ...equippedGems]).size" in js
+    assert "`Gems: ${k} selected`" in js
     assert "'Gems: none'" in js
 
     # Section-open target: stable title stamp on <details> + lookup, the two

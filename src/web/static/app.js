@@ -978,15 +978,19 @@ function wireSlotAddForm(group, slot) {
 // TG2-A (design t_0fbfd0bd §3.1): enhancement state chips on the slot-group
 // header — pure state echo of step-3 selections plus a jump-and-open shortcut.
 // No new state: labels recompute from selectedEnchants/selectedGems live.
+// TG2-F (t_61442157): worn items are pre-checked without entering the selected
+// sets, so the chip counts the UNION with the equipped sets to match the
+// step-3 panel's checked count by construction.
 function enhancementChipLabel(kind, slot) {
   if (kind === 'enchants') {
     if (!(appConfig.enchantments?.[slot] || []).length) return null;
-    const k = selectedEnchants[slot]?.size || 0;
+    const k = new Set([...(selectedEnchants[slot] || []), ...(equippedEnchants[slot] || [])]).size;
     const e = equippedEnchants[slot]?.size || 0;
     return `Enchants: ${k} selected` + (e > 0 && e < k ? ` · worn ${e}` : '');
   }
   if (!(appConfig.gems?.standard || []).length) return null;
-  return selectedGems.size ? `Gems: ${selectedGems.size} selected` : 'Gems: none';
+  const k = new Set([...selectedGems, ...equippedGems]).size;
+  return k ? `Gems: ${k} selected` : 'Gems: none';
 }
 
 function syncEnhancementChips() {
