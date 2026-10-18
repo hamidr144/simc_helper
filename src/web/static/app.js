@@ -1114,7 +1114,7 @@ function renderGear() {
       card.innerHTML = `
         <label class="item-select-row">
           <input type="checkbox" class="item-select-input" ${selectedItems[slot].has(item) ? 'checked' : ''}>
-          <span class="gear-card-info">${createWowheadIconLink(params.id, params.bonus_id, `<span class="item-option-name gear-card-name">${escapeHtml(label.replace(/\s*\(\d+\)/, ''))}</span>`)}${addedItems.has(item) ? '<span class="added-badge">Added</span>' : ''}<span class="gear-card-slot"><span>Item level</span><span class="gear-card-slot-ilvl">${level ? level : '—'}</span></span></span>
+          <span class="gear-card-info">${createWowheadIconLink(params.id, params.bonus_id, `<span class="item-option-name gear-card-name">${escapeHtml(label.replace(/\s*\(\d+\)/, ''))}</span>`)}${addedItems.has(item) ? '<span class="added-badge">Added</span>' : ''}<span class="gear-card-slot"><span>ilvl</span><span class="gear-card-slot-ilvl">${level ? level : '—'}</span></span></span>
         </label>
         ${cardBadges(slot, item)}
         ${upgradePopoverMarkup(slot, item)}
