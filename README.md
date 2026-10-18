@@ -1,3 +1,4 @@
+<!-- GHWR-6 decomposed pilot (t_9c0d6ad0): docs-only comment; opened from the hamidr144 user account to capture identity/baseline evidence. Safe to close. -->
 # Simcraft Helper Suite
 
 *Trigger CI run*
