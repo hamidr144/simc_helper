@@ -6,9 +6,11 @@ Two long-lived branches, two systems, one rule: **nothing reaches `prod` without
 
 | Branch | Deploys to | Version scheme |
 |--------|-----------|----------------|
-| `dev`  | Dev/test system (http://127.0.0.1:8001) — **default branch** | `vMAJOR.MINOR.PATCH-dev.N` (e.g. `v1.2.0-dev.3`), tag each test deploy |
+| `dev`  | Dev/test system (http://127.0.0.1:8001) | `vMAJOR.MINOR.PATCH-dev.N` (e.g. `v1.2.0-dev.3`), tag each test deploy |
 | `prod` | Production system (http://127.0.0.1:8000; external TLS front is host infra, not in this repo) | `vMAJOR.MINOR.PATCH` (e.g. `v1.1.0`), tagged on every merged milestone PR |
 | `feature/<kanban-id>-<slug>` | — (cut from `dev`, short-lived) | — |
+
+`prod` is the repository default branch (stable releases); it is NOT the PR base — always pass `--base dev` explicitly on every `gh pr create`.
 
 `main` is a CI-sandbox island with no role in this flow; it goes away once its CI test-fix is merged into `dev`. After the `v1.0.0` milestone the team moves to trunk-based development (E2): `dev` becomes the trunk, prod becomes a tag + deploy, and the `prod` branch is retired. Until then, keep the two-line flow below.
 
