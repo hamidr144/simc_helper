@@ -366,3 +366,5 @@ The web dashboard follows one comparison workflow:
 
 See [`docs/user_workflow.md`](docs/user_workflow.md) for the detailed user journey, selection
 rules, expected error states, and the acceptance criteria used when testing UI changes.
+
+<!-- PROBE t_530768e0 A5 — do not merge -->
