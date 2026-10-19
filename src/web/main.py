@@ -43,8 +43,8 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             extra={"request_id": request_id},
         )
         return response
-from typing import Any, Dict, List, Optional, Union
-from urllib.parse import urlencode
+from typing import Any, Dict, List, Optional, Set, Union
+from urllib.parse import quote, urlencode
 from xml.etree import ElementTree
 
 import httpx
@@ -67,9 +67,11 @@ from pydantic import BaseModel, Field
 
 from src.core.addon_parser import (
     FOREVER_EXPORT_MESSAGE,
+    count_embedded_copies,
     forever_export_warnings,
     is_forever_export,
     parse_addon_lines,
+    strip_embedded_copies,
 )
 from src.core import armory as armory_source
 from src.core.armory import (
@@ -84,6 +86,10 @@ from src.core.armory import (
 )
 from src.core.circuit_breaker import CircuitBreaker
 from src.core.db import (
+    auth_session_create,
+    auth_session_delete,
+    auth_session_purge_expired,
+    auth_session_user,
     init_db,
     input_set,
     load_inputs,
@@ -94,9 +100,12 @@ from src.core.db import (
     session_cleanup_older_than,
     session_get,
     session_set,
+    task_owner_load,
+    task_owner_meta_json,
+    task_owner_prune_older_than,
+    task_owner_upsert,
     user_create,
     user_get,
-    user_get_by_id,
     user_set_password_hash,
 )
 from src.core.env import get_bind_host, load_cluster_secret, require_admin_token
@@ -107,7 +116,7 @@ from src.core.security import (
     password_needs_rehash,
     verify_password,
 )
-from src.worker import task_status_store
+from src.worker import get_or_create_task_status, task_status_store
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +143,22 @@ FIGHT_STYLE_DIRECTIVES = {
     ),
 }
 
+# TG2 generation modes (design §4.1): ``single_swap`` is the shipped behavior;
+# ``combinations`` emits the cross-slot Top Gear product via
+# ``build_combination_copies``.
+MODE_SINGLE_SWAP = "single_swap"
+MODE_COMBINATIONS = "combinations"
+TG_GENERATION_MODES = (MODE_SINGLE_SWAP, MODE_COMBINATIONS)
+# shortcut: combination budget fixed from env at import; upgrade path =
+# POST /api/settings, ruled out of this epic (TG2-ACCEPT Q1, env-only).
+TG_MAX_COMBINATIONS = int(os.environ.get("SIMC_TG_MAX_COMBINATIONS", "5000"))
+# shortcut: 1 it/s is ~10x pessimistic vs the measured ~9.7 it/s reference
+# worker; recalibrate once the TG2 E2E records real throughput (risk R2).
+TG_WORK_ESTIMATE_ITERS_PER_SEC = float(os.environ.get("SIMC_TG_ITERS_PER_SEC", "1"))
+# shortcut: stage-1 iteration cap for the work estimate; rewired to the
+# SIMC_HELPER_STAGE_PLAN knob in TG2-C (t_590f5317).
+TG_STAGE1_ITERATIONS_CAP = 200
+
 
 class GenerateSimcRequest(BaseModel):
     """Payload for ``/api/generate-simc`` – build a SimulationCraft profile."""
@@ -141,6 +166,7 @@ class GenerateSimcRequest(BaseModel):
     char_name: str
     base_profile: str
     fight_style: Optional[str] = FIGHT_STYLE_SINGLE_BOSS
+    mode: str = MODE_SINGLE_SWAP
     equipped_gear: Dict[str, str]
     selected_items: Dict[str, List[str]]
     selected_enchants: Optional[Dict[str, Any]] = {}
@@ -228,9 +254,15 @@ class WowheadUpgradeInfo(BaseModel):
 
 
 class WowheadUpgradesResponse(BaseModel):
-    """Response from ``/api/wowhead-upgrades``."""
+    """Response from ``/api/wowhead-upgrades``.
+
+    ``two_handed`` lists, per slot, the items whose Wowhead inventorySlot is
+    Two-Hand (TG3-C slot-conflict hint for the client; empty until Wowhead
+    resolved the item).
+    """
     status: str
     gear_upgrades: Dict[str, Dict[str, WowheadUpgradeInfo]]
+    two_handed: Dict[str, List[str]] = {}
     errors: List[str]
 
 
@@ -241,6 +273,11 @@ class GenerateSimcResponse(BaseModel):
     input_id: str
     input_url: str
     combinations: int
+    mode: str = MODE_SINGLE_SWAP
+    # Stage-1-only honest lower bound, combinations mode only (design §4.2).
+    work_estimate_minutes: Optional[float] = None
+    # TG3-D2: copy= blocks stripped from the caller's base profile.
+    embedded_copies: int = 0
 
 
 class TaskStatusResponse(BaseModel):
@@ -269,6 +306,10 @@ class GetResultsResponse(BaseModel):
     status: str
     results: Optional[List[Dict[str, Any]]] = None
     message: Optional[str] = None
+    # TG3-G (t_54bad356): generation mode that produced this run
+    # (``single_swap`` | ``combinations``); None for runs generated before
+    # the mode was recorded or when unavailable (additive, old clients unaffected).
+    mode: Optional[str] = None
 
 
 class WorkerUploadFileResponse(BaseModel):
@@ -393,7 +434,7 @@ os.makedirs(INPUTS_DIR, exist_ok=True)
 from src.core.logging import setup_logging  # noqa: E402
 
 logger = setup_logging("master")
-SIM_COOLDOWN_SECONDS = 300 # 5 minutes
+SIM_COOLDOWN_SECONDS = int(os.environ.get("SIM_COOLDOWN_SECONDS", "300"))  # 5 minutes
 
 # Initialize DB (creates tables if not exist) – must happen before load_sessions/load_inputs
 init_db()
@@ -401,19 +442,54 @@ init_db()
 # In-memory storage (backed by SQLite)
 user_last_sim_time = load_sessions()
 generated_inputs_by_user: dict = load_inputs()
-generated_inputs_by_user["latest"] = None
+# t_2f386596: the global "latest" input used to live inside this map under a
+# magic key that collided with real buckets (the client-controlled user_id
+# cookie fallback when auth is disabled, and legacy user_inputs rows loaded
+# above). SEC-8 (t_ff260cdb) removed the global latest entirely — every
+# reader answers from the caller's own bucket. Drop the legacy rows.
+generated_inputs_by_user.pop("latest", None)
 # t_c968bf8d: task_id -> user_id so worker uploads land in the owner's report
-# directory. Ephemeral by design: uploads for tasks started before a master
-# restart fall back to the "anonymous" bucket (the durable run_history table
-# from t_b3b78acd supersedes this map).
+# directory. LIFE-2 (t_2c718ca6): durable in the sqlite task_owner table —
+# an in-memory-only map lost report attribution when the master restarted
+# mid-run. Hydrated at startup; rows pruned after 24h.
 task_user_map: dict = {}
 # t_b3b78acd: per-user character metadata captured as the user walks the flow
 # (parse-addon / armory-load record the source; generate-simc records the
-# fight style, spec and name). run_simulation snapshots it per task so the
-# SSE done hook can write a run_history row.
+# fight style, spec and name). run_simulation snapshots it per task (also in
+# task_owner.meta) so the done hook can write a complete run_history row.
 run_meta_by_user: Dict[str, Dict[str, Any]] = {}
 task_meta_map: Dict[str, Dict[str, Any]] = {}
+# LIFE-4 (t_5d6903e4): the worker's done payload, kept briefly after the run
+# frees its queue entry so a viewer that opens the stream late (fast run, or a
+# tab that reconnects after the run ended) still gets a terminal event instead
+# of a 404. Pruned on every write.
+task_done_map: Dict[str, Dict[str, Any]] = {}
+TASK_DONE_TTL_SECONDS = 300
+
+
+def _record_task_done(task_id: str, data: Dict[str, Any]) -> None:
+    now = time.time()
+    for stale in [t for t, d in task_done_map.items() if now - d.get("_at", 0) > TASK_DONE_TTL_SECONDS]:
+        task_done_map.pop(stale, None)
+    task_done_map[task_id] = {**data, "_at": now}
+
+
+def _restore_task_owner_maps() -> None:
+    """Hydrate task_user_map / task_meta_map from sqlite (LIFE-2)."""
+    for _tid, _row in task_owner_load().items():
+        task_user_map[_tid] = _row["user_id"]
+        try:
+            task_meta_map[_tid] = json.loads(_row["meta"]) if _row["meta"] else {}
+        except ValueError:
+            task_meta_map[_tid] = {}
+
+
+task_owner_prune_older_than(time.time() - 86400)
+_restore_task_owner_maps()
 wowhead_upgrade_cache = {}
+# TG3-C: inventorySlot DBC id (17 = two-hand weapon) per item XML URL, cached
+# alongside the upgrade lookup (the same response feeds both parses).
+wowhead_invslot_cache: Dict[str, Optional[int]] = {}
 wowhead_icon_cache: Dict[str, tuple[bytes, str]] = {}
 wowhead_tooltip_script_cache: Optional[bytes] = None
 
@@ -481,7 +557,10 @@ class Worker:
 class WorkerManager:
     def __init__(self):
         self.active_workers: Dict[str, Worker] = {}
-        self.task_queues: Dict[str, asyncio.Queue] = {}
+        # LIFE-4 (t_5d6903e4): one subscriber queue per connected SSE viewer;
+        # producers broadcast to all of them, so a disconnect (or a second
+        # tab) can no longer delete or starve another viewer's stream.
+        self.task_queues: Dict[str, Set[asyncio.Queue]] = {}
         self._shutting_down = False
 
     async def connect(self, websocket: WebSocket, name: str):
@@ -501,13 +580,13 @@ class WorkerManager:
 
             # If worker was busy, notify the task queue that it failed
             if worker.current_task and worker.current_task in self.task_queues:
-                queue = self.task_queues[worker.current_task]
-                queue.put_nowait(
-                    {
-                        "type": "error",
-                        "text": f"Worker {worker.name} disconnected abruptly.",
-                    }
-                )
+                for queue in self.task_queues[worker.current_task]:
+                    queue.put_nowait(
+                        {
+                            "type": "error",
+                            "text": f"Worker {worker.name} disconnected abruptly.",
+                        }
+                    )
 
             del self.active_workers[worker_id]
 
@@ -651,7 +730,28 @@ REPORTS_DIR = os.environ.get("REPORTS_DIR") or os.path.join(BASE_DIR, "data", "r
 # Per-user retention cap: the oldest run directories are pruned on insert.
 REPORT_RETENTION = int(os.environ.get("REPORT_RETENTION", "50"))
 os.makedirs(REPORTS_DIR, exist_ok=True)
-app.mount("/reports", StaticFiles(directory=REPORTS_DIR), name="reports")
+class _SessionStaticFiles(StaticFiles):
+    """SEC-5 (t_28df6d81): reports are per-user sim output, so the mount
+    demands the same session the API endpoints demand (require_session is
+    resolved at request time; the AUTHENTICATION_ENABLED kill switch still
+    bypasses it, returning "anonymous").
+
+    TG3-SECFIX (t_71013ac2): session existence alone leaked any user's
+    reports to any logged-in caller who knew the URL. With auth enabled the
+    first path segment (``<user_dir>/...``, as normalized by
+    ``StaticFiles.get_path``) must equal the caller's own report directory —
+    the same rule as ``_task_access_ok``. Non-owners get the mount's own 404,
+    never a 403, so foreign report URLs are indistinguishable from missing
+    ones (no existence oracle)."""
+
+    async def get_response(self, path: str, scope):
+        user_id = require_session(Request(scope))
+        if authentication_enabled() and path.split("/", 1)[0] != _user_report_dir(user_id):
+            raise HTTPException(status_code=404)
+        return await super().get_response(path, scope)
+
+
+app.mount("/reports", _SessionStaticFiles(directory=REPORTS_DIR), name="reports")
 
 # Register middlewares for request ID and structured logging
 app.add_middleware(RequestIDMiddleware)
@@ -707,12 +807,38 @@ def authentication_enabled() -> bool:
     return os.environ.get("AUTHENTICATION_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"}
 
 
+SESSION_TTL_SECONDS = 3600 * 24 * 7  # must match the session cookie max_age
+
+
+def _session_user(request: Request) -> Optional[Dict[str, Any]]:
+    """Resolve the ``session_id`` cookie to its user record, or None.
+
+    SEC-7 (t_0e328148): the cookie is an opaque token issued at
+    login/register and recorded in the ``auth_sessions`` table — the
+    server-side session store. Deleting the row (logout, expiry, account
+    deletion) invalidates the cookie immediately, so a copied cookie dies
+    with its session instead of being valid forever.
+    """
+    token = request.cookies.get("session_id")
+    if not token:
+        return None
+    return auth_session_user(token, time.time())
+
+
+def _issue_session(user_id: str) -> str:
+    """Create an opaque session token (SEC-7) and record it server-side."""
+    token = uuid.uuid4().hex
+    now = time.time()
+    auth_session_purge_expired(now)
+    auth_session_create(token, user_id, now + SESSION_TTL_SECONDS)
+    return token
+
+
 def require_session(request: Request) -> str:
     """FastAPI dependency: require a valid server-side session on an endpoint.
 
-    The ``session_id`` cookie set at login must name an existing user (the
-    ``user_sessions`` table is only a cooldown tracker and is purged
-    regularly, so validity is checked against the ``users`` table).
+    The ``session_id`` cookie must be a token issued at login/register and
+    still present (unexpired) in ``auth_sessions`` (SEC-7).
 
     Security policy (P0 audit F1):
     - ``SIMC_HELPER_DEV_MODE`` must NEVER bypass this gate — dev mode only
@@ -725,26 +851,37 @@ def require_session(request: Request) -> str:
     """
     if not authentication_enabled():
         return "anonymous"
-    session_id = request.cookies.get("session_id")
-    if not session_id:
+    if not request.cookies.get("session_id"):
         raise HTTPException(status_code=401, detail="Authentication required")
-    user = user_get_by_id(session_id)
+    user = _session_user(request)
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
     return user["user_id"]
 
 
-def _page_session_valid(request: Request) -> bool:
-    """True when the request's ``session_id`` cookie names an existing user.
+def _input_bucket(request: Request, current_user: str) -> str:
+    """Key of the caller's generated-input bucket in generated_inputs_by_user.
 
-    Page gates must validate against the ``users`` table, exactly like
-    ``require_session`` does for the API. The ``user_sessions`` table is
-    only sim-cooldown state and is purged every ``SIM_COOLDOWN_SECONDS``
-    (300s) — trusting it for page auth silently logged users out ~5
-    minutes after login (t_ef8682a4).
+    Shared by generate-simc, run-simulation and /api/state so writer and
+    readers cannot disagree (SEC-8 t_ff260cdb). With auth disabled
+    require_session returns "anonymous", so fall back to the legacy
+    client-controlled user_id cookie / client-IP bucket (single-operator mode).
     """
-    session_id = request.cookies.get("session_id")
-    return bool(session_id) and user_get_by_id(session_id) is not None
+    if current_user != "anonymous":
+        return current_user
+    return request.cookies.get("user_id") or f"ip_{request.client.host}"
+
+
+def _page_session_valid(request: Request) -> bool:
+    """True when the request carries a valid server-side session token.
+
+    Page gates use exactly the same rule as ``require_session`` (SEC-7):
+    the opaque token must exist unexpired in ``auth_sessions``. The
+    ``user_sessions`` table is only sim-cooldown state and is purged every
+    ``SIM_COOLDOWN_SECONDS`` (300s) — trusting it for page auth silently
+    logged users out ~5 minutes after login (t_ef8682a4).
+    """
+    return _session_user(request) is not None
 
 
 def _dev_mode_enabled() -> bool:
@@ -789,6 +926,14 @@ def _cluster_secret_ok(header_secret: Optional[str], query_secret: Optional[str]
     if not candidate:
         return False
     return hmac.compare_digest(candidate, CLUSTER_SECRET)
+
+
+def require_session_or_cluster(request: Request) -> str:
+    """SEC-14 (t_28df6d81): gate a resource behind a browser session OR the
+    cluster secret — workers fetch generated inputs without cookies."""
+    if _cluster_secret_ok(request.headers.get("X-Cluster-Secret"), None):
+        return "cluster"
+    return require_session(request)
 
 
 def _require_own_session(user_id: str, current_user: str) -> None:
@@ -865,16 +1010,24 @@ async def history_page(request: Request):
     """Run-history page (t_d34ced81).
 
     Gate note: unlike the older page routes above, the session cookie is
-    validated against the ``users`` table — the same rule as
-    ``require_session`` — because ``session_get`` reads the cooldown table
-    that gets purged, which would bounce logged-in users to /login.
+    validated by the shared session gate (``_page_session_valid``, SEC-7) —
+    the cooldown table gets purged and must not back auth decisions.
     """
     if not authentication_enabled() or "pytest" in sys.modules or os.environ.get("SIMC_HELPER_DEV_MODE") == "1":
         return FileResponse(HISTORY_PAGE)
-    session_id = request.cookies.get("session_id")
-    if session_id and user_get_by_id(session_id) is not None:
+    if _page_session_valid(request):
         return FileResponse(HISTORY_PAGE)
     return RedirectResponse(url="login", status_code=303)
+
+
+def _form_error(request: Request, page: str, status_code: int, detail: str):
+    """t_6f351b30: browser form errors 303 back to the page with the message
+    as ?error= (the page renders it in a styled box) instead of the raw JSON
+    document; API clients that explicitly ask for JSON keep the HTTPException
+    path and status codes."""
+    if "application/json" in request.headers.get("accept", ""):
+        raise HTTPException(status_code=status_code, detail=detail)
+    return RedirectResponse(url=f"{page}?error={quote(detail)}", status_code=303)
 
 
 @app.get("/login")
@@ -901,22 +1054,25 @@ async def register(request: Request, username: str = Form(...), password: str = 
         raise HTTPException(status_code=403, detail="User authentication is disabled")
     ip = client_ip(request)
     if _registrations.is_limited(ip):
-        raise HTTPException(
-            status_code=429,
-            detail=f"Too many registrations; retry in {_registrations.retry_after(ip)}s",
+        return _form_error(
+            request,
+            "register",
+            429,
+            f"Too many registrations; retry in {_registrations.retry_after(ip)}s",
         )
     _registrations.record(ip)
     if user_get(username):
-        raise HTTPException(status_code=400, detail="Username already exists")
+        return _form_error(request, "register", 400, "Username already exists")
 
     password_hash = hash_password(password)
     user_id = user_create(username, password_hash)
+    token = _issue_session(user_id)
     # Browser flow (t_e4d97db9): land on /dashboard logged in, exactly like
     # a successful /login, instead of dumping raw JSON on the user.
     redirect_resp = RedirectResponse(url="dashboard", status_code=303)
     redirect_resp.set_cookie(
         key="session_id",
-        value=user_id,
+        value=token,
         httponly=True,
         max_age=3600 * 24 * 7,
         samesite="lax",
@@ -931,14 +1087,16 @@ async def login(request: Request, response: Response, username: str = Form(...),
         raise HTTPException(status_code=403, detail="User authentication is disabled")
     ip = client_ip(request)
     if _login_failures.is_limited(ip):
-        raise HTTPException(
-            status_code=429,
-            detail=f"Too many failed login attempts; retry in {_login_failures.retry_after(ip)}s",
+        return _form_error(
+            request,
+            "login",
+            429,
+            f"Too many failed login attempts; retry in {_login_failures.retry_after(ip)}s",
         )
     user = user_get(username)
     if not user or not verify_password(password, user["password_hash"]):
         _login_failures.record(ip)
-        raise HTTPException(status_code=401, detail="Invalid username or password")
+        return _form_error(request, "login", 401, "Invalid username or password")
 
     # Transparent upgrade of legacy unsalted SHA-256 hashes to salted PBKDF2.
     if password_needs_rehash(user["password_hash"]):
@@ -950,10 +1108,11 @@ async def login(request: Request, response: Response, username: str = Form(...),
     # made every run started within the cooldown window after login return a
     # bogus 429 for users who had never run a simulation.
 
+    token = _issue_session(user["user_id"])
     redirect_resp = RedirectResponse(url="dashboard", status_code=303)
     redirect_resp.set_cookie(
         key="session_id", 
-        value=user["user_id"], 
+        value=token, 
         httponly=True, 
         max_age=3600 * 24 * 7, 
         samesite="lax",
@@ -963,7 +1122,12 @@ async def login(request: Request, response: Response, username: str = Form(...),
 
 
 @app.get("/logout")
-async def logout():
+async def logout(request: Request):
+    # SEC-7 (t_0e328148): revoke the session server-side, not just the
+    # browser copy of the cookie — a captured cookie must die with logout.
+    token = request.cookies.get("session_id")
+    if token:
+        auth_session_delete(token)
     redirect_resp = RedirectResponse(url="./", status_code=303)
     redirect_resp.delete_cookie("session_id")
     return redirect_resp
@@ -1032,6 +1196,22 @@ def parse_wowhead_upgrade(xml_text: str) -> Optional[Dict[str, Any]]:
         "rank": int(match.group(2)),
         "item_level": int(item_level) if item_level and item_level.isdigit() else None,
     }
+
+
+WOWHEAD_INV_SLOT_TWO_HAND = 17  # Wowhead <inventorySlot id="17">Two-Hand</inventorySlot>
+
+
+def parse_wowhead_inventory_slot(xml_text: str) -> Optional[int]:
+    """InventorySlot DBC id from a Wowhead item XML (17 = two-handed weapon)."""
+    try:
+        root = ElementTree.fromstring(xml_text)
+    except ElementTree.ParseError:
+        return None
+    node = root.find("item/inventorySlot")
+    if node is None:
+        return None
+    raw = node.get("id")
+    return int(raw) if raw and raw.isdigit() else None
 
 
 def parse_wowhead_icon_name(xml_text: str) -> Optional[str]:
@@ -1484,11 +1664,63 @@ async def fetch_wowhead_upgrade(item: str) -> Optional[Dict[str, Any]]:
         response.raise_for_status()
     upgrade = parse_wowhead_upgrade(response.text)
     wowhead_upgrade_cache[url] = upgrade
+    wowhead_invslot_cache[url] = parse_wowhead_inventory_slot(response.text)
     return upgrade
 
 
+async def fetch_wowhead_inventory_slot(item: str) -> Optional[int]:
+    """InventorySlot DBC id for a SimC item string (17 = two-handed weapon).
+
+    Same cached Wowhead XML as ``fetch_wowhead_upgrade`` — the upgrade lookup
+    that already runs at gear-load time warms this cache for the same item
+    strings. Fail-soft like the other Wowhead helpers: an error resolves to
+    None (treated as not-two-handed).
+    """
+    url = wowhead_xml_url(item)
+    if not url:
+        return None
+    if url in wowhead_invslot_cache:
+        return wowhead_invslot_cache[url]
+    try:
+        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True, headers={"User-Agent": "simc-helper/1.0"}) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.warning("Wowhead inventory lookup failed for %s: %s", item, exc)
+        return None
+    invslot = parse_wowhead_inventory_slot(response.text)
+    wowhead_invslot_cache[url] = invslot
+    return invslot
+
+
+async def find_two_hand_slot_conflict(items_by_slot: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Detect a two-handed weapon selected alongside an opposite-hand weapon.
+
+    The only mutually-exclusive combination the addon candidate lists actually
+    make reachable (TG3-C; Wowhead's planner models the same exclusivity and
+    auto-removes the off-hand — this app rejects with a message instead).
+    Other reachable pairs are commented in the guard call and NOT handled here
+    on purpose — this is a guard, not a rule engine.
+    """
+    main = [i for i in items_by_slot.get("main_hand") or [] if isinstance(i, str)]
+    off = [i for i in items_by_slot.get("off_hand") or [] if isinstance(i, str)]
+    if not main or not off:
+        return None
+    candidates = list(dict.fromkeys(main + off))
+    invslots = await asyncio.gather(*(fetch_wowhead_inventory_slot(i) for i in candidates))
+    for item, invslot in zip(candidates, invslots):
+        if invslot == WOWHEAD_INV_SLOT_TWO_HAND:
+            two_handed_slot = "main_hand" if item in main else "off_hand"
+            return {
+                "slot": two_handed_slot,
+                "other_slot": "off_hand" if two_handed_slot == "main_hand" else "main_hand",
+                "item": item,
+            }
+    return None
+
+
 @app.get("/api/state", response_model=StateResponse, tags=["System"])
-async def get_api_state(_: str = Depends(require_session)):
+async def get_api_state(request: Request, user_id: str = Depends(require_session)):
     """Retrieve the current system state – active input and connected workers.
 
     **Tags:** System
@@ -1497,10 +1729,14 @@ async def get_api_state(_: str = Depends(require_session)):
     Audit LOW-1: worker names/ids are internal topology, so this endpoint
     now requires a logged-in session (the dashboard sends its session cookie
     automatically).
+
+    SEC-8 (t_ff260cdb): active_input is the caller's own latest generated
+    input (or null) — never another user's global "latest".
     """
+    record = generated_inputs_by_user.get(_input_bucket(request, user_id))
     return {
         "status": "ready",
-        "active_input": generated_inputs_by_user.get("latest", {}).get("input_id") if generated_inputs_by_user.get("latest") else None,
+        "active_input": record.get("input_id") if record else None,
         "workers": [
             {"id": w.id, "name": w.name, "status": w.status}
             for w in manager.active_workers.values()
@@ -1594,7 +1830,7 @@ async def health_check(request: Request):
 
 
 @app.get("/api/task-status", response_model=Union[TaskStatusResponse, TaskListResponse], tags=["Tasks"])
-async def get_task_status(task_id: Optional[str] = None):
+async def get_task_status(task_id: Optional[str] = None, user_id: str = Depends(require_session)):
     """Get task status for a specific task or list all tasks.
 
     **Tags:** Tasks
@@ -1603,16 +1839,27 @@ async def get_task_status(task_id: Optional[str] = None):
 
     **Response:** Returns a ``TaskStatusResponse`` for a single task or a
     ``TaskListResponse`` when listing all tasks.
+
+    Ownership (SEC-2 residual t_1e5e7fb4): only the caller's own tasks are
+    visible; another user's task_id answers with the same ``not_found`` shape
+    as a nonexistent id (no existence oracle). Tasks with no resolvable owner
+    row (update-simc tasks, attribution lost before LIFE-2) stay visible to
+    every logged-in user — the documented pass-through bucket shared with
+    ``_task_access_ok`` across the ownership family. With
+    AUTHENTICATION_ENABLED=false the kill switch makes everything visible
+    (single-operator mode).
     """
     if task_id:
         status = task_status_store.get(task_id)
-        if not status:
+        if not status or not _task_access_ok(task_id, user_id):
             return {"status": "not_found", "task_id": task_id}
         return {"status": "ok", "task_id": task_id, "task": status.to_dict()}
+    visible = {tid: s for tid, s in task_status_store.items()
+               if _task_access_ok(tid, user_id)}
     return {
         "status": "ok",
-        "tasks": {tid: s.to_dict() for tid, s in task_status_store.items()},
-        "total": len(task_status_store),
+        "tasks": {tid: s.to_dict() for tid, s in visible.items()},
+        "total": len(visible),
     }
 
 @app.get("/api/upgrade-data", tags=["Gear"])
@@ -1688,7 +1935,19 @@ async def get_wowhead_upgrades(payload: WowheadUpgradesRequest):
                 continue
             results.setdefault(slot, {})[item] = upgrade
 
-    return {"status": "success", "gear_upgrades": results, "errors": errors}
+    # TG3-C client hint: which looked-up items are two-handed weapons (the
+    # inventorySlot parse comes for free from the same XML response — cache
+    # read only, never a second fetch).
+    two_handed = {}
+    for slot, items in items_by_slot.items():
+        if not isinstance(items, list):
+            continue
+        hits = [item for item in items if isinstance(item, str)
+                and wowhead_invslot_cache.get(wowhead_xml_url(item) or "") == WOWHEAD_INV_SLOT_TWO_HAND]
+        if hits:
+            two_handed[slot] = hits
+
+    return {"status": "success", "gear_upgrades": results, "two_handed": two_handed, "errors": errors}
 
 @app.post("/api/parse-addon", response_model=ParseAddonResponse, tags=["Addons"])
 async def parse_addon_text(request: Request, payload: ParseAddonRequest, current_user: str = Depends(require_session)):
@@ -1705,12 +1964,37 @@ async def parse_addon_text(request: Request, payload: ParseAddonRequest, current
     item strings as ``item_names``); it is empty for exports without it.
     ``warnings`` carries soft WoW: Forever signals that do not block parsing.
     Exports with explicit WoW: Forever markers are rejected with HTTP 400.
+    Text without a class line (not a SimC export at all) is rejected with
+    HTTP 400 "No valid SimC export found".
     """
     lines = payload.addon_text.split('\n')
     if is_forever_export(lines):
         raise HTTPException(status_code=400, detail=FOREVER_EXPORT_MESSAGE)
     warnings = forever_export_warnings(lines)
+    embedded = count_embedded_copies(lines)
+    if embedded:
+        # TG3-D2: re-uploaded app output carries copy= blocks from the
+        # previous generation; parse_addon_lines now drops them from the
+        # baseline (their gear still lands in the slot groups).
+        warnings = warnings + [
+            f"The uploaded profile carries {embedded} embedded copy "
+            f"block{'' if embedded == 1 else 's'} from a previous generation. "
+            "They are not simulated as-is and do not change your equipped "
+            "baseline; their items are available in the slot choices — "
+            "select the ones you want to compare."
+        ]
     base_profile, equipped_gear, items_by_slot, item_names, char_name, char_class, item_upgrades = parse_addon_lines(lines)
+    if char_class == "Unknown":
+        # t_0cb6af81 (E2E-9/LIFE-8): every real /simc export starts with a
+        # class line; without one the parse is an Unknown/Unknown dead end.
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No valid SimC export found. Paste the full text from the "
+                'in-game /simc export window (it starts with a line like '
+                'paladin="Name").'
+            ),
+        )
     # t_b3b78acd: remember where this user's character came from so the
     # eventual run_history row can say "addon".
     run_meta_by_user.setdefault(_resolved_user_id(request, current_user), {}).update(
@@ -1806,12 +2090,22 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
     Applies enchantments, gems, item-level overrides, midnight-track upgrades,
     and voidforge modifiers to build a full set of simc profiles (one per
     gear combination).  Writes the result to ``inputs/<input_id>.simc``.
+    Rejects HTTP 400 when a two-handed weapon is selected together with an
+    off-hand selection (TG3-C slot-conflict guard, before any file write).
     """
     fight_style = payload.fight_style or FIGHT_STYLE_SINGLE_BOSS
     if fight_style not in FIGHT_STYLE_DIRECTIVES:
         raise HTTPException(
             status_code=422,
             detail=f"Unknown fight_style '{fight_style}'; expected one of {sorted(FIGHT_STYLE_DIRECTIVES)}",
+        )
+    # Ruling E1: mode validation lives OUTSIDE the broad try below (its
+    # HTTPException would otherwise be flattened into a 500).
+    mode = payload.mode
+    if mode not in TG_GENERATION_MODES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown mode '{mode}'; expected one of {list(TG_GENERATION_MODES)}",
         )
     # t_b3b78acd: snapshot what this run is about for the run_history row.
     # ``source`` keeps whatever the load step recorded (addon/armory); plain
@@ -1823,6 +2117,9 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
         {
             "fighting_style": fight_style,
             "char_name": payload.char_name,
+            # TG3-G (t_54bad356): freeze the compare mode so /api/get-results
+            # can state which mode produced the run (audit gap 4.2).
+            "mode": mode,
             "spec": _extract_spec(payload.base_profile) or _gen_meta.get("spec"),
         }
     )
@@ -1831,6 +2128,9 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
         from src.cli.generate_input import (
             apply_gear_upgrade,
             apply_item_level,
+            build_combination_copies,
+            canonical_item,
+            count_combination_copies,
             generate_variations,
             load_config,
         )
@@ -1879,6 +2179,29 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
         gear_upgrades = payload.gear_upgrades or {}
         voidforged_items = payload.voidforged_items or {}
 
+        # TG3-C slot-conflict guard: reject two-handed weapon + opposite-hand
+        # weapon selection BEFORE any dispatch or file write (live repro on
+        # :8001 showed SimC silently dropping the shield -> Combo with the
+        # baseline's DPS ranked as an "upgrade"). Validated on the raw
+        # selection: the apply_level_override rewrite below changes bonus
+        # ids but never the weapon's slot. Not covered on purpose (guard,
+        # not rule engine): a 2H main_hand candidate against a BASELINE-
+        # equipped off_hand (test spec accepts it: "2H alone" = accepted),
+        # and any pair the candidate lists cannot produce (no ranged slot
+        # in addon_parser.SLOTS).
+        conflict = await find_two_hand_slot_conflict(items_by_slot)
+        if conflict:
+            ident = parse_simc_item_identity(conflict["item"]) or {}
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Slot conflict: item {ident.get('id', '?')} in {conflict['slot']} is a "
+                    f"two-handed weapon and cannot be combined with a {conflict['other_slot']} "
+                    "selection — a two-hander occupies both weapon slots. Deselect one of the "
+                    "two slots."
+                ),
+            )
+
         def apply_level_override(slot, item, baseline=False):
             if not item:
                 return item
@@ -1922,7 +2245,12 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
         }
         extra_sockets = payload.extra_sockets or {}
 
-        profile_content = payload.base_profile + "\n"
+        # TG3-D2: copy= blocks carried in the caller's base profile must not
+        # reach the output — SimC would bind the baseline gear block appended
+        # below to the last clone instead of the character (last-actor
+        # semantics), so the real actor simulates gearless.
+        base_profile, embedded_copies = strip_embedded_copies(payload.base_profile)
+        profile_content = base_profile + "\n"
 
         # Fighting-style overrides go after the base profile so they win over
         # any duration/time_to_die the addon export carried, and before the
@@ -1938,65 +2266,92 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
 
         profile_content += "\n"
         count = 0
+        work_estimate_minutes = None
 
-        def canonical_item(item: str) -> str:
-            """Normalize SimC item fields so equivalent profiles compare equally."""
-            fields = [field.strip() for field in str(item or "").lstrip(",").split(",") if field.strip()]
-            return ",".join(sorted(fields))
+        if mode == MODE_COMBINATIONS:
+            # TG3-I (t_acfe75a9): budget check on the cheap pre-dedup product
+            # BEFORE any copy block is materialized — building the full list to
+            # count it OOM-killed the master on over-cap products before 422
+            # could fire. The built (deduped) count is always <= this product,
+            # so passing this gate makes the post-build dispatch budget-safe
+            # without a second check.
+            # TG3-D2: embedded copies from the uploaded profile count toward
+            # the budget even though strip_embedded_copies drops them from the
+            # dispatch (an over-cap upload needs honest re-selection).
+            count = count_combination_copies(
+                items_by_slot, config, equipped_gear, extra_sockets=extra_sockets)
+            if count + embedded_copies > TG_MAX_COMBINATIONS:
+                embedded_part = (
+                    f" + {embedded_copies} embedded copies from the uploaded profile"
+                    if embedded_copies else ""
+                )
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"Combination budget exceeded: {count} combinations{embedded_part} "
+                        f"(budget {TG_MAX_COMBINATIONS}). Deselect items or enchants, "
+                        "or switch back to 'one swap at a time'."
+                    ),
+                )
+            copy_blocks, count = build_combination_copies(
+                items_by_slot, config, equipped_gear, char_name, extra_sockets=extra_sockets)
+            work_estimate_minutes = round(
+                count * TG_STAGE1_ITERATIONS_CAP / TG_WORK_ESTIMATE_ITERS_PER_SEC / 60, 1)
+            profile_content += "".join(copy_blocks)
+        else:
+            def profile_signature(override_slot: Optional[str] = None, override_item: Optional[str] = None):
+                """Return a stable identity for the baseline or one single-slot override."""
+                profile = {
+                    slot: canonical_item(item)
+                    for slot, item in equipped_gear.items()
+                    if item
+                }
+                if override_slot and override_item:
+                    profile[override_slot] = canonical_item(override_item)
+                return tuple(sorted(profile.items()))
 
-        def profile_signature(override_slot: Optional[str] = None, override_item: Optional[str] = None):
-            """Return a stable identity for the baseline or one single-slot override."""
-            profile = {
-                slot: canonical_item(item)
-                for slot, item in equipped_gear.items()
-                if item
-            }
-            if override_slot and override_item:
-                profile[override_slot] = canonical_item(override_item)
-            return tuple(sorted(profile.items()))
+            def is_equipped_variation(slot: str, variation: str) -> bool:
+                if slot == "finger":
+                    equipped = [equipped_gear.get("finger1"), equipped_gear.get("finger2")]
+                elif slot == "trinket":
+                    equipped = [equipped_gear.get("trinket1"), equipped_gear.get("trinket2")]
+                else:
+                    equipped = [equipped_gear.get(slot)]
+                return canonical_item(variation) in {canonical_item(item) for item in equipped if item}
 
-        def is_equipped_variation(slot: str, variation: str) -> bool:
-            if slot == "finger":
-                equipped = [equipped_gear.get("finger1"), equipped_gear.get("finger2")]
-            elif slot == "trinket":
-                equipped = [equipped_gear.get("trinket1"), equipped_gear.get("trinket2")]
-            else:
-                equipped = [equipped_gear.get(slot)]
-            return canonical_item(variation) in {canonical_item(item) for item in equipped if item}
+            all_slots = set(items_by_slot.keys()) | set(config["enchantments"].keys())
+            if payload.selected_gems:
+                gem_slots = {slot for slot, items in items_by_slot.items() if any("gem_id=" in item for item in items)}
+                gem_slots |= {slot for slot, enabled in extra_sockets.items() if enabled}
+                all_slots |= gem_slots
 
-        all_slots = set(items_by_slot.keys()) | set(config["enchantments"].keys())
-        if payload.selected_gems:
-            gem_slots = {slot for slot, items in items_by_slot.items() if any("gem_id=" in item for item in items)}
-            gem_slots |= {slot for slot, enabled in extra_sockets.items() if enabled}
-            all_slots |= gem_slots
+            seen_profiles = {profile_signature()}
+            for slot in sorted(all_slots):
+                equipped_key = "finger1" if slot == "finger" else "trinket1" if slot == "trinket" else slot
+                item_list = items_by_slot.get(slot)
 
-        seen_profiles = {profile_signature()}
-        for slot in sorted(all_slots):
-            equipped_key = "finger1" if slot == "finger" else "trinket1" if slot == "trinket" else slot
-            item_list = items_by_slot.get(slot)
+                if not item_list:
+                    if slot == "finger": item_list = [equipped_gear.get("finger1"), equipped_gear.get("finger2")]
+                    elif slot == "trinket": item_list = [equipped_gear.get("trinket1"), equipped_gear.get("trinket2")]
+                    else: item_list = [equipped_gear.get(slot)]
 
-            if not item_list:
-                if slot == "finger": item_list = [equipped_gear.get("finger1"), equipped_gear.get("finger2")]
-                elif slot == "trinket": item_list = [equipped_gear.get("trinket1"), equipped_gear.get("trinket2")]
-                else: item_list = [equipped_gear.get(slot)]
+                item_list = [it for it in item_list if it]
+                if not item_list: continue
 
-            item_list = [it for it in item_list if it]
-            if not item_list: continue
-
-            variations = generate_variations(item_list, slot, config, extra_sockets=extra_sockets)
-            for var in variations:
-                # The base actor already represents equipped gear. Do not create
-                # fake candidates that simply reapply an unchanged slot.
-                if is_equipped_variation(slot, var):
-                    continue
-                signature = profile_signature(equipped_key, var)
-                if signature in seen_profiles:
-                    continue
-                seen_profiles.add(signature)
-                if var.startswith("id=") or var.startswith("bonus_id="):
-                    var = "," + var
-                profile_content += f'copy="{char_name}_{slot}_{count},{char_name}"\n{equipped_key}={var}\n\n'
-                count += 1
+                variations = generate_variations(item_list, slot, config, extra_sockets=extra_sockets)
+                for var in variations:
+                    # The base actor already represents equipped gear. Do not create
+                    # fake candidates that simply reapply an unchanged slot.
+                    if is_equipped_variation(slot, var):
+                        continue
+                    signature = profile_signature(equipped_key, var)
+                    if signature in seen_profiles:
+                        continue
+                    seen_profiles.add(signature)
+                    if var.startswith("id=") or var.startswith("bonus_id="):
+                        var = "," + var
+                    profile_content += f'copy="{char_name}_{slot}_{count},{char_name}"\n{equipped_key}={var}\n\n'
+                    count += 1
 
         input_id = str(uuid.uuid4())[:12]
         file_path = os.path.join(INPUTS_DIR, f"{input_id}.simc")
@@ -2007,18 +2362,32 @@ async def generate_simc(request: Request, payload: GenerateSimcRequest, current_
         with open("char_simc_addon.txt", "w", encoding="utf-8") as f:
             f.write(profile_content)
 
-        user_id = current_user if current_user != "anonymous" else (request.cookies.get("user_id") or f"ip_{request.client.host}")
+        user_id = _input_bucket(request, current_user)
         record = {"input_id": input_id, "file_path": file_path, "input_url": f"/inputs/{input_id}.simc"}
+        # t_2f386596: no global "latest" key in the per-user map and no fake
+        # "latest" user_id row — SEC-8 (t_ff260cdb) removed the global latest
+        # variable entirely.
         generated_inputs_by_user[user_id] = record
-        generated_inputs_by_user["latest"] = record
         input_set(user_id, record)
-        input_set("latest", record)
 
         # The base actor is always a valid current-gear simulation, even if no
         # alternate item profiles were generated. Report the true candidate
         # count (0 allowed) so the UI can label a baseline-only run honestly
         # and sim_helper can take its baseline path (t_4485565b).
-        return {"status": "success", "file_path": file_path, "input_id": input_id, "input_url": record["input_url"], "combinations": count}
+        return {
+            "status": "success",
+            "file_path": file_path,
+            "input_id": input_id,
+            "input_url": record["input_url"],
+            "combinations": count,
+            "mode": mode,
+            "work_estimate_minutes": work_estimate_minutes,
+            "embedded_copies": embedded_copies,
+        }
+    except HTTPException:
+        # Ruling E1: inner HTTPExceptions (e.g. the budget 422) must not be
+        # flattened into 500s by the broad handler below.
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -2035,12 +2404,12 @@ async def update_simc(request: Request, _: str = Depends(require_session)):
     worker_id = manager.get_idle_worker()
     if not worker_id: raise HTTPException(status_code=503, detail="No idle workers")
     task_id = "upd-" + str(uuid.uuid4())[:8]
-    manager.task_queues[task_id] = asyncio.Queue()
+    manager.task_queues[task_id] = set()
     await manager.send_task(worker_id, {"type": "update", "task_id": task_id})
     return {"status": "success", "task_id": task_id}
 
 @app.get("/api/update-simc/stream/{task_id}", tags=["Admin"])
-async def stream_update_simc(task_id: str):
+async def stream_update_simc(task_id: str, user_id: str = Depends(require_session)):
     """Stream Server-Sent Events for the ``/api/update-simc`` task identified by *task_id*.
 
     **Tags:** Admin
@@ -2048,22 +2417,38 @@ async def stream_update_simc(task_id: str):
     """
     if task_id not in manager.task_queues:
         raise HTTPException(status_code=404, detail="Task not found")
+    # t_2f386596 (LIFE-4 scope add): same ownership gate as the sim stream.
+    # shortcut: update tasks carry no owner record (recording one would make
+    # the done handler write a run_history row for an engine update), so this
+    # passes until update tasks get attribution; ids are unguessable and the
+    # log holds no user data.
+    if not _task_access_ok(task_id, user_id):
+        raise HTTPException(status_code=404, detail="Task not found")
 
     async def update_event_generator():
-        queue = manager.task_queues[task_id]
-        while True:
-            try:
-                data = await asyncio.wait_for(queue.get(), timeout=5.0)
-                if data["type"] == "log":
-                    yield f"data: {json.dumps({'type': 'log', 'text': data['text']})}\n\n"
-                elif data["type"] == "done":
-                    yield f"data: {json.dumps({'type': 'exit', 'code': data['code']})}\n\n"
+        # LIFE-4 (t_5d6903e4): per-viewer subscriber queue; a disconnect only
+        # removes its own subscription. The task entry is freed by the
+        # worker-WS done handler.
+        # shortcut: worker dying mid-update without done leaks the entry
+        # until master restart; upgrade with a TTL sweeper if it shows up.
+        queue: asyncio.Queue = asyncio.Queue()
+        manager.task_queues.setdefault(task_id, set()).add(queue)
+        try:
+            while True:
+                try:
+                    data = await asyncio.wait_for(queue.get(), timeout=5.0)
+                    if data["type"] == "log":
+                        yield f"data: {json.dumps({'type': 'log', 'text': data['text']})}\n\n"
+                    elif data["type"] == "done":
+                        yield f"data: {json.dumps({'type': 'exit', 'code': data['code']})}\n\n"
+                        break
+                except asyncio.TimeoutError:
+                    yield ": keep-alive\n\n"
+                except Exception:
                     break
-            except asyncio.TimeoutError:
-                yield ": keep-alive\n\n"
-            except Exception:
-                break
-        if task_id in manager.task_queues: del manager.task_queues[task_id]
+        finally:
+            subs = manager.task_queues.get(task_id)
+            if subs is not None: subs.discard(queue)
 
     return StreamingResponse(update_event_generator(), media_type="text/event-stream")
 
@@ -2096,9 +2481,38 @@ async def shutdown(request: Request):
     os.kill(os.getpid(), signal.SIGTERM)
     return {"status": "shutting down"}
 
-async def simulation_event_generator(task_id: str, worker_id: str):
+def _done_event(task_id: str, data: Dict[str, Any]) -> str:
+    # LIFE-2 (t_2c718ca6): the run_history row is written by the worker-WS
+    # done handler — this generator only exists while a browser is watching
+    # the stream, so hooking here lost the row when the master restarted
+    # mid-run. t_a0bb3a07 (LIFE-1): a user Stop is reported as stopped, not
+    # as a failed simulation.
+    if data.get("stopped"):
+        payload = {"type": "error", "text": "Simulation stopped."}
+    elif data.get("code") == 0:
+        payload = {"type": "done", "text": "Simulation finished successfully!", "report_file": data.get("report_file"), "task_id": task_id}
+    else:
+        err = data.get("error") or "the SimC process exited with a non-zero code — see the log above"
+        payload = {"type": "error", "text": f"Simulation failed: {err}"}
+    return f"data: {json.dumps(payload)}\n\n"
+
+
+async def simulation_event_generator(task_id: str, worker_id: str, queue: Optional[asyncio.Queue] = None):
+    # LIFE-4 (t_5d6903e4): one subscriber queue per connected viewer; a
+    # disconnect removes only its own subscription. The task entry is freed
+    # by the worker-WS done handler (the run completes with or without
+    # viewers); this generator pops it only when the worker is already gone,
+    # so no done can arrive. task_meta_map stays until _record_run_history
+    # consumes it — popping it here lost the history row's metadata on
+    # refresh.
+    if task_id not in manager.task_queues and task_id in task_done_map:
+        # Viewer joined after the run ended (fast run, or reconnect after a
+        # refresh): replay the buffered terminal event instead of hanging.
+        yield _done_event(task_id, task_done_map[task_id])
+        return
+    if queue is None: queue = asyncio.Queue()
+    manager.task_queues.setdefault(task_id, set()).add(queue)
     try:
-        queue = manager.task_queues[task_id]
         while True:
             try:
                 data = await asyncio.wait_for(queue.get(), timeout=5.0)
@@ -2109,25 +2523,28 @@ async def simulation_event_generator(task_id: str, worker_id: str):
                 elif data["type"] == "task_status_update":
                     yield f"data: {json.dumps({'type': 'task_status_update', 'task_id': data['task_id'], 'status': data['status']})}\n\n"
                 elif data["type"] == "done":
-                    # t_b3b78acd: durable results-history row at the task-done
-                    # point (best-effort; never breaks the stream).
-                    _record_run_history(task_id, "success" if data["code"] == 0 else "failed")
-                    if data["code"] == 0:
-                        yield f"data: {json.dumps({'type': 'done', 'text': 'Simulation finished successfully!', 'report_file': data.get('report_file'), 'task_id': task_id})}\n\n"
-                    else:
-                        err = data.get("error") or "the SimC process exited with a non-zero code — see the log above"
-                        yield f"data: {json.dumps({'type': 'error', 'text': f'Simulation failed: {err}'})}\n\n"
+                    yield _done_event(task_id, data)
                     break
             except asyncio.TimeoutError:
-                if worker_id not in manager.active_workers:
+                # t_acd39188: after a master restart the browser's worker_id
+                # is stale — the task is alive if any current worker still
+                # runs it (the resume handler re-attached it to a new id).
+                if worker_id not in manager.active_workers and not any(
+                    w.current_task == task_id for w in manager.active_workers.values()
+                ):
                     yield f"data: {json.dumps({'type': 'error', 'text': 'Worker connection lost mid-simulation.'})}\n\n"
                     break
                 yield ": keep-alive\n\n"
     finally:
-        if task_id in manager.task_queues: del manager.task_queues[task_id]
-        # t_b3b78acd: drop the metadata snapshot if the done event never
-        # reached the hook (worker dropped, stream cancelled).
-        task_meta_map.pop(task_id, None)
+        subs = manager.task_queues.get(task_id)
+        if subs is not None:
+            subs.discard(queue)
+            # t_acd39188: same stale-worker_id guard as the timeout branch —
+            # a stale viewer disconnecting after a resume must not pop the
+            # re-attached entry (the replayed done still has to land).
+            if (not subs and worker_id not in manager.active_workers
+                    and not any(w.current_task == task_id for w in manager.active_workers.values())):
+                manager.task_queues.pop(task_id, None)
 
 @app.post("/api/run-simulation", response_model=RunSimulationResponse, tags=["Simulation"])
 async def run_simulation(request: Request, worker_id: Optional[str] = Query(None), input_id: Optional[str] = Query(None), current_user: str = Depends(require_session)):
@@ -2138,42 +2555,66 @@ async def run_simulation(request: Request, worker_id: Optional[str] = Query(None
     unauthenticated callers get HTTP 401 — dev mode never bypasses this.
     **Query Parameters:**
       - ``worker_id``: Optional worker ID to target (auto-selected if omitted)
-      - ``input_id``: Optional input file ID (defaults to user's latest)
+      - ``input_id``: Optional input file ID — must be the caller's own
+        generated input (HTTP 403 otherwise, t_2f386596). Defaults to the
+        caller's own latest generated input; HTTP 422 if the caller has none
+        — never another user's input, SEC-6 t_2447fdbd)
 
-    **Rate Limiting:** 300-second cooldown per user.
+    **Rate Limiting:** per-user cooldown of ``sim_cooldown_seconds`` seconds
+    (default 300; runtime-configurable via ``POST /api/settings``).
 
     **Response Model:** ``RunSimulationResponse``
     """
-    user_id = current_user if current_user != "anonymous" else (request.cookies.get("user_id") or f"ip_{request.client.host}")
+    user_id = _input_bucket(request, current_user)
     now = time.time()
     # Cooldown state lives ONLY here (t_ef8682a4): ``user_sessions`` is set
     # when a simulation actually starts and is purged after
     # SIM_COOLDOWN_SECONDS by the enforcer. Login never writes it, so a
     # freshly logged-in user is never rate-limited.
+    # LIFE-5 (t_c610c962): enforce the configured value, not a hardcoded 30s.
+    # Read once so the check and the 429 message can't disagree mid-request.
+    cooldown = SIM_COOLDOWN_SECONDS
     db_time = session_get(user_id)
-    if db_time is not None and now - db_time < 30:
-         raise HTTPException(status_code=429, detail=f"Rate limit: wait {int(30 - (now - db_time))}s")
+    if db_time is not None and now - db_time < cooldown:
+         raise HTTPException(status_code=429, detail=f"Rate limit: wait {int(cooldown - (now - db_time))}s")
 
     target_worker = worker_id if worker_id and worker_id in manager.active_workers and manager.active_workers[worker_id].status == "Idle" else manager.get_idle_worker()
     if not target_worker: raise HTTPException(status_code=503, detail="No idle workers available")
+
+    # SEC-6 (t_2447fdbd): resolve the input BEFORE any state is consumed and
+    # only from the caller's own record — the old global "latest" fallback let
+    # one user run another user's generated profile.
+    if input_id:
+        validate_safe_id(input_id, "input id")
+        # t_2f386596: an explicit input_id must be the caller's own generated
+        # input. user_inputs keeps only the latest record per user, so "own"
+        # means "matches the caller's record". Skipped when auth is disabled
+        # (the kill switch is single-operator mode; legacy CLI/test flows pass
+        # orphan ids nobody owns).
+        if authentication_enabled():
+            own = generated_inputs_by_user.get(user_id)
+            if not own or own.get("input_id") != input_id:
+                raise HTTPException(status_code=403, detail="Input does not belong to user")
+        input_record = {"input_url": f"/inputs/{input_id}.simc"}
+    else:
+        input_record = generated_inputs_by_user.get(user_id)
+    if not input_record:
+        raise HTTPException(status_code=422, detail="No generated input for this user; generate a profile first or pass input_id")
+    input_url = input_record["input_url"]
 
     logger.info(f"Starting sim for {user_id} on {target_worker}")
     user_last_sim_time[user_id] = now
     session_set(user_id, now)
     task_id = str(uuid.uuid4())[:8]
-    manager.task_queues[task_id] = asyncio.Queue()
+    manager.task_queues[task_id] = set()
     task_user_map[task_id] = user_id  # t_c968bf8d: owner of the report directory
-    # t_b3b78acd: freeze the character metadata for this task; the SSE done
-    # hook consumes (and pops) it when writing the run_history row.
+    # t_b3b78acd: freeze the character metadata for this task; the done hook
+    # consumes (and pops) it when writing the run_history row.
     task_meta_map[task_id] = dict(run_meta_by_user.get(user_id) or {})
+    # LIFE-2 (t_2c718ca6): persist owner + meta so attribution and the history
+    # row survive a master restart mid-run.
+    task_owner_upsert(task_id, user_id, json.dumps(task_meta_map[task_id]))
     try:
-        input_record = None
-        if input_id:
-            validate_safe_id(input_id, "input id")
-            input_record = {"input_url": f"/inputs/{input_id}.simc"}
-        else:
-            input_record = generated_inputs_by_user.get(user_id) or generated_inputs_by_user.get("latest")
-        input_url = input_record["input_url"] if input_record else "/inputs/char_simc_addon.txt"
         await manager.send_task(target_worker, {"type": "start", "task_id": task_id, "input_url": input_url})
         manager.active_workers[target_worker].status, manager.active_workers[target_worker].current_task, manager.active_workers[target_worker].user_id = "Busy", task_id, user_id
     except Exception:
@@ -2182,13 +2623,16 @@ async def run_simulation(request: Request, worker_id: Optional[str] = Query(None
     return {"status": "success", "task_id": task_id, "worker_id": target_worker}
 
 @app.get("/api/simulation/stream/{task_id}", tags=["Simulation"])
-async def stream_simulation(task_id: str, worker_id: str):
+async def stream_simulation(task_id: str, worker_id: str, user_id: str = Depends(require_session)):
     """Stream Server-Sent Events for the simulation identified by *task_id*.
 
     **Tags:** Simulation
     **Response Type:** ``text/event-stream``
     """
-    if task_id not in manager.task_queues: raise HTTPException(status_code=404)
+    if task_id not in manager.task_queues and task_id not in task_done_map: raise HTTPException(status_code=404)
+    # t_2f386596 (LIFE-4 scope add): per-viewer queues are keyed by task_id
+    # only — without this check any session could watch another user's run.
+    if not _task_access_ok(task_id, user_id): raise HTTPException(status_code=404)
     return StreamingResponse(simulation_event_generator(task_id, worker_id), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"})
 
 # --- SimC HTML report parsing -------------------------------------------------
@@ -2207,6 +2651,10 @@ _REPORT_DPS_RE = re.compile(
 )
 _REPORT_NAME_TRAILER_RE = re.compile(r'(?:&#160;|&nbsp;|\s)+$')
 _REPORT_SLOT_MAP = {"Head": "head", "Neck": "neck", "Shoulders": "shoulder", "Back": "back", "Chest": "chest", "Wrists": "wrist", "Hands": "hands", "Waist": "waist", "Legs": "legs", "Feet": "feet", "Finger 1": "finger1", "Finger 2": "finger2", "Trinket 1": "trinket1", "Trinket 2": "trinket2", "Main Hand": "main_hand", "Off Hand": "off_hand"}
+# Nightly emits gear labels "Finger1"/"Trinket2" (no space) where older builds
+# emitted "Finger 1" (D1 t_ebcd03f1); whitespace-and-case-insensitive lookup
+# parses both report generations.
+_REPORT_SLOT_BY_LABEL = {re.sub(r"\s+", "", k).lower(): v for k, v in _REPORT_SLOT_MAP.items()}
 
 
 def parse_report_results(html_content: str) -> list:
@@ -2227,12 +2675,16 @@ def parse_report_results(html_content: str) -> list:
         if name == "Raid":
             continue
         dps = int(float(m.group(2).replace(',', '')))
+        # Nightly reports emit pet/utility profiles (e.g. Fluffy_Pillow) as
+        # player sections with 0 dps; they are not real alternatives (E2E-7).
+        if dps == 0:
+            continue
         gear = {}
         gt_match = re.search(r'<div class="player-section gear">.*?<table[^>]*>(.*?)</table>', section, re.DOTALL)
         if gt_match:
             rows = re.finditer(r'<th[^>]*>\s*([^<]+)\s*</th>\s*<td[^>]*>\s*<a[^>]+href="([^"]+)"', gt_match.group(1), re.IGNORECASE)
             for r in rows:
-                simc_slot = _REPORT_SLOT_MAP.get(r.group(1).strip())
+                simc_slot = _REPORT_SLOT_BY_LABEL.get(re.sub(r"\s+", "", r.group(1)).lower())
                 if simc_slot:
                     href = r.group(2)
                     id_match = re.search(r'item=([0-9]+)', href)
@@ -2249,26 +2701,88 @@ def parse_report_results(html_content: str) -> list:
     return results
 
 
+_PLAYER_BLOCK_RE = re.compile(r"^Player: (\S+)")
+_PLAYER_DPS_RE = re.compile(r"DPS=([\d.]+)[^ ]* DPS-Error=([\d.]+)/([\d.]+)%")
+
+
+def parse_actor_precision(log_path: str) -> dict:
+    """Per-actor ``mean`` / ``error_pct`` from a SimC stage log (D6, t_791b16f5).
+
+    Streams the log: ``Player: <name> ...`` opens an actor block, the next
+    ``DPS=<mean> ... DPS-Error=<abs>/<rel>%`` line closes it. Blocks echo the
+    full APL, so a block whose summary never appears is skipped when the next
+    ``Player:`` line arrives (defensive skip, same spirit as sim_helper's
+    ``filter_best`` streaming loop). Missing/unreadable log -> ``{}`` (legacy
+    runs ship no log; callers treat the fields as absent).
+    """
+    precision: dict = {}
+    pending = None
+    try:
+        with open(log_path, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                m = _PLAYER_BLOCK_RE.match(line)
+                if m:
+                    pending = m.group(1)
+                    continue
+                if pending is None:
+                    continue
+                m = _PLAYER_DPS_RE.search(line)
+                if m:
+                    precision[pending] = {"mean": float(m.group(1)),
+                                          "error_pct": float(m.group(3))}
+                    pending = None
+    except OSError:
+        return {}
+    return precision
+
+
+def _task_mode(task_dir: str) -> Optional[str]:
+    """TG3-G (t_54bad356): the generation mode recorded for the run whose
+    report lives in *task_dir* (dir name == task id). In-memory meta first
+    (pre-done runs), persisted ``task_owner`` meta as fallback (the done hook
+    pops the in-memory map before the results page loads). None for runs
+    generated before mode recording — honest absence, never guessed.
+    """
+    tid = os.path.basename(task_dir)
+    meta = task_meta_map.get(tid)
+    if meta is None:
+        raw = task_owner_meta_json(tid)
+        try:
+            meta = json.loads(raw) if raw else {}
+        except ValueError:
+            meta = {}
+    mode = meta.get("mode")
+    return mode if mode in TG_GENERATION_MODES else None
+
+
 @app.get("/api/get-results", response_model=GetResultsResponse, tags=["Simulation"])
-async def get_results(task_id: str = Query(default="latest")):
+async def get_results(task_id: str = Query(default="latest"), user_id: str = Depends(require_session)):
     """Retrieve parsed simulation results (DPS per class, gear data) for a completed task.
 
     **Tags:** Simulation
     **Query Parameters:**
-      - ``task_id``: Task ID, or ``"latest"`` for the most recent report. Defaults to "latest".
+      - ``task_id``: Task ID, or ``"latest"`` for the caller's own most recent
+        report (SEC-1b, t_a4ff7b5d). Defaults to "latest".
 
     **Response Model:** ``GetResultsResponse``
     """
     try:
         html_path = None
         if task_id == "latest":
-             all_reports = glob.glob(os.path.join(REPORTS_DIR, "*", "*", "report_*.html"))
-             if not all_reports: return {"status": "error", "message": "No reports found"}
-             all_reports.sort(key=os.path.getmtime, reverse=True)
-             html_path = all_reports[0]
+            # SEC-1b (t_a4ff7b5d): the old REPORTS_DIR/* glob served the
+            # globally newest report to any logged-in user — cross-user leak.
+            own_reports = glob.glob(os.path.join(
+                REPORTS_DIR, _user_report_dir(user_id), "*", "report_*.html"))
+            if not own_reports: return {"status": "error", "message": "No reports found"}
+            own_reports.sort(key=os.path.getmtime, reverse=True)
+            html_path = own_reports[0]
         else:
             tmp_dir = _find_task_report_dir(task_id)
             if not tmp_dir or not os.path.exists(tmp_dir):
+                return {"status": "error", "message": f"Task {task_id} results not found"}
+            # t_2f386596: explicit task_id must belong to the caller (same
+            # error shape as not-found — no existence oracle).
+            if not _task_access_ok(task_id, user_id):
                 return {"status": "error", "message": f"Task {task_id} results not found"}
             report_files = [f for f in os.listdir(tmp_dir) if f.startswith("report_") and f.endswith(".html")]
             if not report_files: return {"status": "error", "message": "No reports found"}
@@ -2277,7 +2791,14 @@ async def get_results(task_id: str = Query(default="latest")):
 
         with open(html_path, encoding='utf-8', errors='replace') as f: html_content = f.read()
         results = parse_report_results(html_content)
-        return {"status": "success", "results": results}
+        # D6 (t_791b16f5): per-actor precision ships only in the stage-3 log
+        # the worker added to artifacts.zip, extracted next to the report.
+        # No log (legacy runs) -> no merge, response byte-compatible.
+        precision = parse_actor_precision(os.path.join(os.path.dirname(html_path), "stage3.log"))
+        if precision:
+            for item in results:
+                item["mean_error_pct"] = precision.get(item["name"], {}).get("error_pct")
+        return {"status": "success", "results": results, "mode": _task_mode(os.path.dirname(html_path))}
     except HTTPException:
         raise
     except Exception as e:
@@ -2285,18 +2806,20 @@ async def get_results(task_id: str = Query(default="latest")):
         return {"status": "error", "message": str(e)}
 
 @app.get("/api/report-url", tags=["Simulation"])
-async def get_report_url(task_id: str = Query(...)):
+async def get_report_url(task_id: str = Query(...), user_id: str = Depends(require_session)):
     """Resolve the static URL of a run's HTML report (t_c968bf8d).
 
     Durable reports live under the owner's user directory
     (``/reports/<user_id>/<task_id>/report_*.html``), which the frontend
-    cannot derive from ``task_id`` alone. Exposure is equivalent to the
-    ``/reports`` static mount itself — no new access surface.
+    cannot derive from ``task_id`` alone. Explicit task ids are ownership-
+    checked (t_2f386596): a non-owner gets the same 404 as not-found.
     """
     from urllib.parse import quote
 
     task_dir = _find_task_report_dir(task_id)
     if not task_dir or not os.path.isdir(task_dir):
+        raise HTTPException(status_code=404, detail="Report not found")
+    if not _task_access_ok(task_id, user_id):
         raise HTTPException(status_code=404, detail="Report not found")
     report_files = [f for f in os.listdir(task_dir) if f.startswith("report_") and f.endswith(".html")]
     if not report_files:
@@ -2368,7 +2891,7 @@ async def get_history_run(
 
 
 @app.get("/inputs/{file_name}")
-async def get_input_file(file_name: str):
+async def get_input_file(file_name: str, _: str = Depends(require_session_or_cluster)):
     from fastapi.responses import FileResponse
 
     if file_name == "char_simc_addon.txt":
@@ -2402,6 +2925,11 @@ def _user_report_dir(user_id: str) -> str:
 
 _REPORT_SPEC_RE = re.compile(r"^\s*spec\s*=\s*([A-Za-z0-9_]+)", re.MULTILINE)
 
+# LIFE-2 (t_2c718ca6): the row may now be offered twice for one task (the
+# upload fallback and the WS done handler); process-lifetime marker, same
+# lifetime as task_user_map.
+_history_recorded_tasks: set = set()
+
 
 def _resolved_user_id(request: Request, current_user: Optional[str]) -> str:
     """Same identity rule as run_simulation/generate_simc (t_b3b78acd)."""
@@ -2420,16 +2948,18 @@ def _extract_spec(base_profile: str) -> Optional[str]:
 def _record_run_history(task_id: str, status: str) -> None:
     """Insert a run_history row for a finished simulation (t_b3b78acd).
 
-    Called from the task-done SSE point. Best-effort by design: a missing
-    report, an FK violation (anonymous/ip user), or a read error must never
-    break the SSE stream — failures are logged and swallowed. ``top_dps``
-    reuses the t_fdd385ef report parser; ``report_path`` is stored relative
-    to REPORTS_DIR (``<user_dir>/<task_id>/report_*.html``).
+    Called from the worker-WS done handler and, after a master restart, from
+    the artifacts upload fallback (LIFE-2, t_2c718ca6). Best-effort by design:
+    a missing report, an FK violation (anonymous/ip user), or a read error
+    must never break the caller — failures are logged and swallowed.
+    ``top_dps`` reuses the t_fdd385ef report parser; ``report_path`` is stored
+    relative to REPORTS_DIR (``<user_dir>/<task_id>/report_*.html``).
     """
     try:
         user_id = task_user_map.get(task_id)
-        if not user_id:
+        if not user_id or task_id in _history_recorded_tasks:
             return
+        _history_recorded_tasks.add(task_id)
         meta = task_meta_map.pop(task_id, {}) or {}
         top_dps: Optional[int] = None
         report_rel: Optional[str] = None
@@ -2481,15 +3011,48 @@ def _task_report_dir(user_dir: str, task_id: str) -> str:
     return safe_task_dir(os.path.join(REPORTS_DIR, user_dir), task_id)
 
 
+def _task_owner(task_id: str) -> Optional[str]:
+    """Owner user_id of *task_id*, or None when unresolvable.
+
+    Shared ownership-resolution helper (t_a4ff7b5d ownership family): checks
+    the durable task map first, then falls back to the REPORTS_DIR path
+    segment (``REPORTS_DIR/<owner>/<task_id>/``) for uploads whose owner was
+    lost across a master restart. Callers compare against their own id
+    (``_user_report_dir``-sanitized) and reject non-owners with 403/404.
+    """
+    owner = task_user_map.get(task_id)
+    if owner:
+        return owner
+    for match in glob.glob(os.path.join(REPORTS_DIR, "*", task_id)):
+        if os.path.isdir(match):
+            return os.path.basename(os.path.dirname(match))
+    return None
+
+
+def _task_access_ok(task_id: str, claimant: str) -> bool:
+    """True when *claimant* may read *task_id* (t_2f386596 ownership pass).
+
+    Ownership is only meaningful when authentication is enabled — the
+    AUTHENTICATION_ENABLED=false kill switch is single-operator mode. An
+    unresolvable owner (update-simc tasks, attribution lost before LIFE-2)
+    passes through; the caller's own existence gate still applies.
+    """
+    if not authentication_enabled():
+        return True
+    owner = _task_owner(task_id)
+    return owner is None or _user_report_dir(owner) == _user_report_dir(claimant)
+
+
 def _find_task_report_dir(task_id: str) -> Optional[str]:
     """Locate the report directory for *task_id* across user directories.
 
-    Checks the owner's directory first via the in-memory task map, then scans
-    ``REPORTS_DIR/*/<task_id>`` — covers uploads whose owner was lost across a
-    master restart. Returns None when the task has no directory yet.
+    Checks the owner's directory first via the shared ``_task_owner``
+    resolution, then scans ``REPORTS_DIR/*/<task_id>`` — covers uploads whose
+    owner was lost across a master restart. Returns None when the task has no
+    directory yet.
     """
     validate_safe_id(task_id, "task id")
-    owner = task_user_map.get(task_id)
+    owner = _task_owner(task_id)
     if owner:
         candidate = os.path.join(REPORTS_DIR, _user_report_dir(owner), task_id)
         if os.path.isdir(candidate):
@@ -2561,6 +3124,19 @@ async def worker_upload_file(
     with open(dest_path, "wb") as f: f.write(await file.read())
     if file_name == "artifacts.zip":
         _extract_zip_safely(dest_path, dest_dir)
+        # LIFE-2 (t_2c718ca6): master restarted mid-run — the worker's done
+        # event is gone and this upload is the only completion signal left.
+        # The live task queue is the discriminator: on the normal path it
+        # still exists and the WS done handler records the row instead.
+        # t_acd39188 (LIFE-10): the worker DOES replay done after a
+        # reconnect; _record_run_history dedupes via _history_recorded_tasks,
+        # so this fallback and the replayed done collapse to one row.
+        if task_id not in manager.task_queues and task_id in task_user_map:
+            has_report = any(
+                f.startswith("report_") and f.endswith(".html")
+                for f in os.listdir(dest_dir)
+            )
+            _record_run_history(task_id, "success" if has_report else "failed")
     # Retention cap (t_c968bf8d): prune this user's oldest runs beyond the cap.
     _prune_user_reports(user_dir)
     return {"status": "success"}
@@ -2580,16 +3156,52 @@ async def worker_websocket(websocket: WebSocket, name: str, secret: Optional[str
                     # Forward task status updates to SSE consumers
                     tid = data["task_id"]
                     task = data["status"]
+                    # t_14e40e6c: mirror the worker-pushed status into the
+                    # master's task_status_store — the store is per-process,
+                    # this WS channel is the only writer that crosses the
+                    # master/worker boundary, so /api/task-status stays empty
+                    # on master without it.
+                    ts = get_or_create_task_status(tid)
+                    for field, value in task.items():
+                        if field != "task_id" and hasattr(ts, field):
+                            setattr(ts, field, value)
                     # Broadcast via all task queues that might have subscribers
-                    for qid, queue in manager.task_queues.items():
-                        try:
-                            await queue.put({"type": "task_status_update", "task_id": tid, "status": task})
-                        except Exception:
-                            pass
+                    for subs in manager.task_queues.values():
+                        for queue in subs:
+                            try:
+                                await queue.put({"type": "task_status_update", "task_id": tid, "status": task})
+                            except Exception:
+                                pass
+                elif data["type"] == "resume":
+                    # t_acd39188 (LIFE-10): worker reconnected mid-task
+                    # (master restart). Re-attach the task queue set so SSE
+                    # works and the worker's replayed upload/done land
+                    # attributed. Never overwrite an existing subscriber set
+                    # (LIFE-4: task_queues is Dict[str, Set[Queue]]). The
+                    # master never re-dispatches the sim — the worker replays
+                    # its on-disk artifacts or reports the loss.
+                    tid = data.get("task_id")
+                    if tid and tid in task_user_map:
+                        manager.task_queues.setdefault(tid, set())
+                        w = manager.active_workers[worker_id]
+                        w.status, w.current_task, w.user_id = "Busy", tid, task_user_map[tid]
+                        logger.info(f"Worker {name} ({worker_id}) resumed task {tid} after reconnect.")
                 elif data["type"] == "log" or data["type"] == "log_batch" or data["type"] == "done":
                     tid = data.get("task_id")
-                    if tid in manager.task_queues: await manager.task_queues[tid].put(data)
-                    if data["type"] == "done": manager.active_workers[worker_id].status = "Idle"
+                    for queue in manager.task_queues.get(tid, ()): await queue.put(data)
+                    if data["type"] == "done":
+                        # LIFE-4 (t_5d6903e4): the queue entry lives for the
+                        # run, not for the viewers — free it here at run end.
+                        manager.task_queues.pop(tid, None)
+                        _record_task_done(tid, data)
+                        manager.active_workers[worker_id].status = "Idle"
+                        # LIFE-2 (t_2c718ca6): history row recorded here, at the
+                        # one done writer that crosses the master/worker boundary
+                        # (t_14e40e6c) — works with no SSE consumer and after a
+                        # master restart. t_a0bb3a07 (LIFE-1): a user Stop is
+                        # reported as stopped, not as a failed simulation.
+                        stopped = bool(data.get("stopped"))
+                        _record_run_history(tid, "stopped" if stopped else ("success" if data.get("code") == 0 else "failed"))
     except WebSocketDisconnect: manager.disconnect(worker_id)
     except Exception as e: logger.error(f"WS error for {name}: {e}"); manager.disconnect(worker_id)
 

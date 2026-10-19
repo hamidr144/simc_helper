@@ -4,6 +4,7 @@ import os
 import pty
 import re
 import select
+import shutil
 import signal
 import ssl
 import subprocess  # nosec B404
@@ -76,6 +77,17 @@ RETRY_BACKOFF_BASE = float(os.environ.get("RETRY_BACKOFF_BASE", str(DEFAULT_RETR
 DEFAULT_RETRY_BACKOFF_MAX = 60.0  # max backoff in seconds
 RETRY_BACKOFF_MAX = float(os.environ.get("RETRY_BACKOFF_MAX", str(DEFAULT_RETRY_BACKOFF_MAX)))
 
+# t_a0bb3a07 (LIFE-1): sentinel exit code meaning "user pressed Stop". The
+# retry loop must treat it as terminal, never as a failure to retry. Safe:
+# outside real exit codes and signal deaths (wait() returns -1..-64).
+STOPPED_EXIT_CODE = -100
+
+
+class _ReconnectRequested(Exception):
+    """t_acd39188 (LIFE-10): the WS to master died mid-execution. Distinct
+    from a task failure so the retry loop breaks out to reconnect instead of
+    burning its attempts against the dead socket."""
+
 # Task status tracking (in-memory, shared with main.py via sync)
 # (defined after TaskStatus class)
 
@@ -129,8 +141,11 @@ if WS_URL.startswith("wss://"):
         ssl_context = ssl.create_default_context()
 
 async def upload_file(session, task_id, file_path):
+    # LIFE-9 (t_a13e5be8): failures must propagate — a swallowed upload error
+    # used to report run success with no artifact on master.
+    # _execute_task_with_reconnect turns this into a visible retry/failure.
     if not file_path or not os.path.exists(file_path):
-        return None
+        raise FileNotFoundError(f"Artifact missing, cannot upload: {file_path}")
     file_name = os.path.basename(file_path)
     # Audit MEDIUM-2: cluster secret travels in a header, never in the URL.
     url = f"{MASTER_URL}/api/worker/upload-file?task_id={task_id}&file_name={file_name}"
@@ -141,15 +156,79 @@ async def upload_file(session, task_id, file_path):
             async with session.post(
                 url, data=data, headers={"X-Cluster-Secret": CLUSTER_SECRET}
             ) as resp:
+                if resp.status != 200:
+                    raise RuntimeError(
+                        f"Master rejected upload of {file_name}: HTTP {resp.status}")
                 return await resp.json()
     except Exception as e:
-        logger.info(f"Failed to upload {file_name}: {e}")
-        return None
+        logger.error(f"Failed to upload {file_name}: {e}")
+        raise
+
+
+UPLOAD_RETRY_ATTEMPTS = 3
+
+
+async def _upload_file_with_retry(session, task_id, file_path):
+    """t_acd39188 (LIFE-10): bounded retry around upload_file so a master
+    restart during the upload window does not lose the run's artifacts.
+    Final failure raises — never re-swallow (LIFE-9 t_a13e5be8: upload_file
+    itself raises on missing artifact or master non-200)."""
+    last_exc = RuntimeError(
+        f"Upload of {file_path} failed after {UPLOAD_RETRY_ATTEMPTS} attempts")
+    for attempt in range(UPLOAD_RETRY_ATTEMPTS):
+        try:
+            return await upload_file(session, task_id, file_path)
+        except FileNotFoundError:
+            raise  # missing artifact: retrying cannot help
+        except Exception as exc:
+            last_exc = exc
+        if attempt < UPLOAD_RETRY_ATTEMPTS - 1:
+            await asyncio.sleep(_calculate_retry_backoff(attempt + 1))
+    raise last_exc
+
+
+async def _recover_task_after_reconnect(session, websocket, task_id: str):
+    """t_acd39188 (LIFE-10): after a master restart the in-flight sim is
+    gone (its pty died with the old WS). Replay what survived: a finished
+    run's artifacts.zip is still on disk — re-upload it and report success;
+    otherwise report the loss so the user gets a failed history row
+    instead of silence."""
+    zip_path = f"/tmp/worker_sim_{task_id}/artifacts.zip"  # nosec B108
+    report_file = None
+    if os.path.exists(zip_path):
+        try:
+            import zipfile
+            report_file = next(
+                (n for n in zipfile.ZipFile(zip_path).namelist()
+                 if n.startswith("report_") and n.endswith(".html")), None)
+            await _upload_file_with_retry(session, task_id, zip_path)
+            code = 0 if report_file else 1
+            error = None if report_file else "Simulation produced no report before the connection loss"
+        except Exception as exc:
+            code, report_file, error = 1, None, f"Artifact re-upload after reconnect failed: {exc}"
+    else:
+        code, error = 1, "Connection to master lost: in-flight simulation was not resumable"
+    task_status = get_or_create_task_status(task_id)
+    task_status.status = "done" if code == 0 else "failed"
+    task_status.exit_code = code
+    task_status.error = error
+    task_status.updated_at = time.time()
+    await _push_task_status(websocket, task_id, task_status)
+    await websocket.send(json.dumps({
+        "type": "done", "task_id": task_id, "code": code,
+        "report_file": report_file, "error": error,
+        "retry_count": task_status.retry_count,
+        "max_retries": task_status.max_retries,
+    }))
+    # Recovery reached terminal state — honour LIFE-10's cleanup contract.
+    shutil.rmtree(f"/tmp/worker_sim_{task_id}", ignore_errors=True)  # nosec B108
 
 async def download_input_file(session, url_path, dest_path):
     url = f"{MASTER_URL}{url_path}"
     try:
-        async with session.get(url) as resp:
+        # SEC-14 (t_28df6d81): master gates /inputs behind session-or-cluster;
+        # workers authenticate with the cluster secret like upload-file.
+        async with session.get(url, headers={"X-Cluster-Secret": CLUSTER_SECRET}) as resp:
             if resp.status == 200:
                 with open(dest_path, 'wb') as f:
                     async for chunk in resp.content.iter_chunked(8192):
@@ -306,6 +385,29 @@ async def process_logs(master_fd, active_process, websocket, task_id, full_log, 
 
         await asyncio.sleep(0.01)
 
+    # Post-exit PTY drain (t_537242a9): the loop above exits as soon as
+    # poll() sees the process gone, silently dropping any PTY tail it had
+    # not read yet. Linux keeps data written before the slave closed and
+    # only then returns EIO, so one final drain recovers the tail — on
+    # macOS the scheduler happened to deliver it, on Linux a fast-exiting
+    # process lost its last lines (symptom: report_*.html line gone and
+    # _execute_task returning report=None; ubuntu-only CI failure).
+    # shortcut: 0.5s select budget; a live grandchild holding the slave
+    # only adds one idle tick per drain, upgrade to an event if slow.
+    while select.select([master_fd], [], [], 0.5)[0]:
+        try:
+            raw_data = os.read(master_fd, 4096)
+        except OSError:
+            break
+        if not raw_data:
+            break
+        text = raw_data.decode('utf-8', errors='replace').replace('\r\n', '\n')
+        for line in text.split('\n'):
+            if line:
+                full_log.append(line)
+                if "Progress:" not in line:
+                    log_batch.append(line)
+
     if log_batch:
         try:
             await websocket.send(json.dumps({"type": "log_batch", "task_id": task_id, "lines": log_batch}))
@@ -324,6 +426,27 @@ async def _push_task_status(websocket, task_id: str, status: TaskStatus):
         }))
     except Exception:
         pass
+
+
+def _sweep_stale_tmp_dirs(root: str = "/tmp") -> int:
+    """LIFE-10 (t_3075ffff): killed runs leak per-task temp dirs because no
+    finally runs on SIGKILL; sweep leftovers at worker startup. Safe here:
+    /tmp is container-local and nothing runs yet. simc_reports is the report
+    staging dir (re-populated per run), kept."""
+    removed = 0
+    try:
+        names = os.listdir(root)
+    except OSError:
+        return 0
+    for name in names:
+        if name == "simc_reports":
+            continue
+        if name.startswith("worker_sim_") or name.startswith("simc_"):
+            path = os.path.join(root, name)
+            if os.path.isdir(path):
+                shutil.rmtree(path, ignore_errors=True)
+                removed += 1
+    return removed
 
 
 async def _execute_task(session, task_id: str, input_file: str, websocket) -> tuple:
@@ -351,16 +474,32 @@ async def _execute_task(session, task_id: str, input_file: str, websocket) -> tu
 
         res = await process_logs(master_fd, active_process, websocket, task_id, active_process.full_log_buffer, active_process.last_send_time_ref, 1.0)
         if res == "reconnect":
-            return 1, None, "Worker connection lost during execution"
+            # t_acd39188 (LIFE-10): the WS died. Kill the sim now — relying
+            # on pty SIGHUP left orphans racing the post-reconnect replay —
+            # and surface 'reconnect' so the retry loop stops burning its
+            # attempts against the dead socket.
+            try:
+                os.killpg(os.getpgid(active_process.pid), signal.SIGTERM)
+                active_process.wait(timeout=5)
+            except Exception:
+                pass
+            raise _ReconnectRequested()
         if res == "stopped":
-            return 1, None, "Task was stopped by user"
+            # Reap the SIGTERM'd process group so a stopped task leaves no zombie.
+            try:
+                active_process.wait(timeout=5)
+            except Exception:
+                pass
+            return STOPPED_EXIT_CODE, None, "Task was stopped by user"
 
         exit_code = active_process.wait()
         logger.info(f"[{task_id}] Process finished with code {exit_code}")
         log_str = "\n".join(active_process.full_log_buffer)
         report_match = re.search(r"report_.*\.html", log_str)
         report_file = report_match.group(0) if report_match else None
-        tmp_match = re.search(r"Temporary files are in (\/tmp\/simc_[^\s\n]+)", log_str)
+        # Character class (not [^\s\n]+): tmp_dir is rmtree'd below, so a
+        # spoofed log line must not be able to smuggle path separators.
+        tmp_match = re.search(r"Temporary files are in (\/tmp\/simc_[A-Za-z0-9_]+)", log_str)
         tmp_dir = tmp_match.group(1) if tmp_match else None
 
         if tmp_dir or report_file:
@@ -368,11 +507,21 @@ async def _execute_task(session, task_id: str, input_file: str, websocket) -> tu
             zip_path = f"/tmp/worker_sim_{task_id}/artifacts.zip"  # nosec B108
             with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
                 if tmp_dir and os.path.exists(os.path.join(tmp_dir, "stage3.simc")): zf.write(os.path.join(tmp_dir, "stage3.simc"), "stage3.simc")
+                # D6 (t_791b16f5): per-actor mean±error lives only in the SimC
+                # log; ship the final-stage one under the uniform arcname
+                # stage3.log (baseline runs write baseline.log — keeps master dumb).
+                if tmp_dir and os.path.exists(os.path.join(tmp_dir, "stage3.log")): zf.write(os.path.join(tmp_dir, "stage3.log"), "stage3.log")
+                elif tmp_dir and os.path.exists(os.path.join(tmp_dir, "baseline.log")): zf.write(os.path.join(tmp_dir, "baseline.log"), "stage3.log")
                 if report_file:
                     report_path = os.path.join("/tmp/simc_reports", report_file)  # nosec B108
                     if os.path.exists(report_path):
                         zf.write(report_path, report_file)
-            await upload_file(session, task_id, zip_path)
+            # Retry-wrapped (t_acd39188): raises after final attempt, skipping
+            # the cleanup below — the zip stays on disk for post-reconnect replay.
+            await _upload_file_with_retry(session, task_id, zip_path)
+            if tmp_dir:
+                # LIFE-10: engine temp dir is fully captured in the zip.
+                shutil.rmtree(tmp_dir, ignore_errors=True)
 
         return exit_code, report_file, None
     finally:
@@ -385,6 +534,10 @@ async def _execute_task(session, task_id: str, input_file: str, websocket) -> tu
 async def run_worker():
     logger.info(f"Starting Worker: {WORKER_NAME}")
     logger.info(f"Master URL: {MASTER_URL}")
+
+    swept = _sweep_stale_tmp_dirs()
+    if swept:
+        logger.info("Startup sweep removed %d stale /tmp task dirs (LIFE-10)", swept)
 
     active_process = None
     active_task_id = None
@@ -411,6 +564,10 @@ async def run_worker():
         try:
             exit_code, report_file, error = await _execute_task(session, task_id, input_file, websocket)
             return ("success", exit_code, report_file, error)
+        except _ReconnectRequested:
+            # t_acd39188: was previously swallowed into a plain exit-1
+            # failure, making the 'reconnect' branch below unreachable.
+            return ("reconnect", 1, None, "WebSocket closed during execution")
         except websockets.ConnectionClosed:
             return ("reconnect", 1, None, "WebSocket closed during execution")
         except Exception as e:
@@ -445,6 +602,11 @@ async def run_worker():
                         if active_task_id:
                             logger.info(f"[{active_task_id}] Resuming active task after reconnect...")
                             await websocket.send(json.dumps({"type": "resume", "task_id": active_task_id}))
+                            # t_acd39188 (LIFE-10): master re-attached the task
+                            # queue; replay the on-disk artifacts or report the
+                            # loss, then clear so we go back to idle.
+                            await _recover_task_after_reconnect(session, websocket, active_task_id)
+                            active_task_id = None
 
                         last_ping_time = time.time()
 
@@ -501,6 +663,7 @@ async def run_worker():
                                                         "retry_count": 0,
                                                         "max_retries": MAX_RETRY_COUNT,
                                                     }))
+                                                    shutil.rmtree(workspace, ignore_errors=True)
                                                     active_task_id = None
                                                     continue
                                             else:
@@ -536,17 +699,35 @@ async def run_worker():
                                                 status, exit_code, report_file, error = result
 
                                                 if status == "reconnect":
-                                                    # Connection lost — exit inner retry loop to reconnect
+                                                    # Connection lost — exit inner retry loop to reconnect.
+                                                    # t_acd39188: keep active_task_id set so the
+                                                    # post-reconnect resume/replay path runs.
                                                     logger.info(f"[{task_id}] Connection lost — reconnecting to master.")
-                                                    active_task_id = None
                                                     final_exit_code = 1
                                                     final_error = "Connection lost"
+                                                    break
+
+                                                if exit_code == STOPPED_EXIT_CODE:
+                                                    # t_a0bb3a07 (LIFE-1): user Stop is terminal —
+                                                    # retrying here used to restart the stopped sim.
+                                                    logger.info(f"[{task_id}] Stopped by user — not retrying.")
+                                                    task_status.status = "stopped"
+                                                    task_status.exit_code = exit_code
+                                                    task_status.error = error
+                                                    task_status.updated_at = time.time()
+                                                    await _push_task_status(websocket, task_id, task_status)
+                                                    final_exit_code = exit_code
+                                                    final_error = error
                                                     break
 
                                                 if exit_code == 0:
                                                     task_status.status = "done"
                                                     task_status.exit_code = exit_code
                                                     task_status.updated_at = time.time()
+                                                    # t_14e40e6c: every other transition pushes;
+                                                    # done was silently dropped, leaving master's
+                                                    # /api/task-status stuck on "running".
+                                                    await _push_task_status(websocket, task_id, task_status)
                                                     final_exit_code = exit_code
                                                     final_report_file = report_file
                                                     logger.info(f"[{task_id}] Task succeeded on attempt {attempt}")
@@ -593,10 +774,16 @@ async def run_worker():
                                                 "code": final_exit_code,
                                                 "report_file": final_report_file,
                                                 "error": final_error,
+                                                "stopped": final_exit_code == STOPPED_EXIT_CODE,
                                                 "retry_count": task_status.retry_count,
                                                 "max_retries": task_status.max_retries,
                                             }))
                                             active_task_id = None
+                                            # LIFE-10: task is terminal here (done/stopped/
+                                            # retries exhausted) — drop the per-task workspace.
+                                            # The reconnect path leaks it until the next start
+                                            # of this task or the startup sweep; accepted.
+                                            shutil.rmtree(workspace, ignore_errors=True)
 
                                         elif data["type"] == "update":
                                             task_id = data["task_id"]

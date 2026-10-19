@@ -31,7 +31,9 @@ def test_api_run_simulation_send_task_error():
     manager.active_workers["idle_worker"] = MagicMock(status="Idle")
     with patch("web.main.session_get", return_value=None), \
          patch.object(manager, "send_task", side_effect=Exception("Failed")):
-        response = client.post("/api/run-simulation", params={"worker_id": "idle_worker"})
+        # SEC-6: run now requires the caller's own input; pass an explicit
+        # input_id (fake worker never fetches it).
+        response = client.post("/api/run-simulation", params={"worker_id": "idle_worker", "input_id": "qa-sendtask-err"})
         assert response.status_code == 500
 
 def test_api_simulation_stream_not_found():

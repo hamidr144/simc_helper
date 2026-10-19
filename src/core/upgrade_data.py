@@ -113,12 +113,22 @@ def is_ascension_eligible_slot(season: Dict[str, Any], slot: Optional[str]) -> b
     return base in slots
 
 
-def ascension_result(season: Dict[str, Any], track: Optional[str]) -> Optional[int]:
-    """Absolute ascended ilvl for a track (hero/myth), or None if not eligible."""
+def ascension_result(season: Dict[str, Any], track: Optional[str], crafted: bool = False) -> Optional[int]:
+    """Absolute ascended ilvl for a track (hero/myth), or None if not eligible.
+
+    A max-quality crafted base ascends to a lower ilvl than a track item
+    (``crafted_results``); fall back to the track ``results`` when the season
+    defines no crafted value.
+    """
     ascension = ascension_for(season)
     if not ascension or not track:
         return None
-    return (ascension.get("results") or {}).get(str(track).lower())
+    track_key = str(track).lower()
+    if crafted:
+        crafted_result = (ascension.get("crafted_results") or {}).get(track_key)
+        if crafted_result is not None:
+            return crafted_result
+    return (ascension.get("results") or {}).get(track_key)
 
 
 def is_elevated(season: Dict[str, Any], level: Optional[int]) -> bool:

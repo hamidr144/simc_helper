@@ -68,7 +68,7 @@ def _authed_client(user_id: str) -> TestClient:
     # conftest kill switch -> require_session yields "anonymous"; the user_id
     # cookie then carries the identity through _resolved_user_id, same rule
     # the write hook used to stamp task ownership.
-    client.cookies.set("session_id", user_id)
+    client.cookies.set("session_id", master._issue_session(user_id))
     client.cookies.set("user_id", user_id)
     return client
 
@@ -79,7 +79,8 @@ def _drive_run(client: TestClient, worker_ws, *, report_file=None, code=0):
     Returns ``(task_id, worker_id)`` after the SSE stream has observed the
     terminal event, i.e. after the run_history insert hook has fired.
     """
-    resp = client.post("/api/run-simulation")
+    # SEC-6: explicit input_id (the fake ws worker never fetches it)
+    resp = client.post("/api/run-simulation", params={"input_id": "acc-drive"})
     assert resp.status_code == 200, resp.text
     task_id, worker_id = resp.json()["task_id"], resp.json()["worker_id"]
 
@@ -114,11 +115,24 @@ def _read_until_terminal(stream, timeout: float = 20.0) -> str:
     raise AssertionError("SSE stream closed without a terminal event")
 
 
-def _history_row(client: TestClient, task_id: str) -> dict:
-    """The history row whose report lives under ``<user>/<task_id>/``."""
-    runs = client.get("/api/history").json()["runs"]
-    matches = [r for r in runs if r["report_path"] and f"/{task_id}/" in r["report_path"]]
-    assert matches, f"no history row for task {task_id} in {[r['run_id'] for r in runs]}"
+def _history_row(client: TestClient, task_id: str, timeout: float = 5.0) -> dict:
+    """The history row whose report lives under ``<user>/<task_id>/``.
+
+    Polls within a bounded deadline: the task-done hook writes the row
+    asynchronously *after* the SSE terminal event (~31ms lag seen in CI run
+    39210595915), so a single immediate GET races and flakes.
+    """
+    deadline = time.time() + timeout
+    while True:
+        runs = client.get("/api/history").json()["runs"]
+        matches = [r for r in runs if r["report_path"] and f"/{task_id}/" in r["report_path"]]
+        if matches or time.time() >= deadline:
+            break
+        time.sleep(0.2)
+    assert matches, (
+        f"no history row for task {task_id} in {[r['run_id'] for r in runs]} "
+        f"(waited {timeout}s)"
+    )
     return matches[0]
 
 
@@ -307,14 +321,14 @@ def test_restart_persistence_two_process_history_link_serves_report(tmp_path):
         client = httpx.Client(base_url=url, timeout=15)
 
         # register + login for real (auth is on by default in the subprocess)
-        # t_e4d97db9: register now redirects like login; user_id rides in the
-        # session_id cookie.
+        # t_e4d97db9: register now redirects like login; SEC-7 (t_0e328148):
+        # session_id is an opaque token, the user is resolved via auth_sessions.
         username = f"restart-{uuid.uuid4().hex[:8]}"
         r = client.post("/register", data={"username": username, "password": "***"},
                         follow_redirects=False)
         assert r.status_code == 303, r.text
-        user_id = client.cookies.get("session_id")
-        assert user_id
+        session_token = client.cookies.get("session_id")
+        assert session_token
         r = client.post("/login", data={"username": username, "password": "***"},
                         follow_redirects=False)
         assert r.status_code == 303
@@ -323,6 +337,9 @@ def test_restart_persistence_two_process_history_link_serves_report(tmp_path):
         # login would 429 run-simulation for 30s. Rewind the cooldown row
         # directly; the xfail test below pins the bug itself.
         db = sqlite3.connect(os.path.join(base_dir, "data", "master", "simc_helper.sqlite"))
+        user_id = db.execute(
+            "SELECT user_id FROM auth_sessions WHERE token = ?", (session_token,)
+        ).fetchone()[0]
         db.execute("UPDATE user_sessions SET last_sim_time = 0 WHERE user_id = ?", (user_id,))
         db.commit()
         db.close()
@@ -332,7 +349,17 @@ def test_restart_persistence_two_process_history_link_serves_report(tmp_path):
             f"ws://127.0.0.1:{port}/ws/worker?name=acc",
             additional_headers={"X-Cluster-Secret": ACC_SECRET},
         ) as ws:
-            r = client.post("/api/run-simulation")
+            # SEC-6/t_2f386596: run the caller's own generated input (the
+            # fake ws worker never fetches it).
+            gen = client.post("/api/generate-simc", json={
+                "char_class": "paladin", "char_name": "AccLive",
+                "base_profile": "paladin=AccLive", "equipped_gear": {},
+                "selected_items": {}, "selected_enchants": {}, "selected_gems": [],
+                "selected_meta_gems": [], "item_levels": {}, "gear_upgrades": {},
+                "voidforged_items": {}, "extra_sockets": {},
+            })
+            assert gen.status_code == 200, gen.text
+            r = client.post("/api/run-simulation", params={"input_id": gen.json()["input_id"]})
             assert r.status_code == 200, r.text
             task_id, worker_id = r.json()["task_id"], r.json()["worker_id"]
 
@@ -411,7 +438,7 @@ def test_history_reads_work_without_cooldown_rows(history_user, monkeypatch):
     assert master.session_get(history_user) is None  # no cooldown row exists
 
     client = TestClient(app)
-    client.cookies.set("session_id", history_user)
+    client.cookies.set("session_id", master._issue_session(history_user))
 
     assert client.get("/history").status_code == 200
     resp = client.get("/api/history")

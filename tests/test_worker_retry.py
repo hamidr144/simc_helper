@@ -8,11 +8,12 @@ Covers all 5 implementation points from the retry-logic task:
   5. Edge cases and configuration variations
 """
 
+import asyncio
 import json
 import os
 import sys
 import time
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -611,3 +612,217 @@ class TestEdgeCases:
         assert ts.task_id == "id-preserved"
         d = ts.to_dict()
         assert d["task_id"] == "id-preserved"
+
+
+# ---------------------------------------------------------------------------
+# 7. User Stop must not be retried (t_a0bb3a07, LIFE-1)
+# ---------------------------------------------------------------------------
+
+class TestStopNotRetried:
+    """Regression: Stop was treated as a failure and the retry loop
+    re-started the simulation (worker.py retry loop, LIFE-1)."""
+
+    @pytest.mark.asyncio
+    async def test_execute_task_maps_stopped_to_sentinel(self):
+        """process_logs returning 'stopped' yields STOPPED_EXIT_CODE, not 1."""
+        from types import SimpleNamespace
+        master_fd, slave_fd = os.openpty()
+        proc = SimpleNamespace(pid=os.getpid(), wait=lambda timeout=None: 0)
+        with patch("worker.pty.openpty", return_value=(master_fd, slave_fd)), \
+             patch("worker.subprocess.Popen", return_value=proc), \
+             patch("worker.process_logs", new=AsyncMock(return_value="stopped")):
+            code, report, err = await worker._execute_task(None, "t-map", "/tmp/in.simc", AsyncMock())
+        assert code == worker.STOPPED_EXIT_CODE
+        assert report is None
+        assert err == "Task was stopped by user"
+
+    @pytest.mark.asyncio
+    async def test_stop_is_not_retried(self):
+        """A stopped task runs exactly one attempt and reports stopped:true."""
+        mock_ws = AsyncMock()
+        mock_ws.open = True
+
+        async def fake_execute(session, task_id, input_file, websocket):
+            return worker.STOPPED_EXIT_CODE, None, "Task was stopped by user"
+
+        mock_ws.recv.side_effect = [
+            json.dumps({"type": "start", "task_id": "t-stop", "input_url": "/in"}),
+            Exception("Break"),
+        ]
+
+        with patch("worker.websockets.connect") as mock_connect, \
+             patch("worker.aiohttp.ClientSession"), \
+             patch("worker.should_update_simc", return_value=False), \
+             patch("worker.asyncio.sleep", side_effect=Exception("Stop")), \
+             patch("worker.download_input_file", return_value=True), \
+             patch("worker.os.makedirs"), \
+             patch("worker._execute_task", side_effect=fake_execute) as mock_execute, \
+             patch("worker.MAX_RETRY_COUNT", 3):
+            mock_connect.return_value.__aenter__.return_value = mock_ws
+            try:
+                await run_worker()
+            except Exception:
+                pass
+
+        assert mock_execute.call_count == 1  # no restart after stop
+        assert worker.task_status_store["t-stop"].status == "stopped"
+        done_calls = [
+            c for c in mock_ws.send.call_args_list
+            if json.loads(c.args[0]).get("type") == "done"
+        ]
+        assert len(done_calls) == 1
+        final_msg = json.loads(done_calls[-1].args[0])
+        assert final_msg["stopped"] is True
+        assert final_msg["error"] == "Task was stopped by user"
+        assert final_msg["retry_count"] == 0
+
+    @pytest.mark.asyncio
+    async def test_master_relay_reports_stopped(self):
+        """done{stopped:true} relays as 'Simulation stopped.', not 'failed'."""
+        import web.main as main_mod
+        queue: asyncio.Queue = asyncio.Queue()
+        queue.put_nowait({
+            "type": "done", "task_id": "t-relay",
+            "code": worker.STOPPED_EXIT_CODE,
+            "error": "Task was stopped by user", "stopped": True,
+        })
+        main_mod.manager.task_queues["t-relay"] = set()
+        events = [e async for e in main_mod.simulation_event_generator("t-relay", "w1", queue=queue)]
+        payload = json.loads(events[-1].split("data: ", 1)[1])
+        assert payload["type"] == "error"
+        assert payload["text"] == "Simulation stopped."
+
+
+# ---------------------------------------------------------------------------
+# t_acd39188 (LIFE-10): mid-run master restart — reconnect, replay, retry
+# ---------------------------------------------------------------------------
+
+class TestMasterReconnect:
+    """Root causes from BUG t_acd39188: retry loop burned its attempts on a
+    dead WS, upload failures were swallowed, and nothing replayed after
+    reconnect."""
+
+    @pytest.mark.asyncio
+    async def test_execute_task_reconnect_kills_sim_and_raises(self, tmp_path):
+        """process_logs 'reconnect' must kill the sim and raise, not return
+        a plain exit-1 failure (which made the reconnect branch dead code)."""
+        import subprocess as sp_mod
+        fake_proc = MagicMock()
+        fake_proc.pid = 4242
+        fake_proc.wait.return_value = -15
+        with patch("worker.pty.openpty", return_value=(11, 12)), \
+             patch.object(sp_mod, "Popen", return_value=fake_proc), \
+             patch("worker.os.close"), \
+             patch("worker.process_logs", new_callable=AsyncMock, return_value="reconnect"), \
+             patch("worker.os.killpg") as killpg, \
+             patch("worker.os.getpgid", return_value=777):
+            with pytest.raises(worker._ReconnectRequested):
+                await worker._execute_task(MagicMock(), "t-rc", "in.simc", MagicMock())
+        killpg.assert_called_once_with(777, worker.signal.SIGTERM)
+        fake_proc.wait.assert_called_once_with(timeout=5)
+
+    @pytest.mark.asyncio
+    async def test_upload_file_with_retry_retries_then_succeeds(self):
+        calls = {"n": 0}
+
+        async def flaky(session, task_id, path):
+            calls["n"] += 1
+            if calls["n"] < 2:
+                raise RuntimeError("master down")
+            return {"status": "success"}
+
+        with patch("worker.upload_file", side_effect=flaky), \
+             patch("worker._calculate_retry_backoff", return_value=0):
+            res = await worker._upload_file_with_retry(MagicMock(), "t1", "/tmp/x.zip")
+        assert res == {"status": "success"}
+        assert calls["n"] == 2
+
+    @pytest.mark.asyncio
+    async def test_upload_file_with_retry_final_failure_raises(self):
+        """Final failure must raise — never re-swallow (LIFE-9 composition)."""
+        with patch("worker.upload_file", side_effect=RuntimeError("down")), \
+             patch("worker._calculate_retry_backoff", return_value=0):
+            with pytest.raises(RuntimeError, match="down"):
+                await worker._upload_file_with_retry(MagicMock(), "t1", "/tmp/x.zip")
+
+    @pytest.mark.asyncio
+    async def test_upload_file_with_retry_missing_file_raises_fast(self):
+        up = AsyncMock(side_effect=FileNotFoundError("missing"))
+        with patch("worker.upload_file", up):
+            with pytest.raises(FileNotFoundError):
+                await worker._upload_file_with_retry(MagicMock(), "t1", "/tmp/x.zip")
+        assert up.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_recover_task_lost_reports_failed(self):
+        """No artifacts.zip on disk -> user gets a failed done, not silence."""
+        ws = AsyncMock()
+        with patch("worker.os.path.exists", return_value=False):
+            await worker._recover_task_after_reconnect(MagicMock(), ws, "t-lost")
+        done = next(m for m in (json.loads(c.args[0]) for c in ws.send.call_args_list)
+                    if m["type"] == "done")
+        assert done["task_id"] == "t-lost"
+        assert done["code"] == 1
+        assert "not resumable" in done["error"]
+
+    @pytest.mark.asyncio
+    async def test_recover_task_replays_artifacts_zip(self):
+        """A run that finished during the outage: re-upload the zip on disk
+        and report success with the report file name."""
+        import zipfile
+        task_id = f"l10{int(time.time()*1000)%10**8}"
+        ws_dir = f"/tmp/worker_sim_{task_id}"  # nosec B108
+        os.makedirs(ws_dir, exist_ok=True)
+        try:
+            with zipfile.ZipFile(f"{ws_dir}/artifacts.zip", "w") as zf:
+                zf.writestr("report_9999.html", "<html></html>")
+            up = AsyncMock(return_value={"status": "success"})
+            ws = AsyncMock()
+            with patch("worker._upload_file_with_retry", up):
+                await worker._recover_task_after_reconnect(MagicMock(), ws, task_id)
+            up.assert_awaited_once()
+            done = next(m for m in (json.loads(c.args[0]) for c in ws.send.call_args_list)
+                        if m["type"] == "done")
+            assert done["code"] == 0
+            assert done["report_file"] == "report_9999.html"
+        finally:
+            import shutil
+            shutil.rmtree(ws_dir, ignore_errors=True)
+
+    @pytest.mark.asyncio
+    async def test_reconnect_break_preserves_task_and_replays_after_reconnect(self):
+        """End-to-end loop: WS dies mid-execution -> exactly ONE attempt
+        (no retry storm on the dead socket) -> reconnect sends 'resume' and
+        runs the replay."""
+        ws1, ws2 = AsyncMock(), AsyncMock()
+        ws1.recv.side_effect = [json.dumps({"type": "start", "task_id": "t-rc-loop", "input_url": "/in"})]
+        ws1.send.side_effect = [None, worker.websockets.ConnectionClosed(None, None)]
+        ws2.recv.side_effect = [Exception("Break")]
+
+        class _CM:
+            def __init__(self, ws): self.ws = ws
+            async def __aenter__(self): return self.ws
+            async def __aexit__(self, *a): return False
+
+        conns = iter([_CM(ws1), _CM(ws2)])
+        execute = AsyncMock(side_effect=worker._ReconnectRequested())
+        recover = AsyncMock()
+        with patch("worker.websockets.connect", side_effect=lambda *a, **k: next(conns)), \
+             patch("worker.aiohttp.ClientSession"), \
+             patch("worker.should_update_simc", return_value=False), \
+             patch("worker.asyncio.sleep", side_effect=[None, None, None, Exception("Stop")]), \
+             patch("worker.download_input_file", return_value=True), \
+             patch("worker.os.makedirs"), \
+             patch("worker._execute_task", execute), \
+             patch("worker._recover_task_after_reconnect", recover):
+            try:
+                await run_worker()
+            except Exception:
+                pass
+
+        assert execute.await_count == 1  # root cause 1: no attempts 2-4 on dead WS
+        recover.assert_awaited_once()
+        assert recover.await_args.args[2] == "t-rc-loop"
+        resume = next(m for m in (json.loads(c.args[0]) for c in ws2.send.call_args_list)
+                      if m["type"] == "resume")
+        assert resume["task_id"] == "t-rc-loop"

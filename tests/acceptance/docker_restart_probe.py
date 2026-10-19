@@ -75,7 +75,8 @@ subprocess.run(
 # fake worker + full run
 with ws_connect("ws://127.0.0.1:8899/ws/worker?name=dockerprobe",
                 additional_headers={"X-Cluster-Secret": SECRET}) as ws:
-    r = client.post("/api/run-simulation")
+    # SEC-6: explicit input_id (the fake ws worker never fetches it)
+    r = client.post("/api/run-simulation", params={"input_id": "dockerprobe1"})
     check("run-simulation 200", r.status_code == 200, r.text[:120])
     task_id, worker_id = r.json()["task_id"], r.json()["worker_id"]
     start = json.loads(ws.recv(timeout=15))

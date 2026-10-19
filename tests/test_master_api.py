@@ -12,6 +12,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 from web.main import (
     app,
     manager,
+    parse_actor_precision,
     parse_wowhead_icon_name,
     parse_wowhead_upgrade,
     wowhead_xml_url,
@@ -141,7 +142,8 @@ def test_rate_limit():
         with patch.object(manager, "get_idle_worker", return_value="worker1"), \
              patch.object(manager, "send_task", return_value=None):
             manager.active_workers["worker1"] = MagicMock(status="Idle")
-            response = client.post("/api/run-simulation")
+            # SEC-6: explicit input_id (fake worker never fetches it)
+            response = client.post("/api/run-simulation", params={"input_id": "qa-ratelimit"})
             assert response.status_code == 200
             assert "task_id" in response.json()
             
@@ -157,7 +159,8 @@ def test_api_run_simulation_endpoint():
     with patch.object(manager, "get_idle_worker", return_value="worker1"), \
          patch.object(manager, "send_task", return_value=None):
         manager.active_workers["worker1"] = MagicMock(status="Idle")
-        response = client.post("/api/run-simulation")
+        # SEC-6: explicit input_id (fake worker never fetches it)
+        response = client.post("/api/run-simulation", params={"input_id": "qa-endpoint"})
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "success"
@@ -631,9 +634,11 @@ def test_report_url_endpoint():
     assert missing.status_code == 404
 
 
-def test_get_results_latest_spans_user_directories():
-    """t_c968bf8d: task_id=latest globs the new <user>/<task> layout."""
-    task_dir = os.path.join(MASTER_REPORTS_DIR, "u-latest", "latest-task")
+def test_get_results_latest_scoped_to_caller_dir():
+    """t_c968bf8d + t_a4ff7b5d: task_id=latest resolves the <user>/<task>
+    layout but only within the CALLER's own user directory (auth-disabled
+    test client -> "anonymous"); it no longer globs across users."""
+    task_dir = os.path.join(MASTER_REPORTS_DIR, "anonymous", "latest-task")
     os.makedirs(task_dir, exist_ok=True)
     with open(os.path.join(task_dir, "report_latest.html"), "w") as f:
         f.write('<h2 class="toggle">Latest&#160;:&#160;4242 dps</h2>')
@@ -732,17 +737,98 @@ def test_api_get_results_nightly_report_format():
     response = client.get(f"/api/get-results?task_id={task_id}")
     assert response.status_code == 200
     results = response.json()["results"]
-    assert len(results) == 3
+    assert len(results) == 2
     by_name = {r["name"]: r for r in results}
     assert by_name["Hamidriel"]["dps"] == 18820
     assert by_name["Hamidriel_back_12"]["dps"] == 19872
-    assert by_name["Fluffy_Pillow"]["dps"] == 0
-    # Non-player headers (Table of Contents, apm-summary) are not results.
-    assert set(by_name) == {"Hamidriel", "Hamidriel_back_12", "Fluffy_Pillow"}
+    # Non-player headers (Table of Contents, apm-summary) are not results,
+    # and the 0-dps pet/utility section is filtered (E2E-7).
+    assert set(by_name) == {"Hamidriel", "Hamidriel_back_12"}
     head = by_name["Hamidriel"]["gear"]["head"]
     assert head.startswith("id=271465")
     assert "enchant_id=8017" in head
     assert "bonus_id=6652/12850" in head
+
+
+# --- mean±error end-to-end (D6, t_791b16f5) ---------------------------------
+
+# Synthetic but verbatim-shaped (Appendix A: `Player: <name> <race> <class>
+# <spec> <level>` then `DPS=<mean> DPS-Error=<abs>/<rel>% DPS-Range=...`).
+STAGE3_LOG_TWO_ACTORS = (
+    "SimulationCraft 1210-01 for World of Warcraft 12.1.0.69933\n"
+    "Player: Hamidriel blood_elf paladin retribution 90\n"
+    "  copy=Hamidriel\n"
+    "  Talented: some APL echo line\n"
+    "DPS=18820.458333 DPS-Error=37.715052/0.20% DPS-Range=18745-18896\n"
+    "--------------------------------------------------------------------------------\n"
+    "Player: Hamidriel_back_12 blood_elf paladin retribution 90\n"
+    "  copy=Hamidriel_back_12\n"
+    "DPS=19872.500123 DPS-Error=40.123456/0.21% DPS-Range=19792-19953\n"
+    "--------------------------------------------------------------------------------\n"
+    "DPS Ranking:\n"
+    "   19872 100.4%  Hamidriel_back_12\n"
+    "   18820 100.0%  Hamidriel\n"
+)
+
+
+def test_parse_actor_precision_two_blocks(tmp_path):
+    """D6: per-actor mean+error_pct parsed from a stage-3 log (two Player
+    blocks); a third block whose summary line never appears is skipped
+    defensively when the next block boundary arrives."""
+    log = tmp_path / "stage3.log"
+    log.write_text(
+        STAGE3_LOG_TWO_ACTORS
+        + "Player: Hamidriel_trinket_3 blood_elf paladin retribution 90\n"
+        + "  copy=Hamidriel_trinket_3\n",
+        encoding="utf-8",
+    )
+    parsed = parse_actor_precision(str(log))
+    assert parsed == {
+        "Hamidriel": {"mean": 18820.458333, "error_pct": 0.2},
+        "Hamidriel_back_12": {"mean": 19872.500123, "error_pct": 0.21},
+    }
+
+
+def test_parse_actor_precision_missing_log(tmp_path):
+    assert parse_actor_precision(str(tmp_path / "nope.log")) == {}
+
+
+def test_api_get_results_merges_mean_error(tmp_path):
+    """D6: get-results merges mean_error_pct by exact name from the stage-3
+    log the worker now ships in artifacts.zip (extracted next to the report)."""
+    task_id = "test-meanerr"
+    task_dir = os.path.join(MASTER_REPORTS_DIR, "testuser", task_id)
+    os.makedirs(task_dir, exist_ok=True)
+    with open(os.path.join(task_dir, "report_t.html"), "w") as f:
+        f.write('<h2 class="toggle">Hamidriel&#160;:&#160;18,820 dps</h2>\n'
+                '<h2 class="toggle">Hamidriel_back_12&#160;:&#160;19,872 dps</h2>\n'
+                '<h2 class="toggle">Hamidriel_back_13&#160;:&#160;19,001 dps</h2>')
+    with open(os.path.join(task_dir, "stage3.log"), "w") as f:
+        f.write(STAGE3_LOG_TWO_ACTORS)
+
+    response = client.get(f"/api/get-results?task_id={task_id}")
+    assert response.status_code == 200
+    by_name = {r["name"]: r for r in response.json()["results"]}
+    assert by_name["Hamidriel"]["mean_error_pct"] == 0.2
+    assert by_name["Hamidriel_back_12"]["mean_error_pct"] == 0.21
+    # Actor present in the report but absent from the log -> explicit None.
+    assert by_name["Hamidriel_back_13"]["mean_error_pct"] is None
+
+
+def test_api_get_results_legacy_zip_no_log_fields_absent():
+    """D6/R5: legacy runs have no stage3.log in the task dir — the response
+    keeps its old shape (mean_error_pct key absent, not null)."""
+    task_id = "test-meanerr-legacy"
+    task_dir = os.path.join(MASTER_REPORTS_DIR, "testuser", task_id)
+    os.makedirs(task_dir, exist_ok=True)
+    with open(os.path.join(task_dir, "report_t.html"), "w") as f:
+        f.write('<h2 class="toggle">C1&#160;:&#160;100,000 dps</h2>')
+
+    response = client.get(f"/api/get-results?task_id={task_id}")
+    assert response.status_code == 200
+    item = response.json()["results"][0]
+    assert item["name"] == "C1"
+    assert "mean_error_pct" not in item
 
 
 def test_input_serving_allows_generated_simc_file_only():
@@ -756,9 +842,9 @@ def test_input_serving_allows_generated_simc_file_only():
     assert blocked.status_code == 404
 
 def test_parse_addon_edge_cases():
-    # Empty text
+    # Empty text is not a SimC export (t_0cb6af81)
     response = client.post("/api/parse-addon", json={"addon_text": ""})
-    assert response.status_code == 200
+    assert response.status_code == 400
     
     # No items
     response = client.post("/api/parse-addon", json={"addon_text": "paladin=Test"})
@@ -818,6 +904,42 @@ def test_api_task_status_not_found():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "not_found"
+
+
+def test_task_status_populated_by_worker_ws_push():
+    """t_14e40e6c regression: /api/task-status must reflect statuses the
+    worker pushes over /ws/worker (the only cross-process writer), not just
+    in-process writes to task_status_store. Red before the fix: the WS
+    handler forwarded to SSE queues but never stored, so master always
+    returned not_found mid-run."""
+    from src.worker import task_status_store
+    task_status_store.pop("ws-push-t1", None)
+    ws_client = TestClient(app, client=("203.0.113.9", 1))
+    with ws_client.websocket_connect(
+        "/ws/worker?name=push-ws-worker",
+        headers={"X-Cluster-Secret": master.CLUSTER_SECRET},
+    ) as ws:
+        ws.send_json({"type": "task_status_update", "task_id": "ws-push-t1",
+                      "status": {"task_id": "ws-push-t1", "status": "running",
+                                 "retry_count": 0, "max_retries": 3,
+                                 "exit_code": None, "error": None,
+                                 "updated_at": 1.0}})
+        # Second push exercises the upsert (update, not create) path.
+        ws.send_json({"type": "task_status_update", "task_id": "ws-push-t1",
+                      "status": {"task_id": "ws-push-t1", "status": "done",
+                                 "retry_count": 1, "max_retries": 3,
+                                 "exit_code": 0, "error": None,
+                                 "updated_at": 2.0}})
+    try:
+        data = client.get("/api/task-status?task_id=ws-push-t1").json()
+        assert data["status"] == "ok"
+        assert data["task"]["status"] == "done"
+        assert data["task"]["exit_code"] == 0
+        assert data["task"]["retry_count"] == 1
+        listing = client.get("/api/task-status").json()
+        assert "ws-push-t1" in listing["tasks"]
+    finally:
+        task_status_store.pop("ws-push-t1", None)
 
 
 # =========================================================================
@@ -895,7 +1017,7 @@ def test_valid_session_passes_gate_run_simulation(monkeypatch):
     user_id = user_create(username, security.hash_password("pw-not-used"))
     monkeypatch.setattr(master.manager, "get_idle_worker", lambda: None)
     authed = TestClient(app)
-    authed.cookies.set("session_id", user_id)
+    authed.cookies.set("session_id", master._issue_session(user_id))
     response = authed.post("/api/run-simulation")
     # Past the auth gate; fails later only because no workers are connected.
     assert response.status_code == 503
@@ -1005,16 +1127,36 @@ def test_register_form_redirects_and_logs_in(monkeypatch):
     )
     assert response.status_code == 303
     assert response.headers["location"] == "dashboard"
-    assert anon.cookies.get("session_id") == user_get(username)["user_id"]
+    # SEC-7 (t_0e328148): the cookie is an opaque token, not the user_id;
+    # it must resolve to the new user through the server-side session store.
+    from src.core.db import auth_session_user
+    token = anon.cookies.get("session_id")
+    assert token
+    resolved = auth_session_user(token, time.time())
+    assert resolved and resolved["user_id"] == user_get(username)["user_id"]
     assert anon.get("/dashboard").status_code == 200
     # The issued session passes the API gate, same as login's does.
     gated = anon.post("/api/parse-addon", json={"addon_text": "paladin=Test\nhead=id=123"})
     assert gated.status_code == 200
 
+    # t_6f351b30 regression: browser form error 303s back to the register
+    # page with the message as ?error= (styled error box), not raw JSON.
     dup = TestClient(app).post(
-        "/register", data={"username": username, "password": "pw-123456"}
+        "/register",
+        data={"username": username, "password": "pw-123456"},
+        follow_redirects=False,
     )
-    assert dup.status_code == 400
+    assert dup.status_code == 303
+    assert dup.headers["location"].startswith("register?error=")
+    assert "Username%20already%20exists" in dup.headers["location"]
+    assert "application/json" not in dup.headers.get("content-type", "")
+    # API clients that explicitly ask for JSON keep the 400 status code.
+    dup_api = TestClient(app).post(
+        "/register",
+        data={"username": username, "password": "pw-123456"},
+        headers={"Accept": "application/json"},
+    )
+    assert dup_api.status_code == 400
     master._registrations.reset()
 
 
@@ -1051,14 +1193,50 @@ def test_login_rate_limited_after_repeated_failures(monkeypatch):
     username = f"rl-{uuid.uuid4().hex[:8]}"
     user_create(username, security.hash_password("correct-horse-battery"))
     anon = TestClient(app)
+    json_headers = {"Accept": "application/json"}
     for _ in range(5):
-        bad = anon.post("/login", data={"username": username, "password": "wrong"})
+        bad = anon.post("/login", data={"username": username, "password": "wrong"},
+                        headers=json_headers)
         assert bad.status_code == 401
-    limited = anon.post("/login", data={"username": username, "password": "wrong"})
+    limited = anon.post("/login", data={"username": username, "password": "wrong"},
+                        headers=json_headers)
     assert limited.status_code == 429
     # While limited, even the correct password is refused (lockout by IP).
-    blocked = anon.post("/login", data={"username": username, "password": "correct-horse-battery"})
+    blocked = anon.post("/login", data={"username": username, "password": "correct-horse-battery"},
+                        headers=json_headers)
     assert blocked.status_code == 429
+    # t_6f351b30: the browser form path gets 303 -> login?error= instead of
+    # the raw JSON 429 document.
+    form = anon.post(
+        "/login", data={"username": username, "password": "wrong"}, follow_redirects=False
+    )
+    assert form.status_code == 303
+    assert form.headers["location"].startswith("login?error=")
+    master._login_failures.reset()
+
+
+def test_login_form_error_redirects_with_error_param(monkeypatch):
+    """t_6f351b30 regression: browser form login errors render as a styled
+    error box on the login page (303 + ?error=), not a raw JSON document;
+    JSON clients keep the 401 status code."""
+    _auth_on(monkeypatch)
+    master._login_failures.reset()
+    username = f"formerr-{uuid.uuid4().hex[:8]}"
+    user_create(username, security.hash_password("correct-horse-battery"))
+    anon = TestClient(app)
+    bad = anon.post(
+        "/login", data={"username": username, "password": "wrong"}, follow_redirects=False
+    )
+    assert bad.status_code == 303
+    assert bad.headers["location"].startswith("login?error=")
+    assert "Invalid%20username%20or%20password" in bad.headers["location"]
+    assert "application/json" not in bad.headers.get("content-type", "")
+    api = anon.post(
+        "/login",
+        data={"username": username, "password": "wrong"},
+        headers={"Accept": "application/json"},
+    )
+    assert api.status_code == 401
     master._login_failures.reset()
 
 
@@ -1070,7 +1248,7 @@ def test_login_rate_limited_after_repeated_failures(monkeypatch):
 
 def _authed_client(user_id):
     authed = TestClient(app)
-    authed.cookies.set("session_id", user_id)
+    authed.cookies.set("session_id", master._issue_session(user_id))
     return authed
 
 
@@ -1294,7 +1472,7 @@ def test_dashboard_survives_cooldown_purge(monkeypatch):
 
 
 def test_page_gates_reject_unknown_session_cookie(monkeypatch):
-    """The users-table check must still bounce forged/stale cookies."""
+    """The session-store check must still bounce forged/stale cookies."""
     _pages_under_auth(monkeypatch)
     anon = TestClient(app)
     anon.cookies.set("session_id", "user-id-that-does-not-exist")
@@ -1318,7 +1496,10 @@ def test_login_does_not_seed_run_cooldown(monkeypatch):
     monkeypatch.setattr(master.manager, "send_task", AsyncMock(return_value=None))
     monkeypatch.setitem(master.manager.active_workers, "worker1", MagicMock(status="Idle"))
     try:
-        first = authed.post("/api/run-simulation")
+        # SEC-6: explicit input_id (fake worker never fetches it)
+        # t_2f386596: explicit input_id must match the caller's own record.
+        master.generated_inputs_by_user[user_id] = {"input_id": "qa-cooldown"}
+        first = authed.post("/api/run-simulation", params={"input_id": "qa-cooldown"})
         assert first.status_code == 200, first.text
         task_id = first.json()["task_id"]
         # The real cooldown still applies once a sim actually started.
@@ -1523,6 +1704,8 @@ def test_run_simulation_snapshots_task_metadata(monkeypatch):
     _auth_on(monkeypatch)  # real session -> current_user is the created user
     uid = _rh_user("snap")
     m.run_meta_by_user[uid] = {"source": "armory", "char_name": "Snap"}
+    # t_2f386596: explicit input_id must match the caller's own record.
+    m.generated_inputs_by_user[uid] = {"input_id": "qa-snap"}
     m.user_last_sim_time.pop(uid, None)
     session_cleanup_older_than(0, time.time())
     task_id = None
@@ -1531,7 +1714,8 @@ def test_run_simulation_snapshots_task_metadata(monkeypatch):
              patch.object(manager, "send_task", return_value=None):
             manager.active_workers["worker-snap"] = MagicMock(status="Idle")
             authed = _authed_client(uid)
-            response = authed.post("/api/run-simulation")
+            # SEC-6: explicit input_id (fake worker never fetches it)
+            response = authed.post("/api/run-simulation", params={"input_id": "qa-snap"})
             assert response.status_code == 200
             task_id = response.json()["task_id"]
         assert m.task_meta_map[task_id] == {"source": "armory", "char_name": "Snap"}

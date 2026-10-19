@@ -1,4 +1,5 @@
-FROM tobix/pywine:3.9
+# py3.11 to match the fastapi pin (requirements.txt needs >=3.10), Dockerfile.linux and CI matrix python
+FROM tobix/pywine:3.11
 WORKDIR /app
 COPY requirements.txt .
 RUN wine pip install --no-cache-dir -r requirements.txt pyinstaller psutil requests

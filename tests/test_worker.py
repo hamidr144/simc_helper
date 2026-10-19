@@ -13,6 +13,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 from worker import (
     TaskStatus,
     _calculate_retry_backoff,
+    _sweep_stale_tmp_dirs,
     download_input_file,
     get_or_create_task_status,
     process_logs,
@@ -21,6 +22,15 @@ from worker import (
     task_status_store,
     worker_subcommand,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_host_tmp_sweep(monkeypatch):
+    """LIFE-10: run_worker sweeps the real /tmp at startup; keep unit tests
+    off the host filesystem. Tests that need the sweep call the function
+    directly (the top-level import above binds the original)."""
+    import worker as _w
+    monkeypatch.setattr(_w, "_sweep_stale_tmp_dirs", lambda root="/tmp": 0)
 
 
 def test_simc_update_due_on_startup_and_after_interval():
@@ -182,12 +192,15 @@ async def test_worker_start_command():
          patch("worker.asyncio.sleep", side_effect=[None, Exception("Stop")]), \
          patch("worker.download_input_file", return_value=True), \
          patch("worker.os.makedirs"), \
+         patch("worker.shutil.rmtree") as mock_rmtree, \
          patch("worker._execute_task", side_effect=fake_execute) as mock_execute:
         mock_connect.return_value.__aenter__.return_value = mock_ws
         try: await run_worker()
         except: pass
         assert mock_execute.called
         assert mock_execute.call_count >= 1
+        # LIFE-10: terminal task must drop its /tmp/worker_sim_<id> workspace.
+        mock_rmtree.assert_any_call("/tmp/worker_sim_t1", ignore_errors=True)
 
 @pytest.mark.asyncio
 async def test_worker_stop_command():
@@ -325,6 +338,7 @@ async def test_upload_file_direct():
     from worker import upload_file
     mock_session = MagicMock()
     mock_resp = AsyncMock()
+    mock_resp.status = 200
     mock_resp.json.return_value = {"status": "success"}
     mock_session.post.return_value.__aenter__.return_value = mock_resp
     
@@ -338,15 +352,36 @@ async def test_upload_file_direct():
 
 @pytest.mark.asyncio
 async def test_upload_file_error():
+    # LIFE-9 (t_a13e5be8): upload failures must propagate, not return None.
     from worker import upload_file
     mock_session = MagicMock()
     mock_session.post.side_effect = Exception("Upload error")
     with open("fake_error.zip", "w") as f: f.write("data")
     try:
-        res = await upload_file(mock_session, "t1", "fake_error.zip")
-        assert res is None
+        with pytest.raises(Exception, match="Upload error"):
+            await upload_file(mock_session, "t1", "fake_error.zip")
     finally:
         if os.path.exists("fake_error.zip"): os.remove("fake_error.zip")
+
+@pytest.mark.asyncio
+async def test_upload_file_non_200_raises():
+    from worker import upload_file
+    mock_session = MagicMock()
+    mock_resp = AsyncMock()
+    mock_resp.status = 500
+    mock_session.post.return_value.__aenter__.return_value = mock_resp
+    with open("fake_500.zip", "w") as f: f.write("data")
+    try:
+        with pytest.raises(RuntimeError, match="HTTP 500"):
+            await upload_file(mock_session, "t1", "fake_500.zip")
+    finally:
+        if os.path.exists("fake_500.zip"): os.remove("fake_500.zip")
+
+@pytest.mark.asyncio
+async def test_upload_file_missing_file_raises():
+    from worker import upload_file
+    with pytest.raises(FileNotFoundError):
+        await upload_file(MagicMock(), "t1", "does_not_exist.zip")
 
 @pytest.mark.asyncio
 async def test_download_input_file_error():
@@ -455,7 +490,7 @@ def test_execute_task_report_regexes_match_real_simhelper_logs():
         report_match = re.search(r"report_.*\.html", log_str)
         assert report_match is not None, f"no report found in {log_path.name}"
         assert report_match.group(0) == expected_report
-        tmp_match = re.search(r"Temporary files are in (\/tmp\/simc_[^\s\n]+)", log_str)
+        tmp_match = re.search(r"Temporary files are in (\/tmp\/simc_[A-Za-z0-9_]+)", log_str)
         assert tmp_match is not None, f"no tmp dir found in {log_path.name}"
         assert tmp_match.group(1) == expected_tmp
 
@@ -519,3 +554,92 @@ async def test_execute_task_uploads_real_baseline_report(tmp_path, monkeypatch):
     with zipfile.ZipFile(uploads[0][1]) as zf:
         assert report_file in zf.namelist()
         assert zf.read(report_file) == NIGHTLY_BASELINE_REPORT.read_bytes()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source_log", ["stage3.log", "baseline.log"])
+async def test_execute_task_zip_carries_final_stage_log(tmp_path, monkeypatch, source_log):
+    """D6 (t_791b16f5): artifacts.zip carries the final-stage SimC log under
+    the uniform arcname ``stage3.log``; a baseline-only run (no stage3.log)
+    falls back to ``baseline.log`` content under the same arcname."""
+    import worker as worker_mod
+
+    tag = source_log.split(".")[0]
+    task_id = f"fixture-stagelog-{tag}-{os.getpid()}"
+    simc_dir = f"/tmp/simc_fixturestagelog_{os.getpid()}_{tag}"
+    report_file = f"report_fixture_t791b16f5_{tag}.html"
+    os.makedirs(f"/tmp/worker_sim_{task_id}", exist_ok=True)
+    stub = tmp_path / f"stub_{tag}.py"
+    stub.write_text(
+        "import os, sys\n"
+        f"os.makedirs({simc_dir!r}, exist_ok=True)\n"
+        f"open(os.path.join({simc_dir!r}, {source_log!r}), 'w').write('Player: Stub blood_elf paladin retribution 90\\n')\n"
+        "os.makedirs('/tmp/simc_reports', exist_ok=True)\n"
+        f"open('/tmp/simc_reports/{report_file}', 'w').write('<html>ok</html>')\n"
+        f"sys.stdout.write('Temporary files are in {simc_dir}\\n')\n"
+        f"sys.stdout.write('{report_file}\\n')\n"
+        "sys.stdout.flush()\n"
+    )
+    monkeypatch.setattr(worker_mod, "worker_subcommand", lambda sub: [sys.executable, str(stub)])
+
+    uploads = []
+
+    async def fake_upload(session, tid, path):
+        snapshot = tmp_path / f"artifacts_{tag}.zip"
+        shutil.copy(path, snapshot)
+        uploads.append((tid, str(snapshot)))
+        return {"status": "success"}
+
+    monkeypatch.setattr(worker_mod, "upload_file", fake_upload)
+
+    ws = AsyncMock()
+    ws.recv.side_effect = asyncio.TimeoutError
+    try:
+        exit_code, report, error = await worker_mod._execute_task(
+            MagicMock(), task_id, "/tmp/inputs/fixture.simc", ws
+        )
+    finally:
+        shutil.rmtree(f"/tmp/worker_sim_{task_id}", ignore_errors=True)
+        shutil.rmtree(simc_dir, ignore_errors=True)
+        try:
+            os.remove(f"/tmp/simc_reports/{report_file}")
+        except OSError:
+            pass
+
+    assert (exit_code, error) == (0, None)
+    assert report == report_file
+    assert uploads
+    with zipfile.ZipFile(uploads[0][1]) as zf:
+        assert "stage3.log" in zf.namelist()
+        assert zf.read("stage3.log").startswith(b"Player: Stub")
+
+
+def test_sweep_stale_tmp_dirs(tmp_path):
+    """LIFE-10 (t_3075ffff): startup sweep removes leaked per-task dirs."""
+    (tmp_path / "worker_sim_t1").mkdir()
+    (tmp_path / "simc_20261016_101029").mkdir()
+    reports = tmp_path / "simc_reports"
+    reports.mkdir()
+    (reports / "report_x.html").write_text("x")
+    (tmp_path / "unrelated").mkdir()
+    (tmp_path / "worker_sim_notadir").write_text("x")
+
+    assert _sweep_stale_tmp_dirs(str(tmp_path)) == 2
+    assert not (tmp_path / "worker_sim_t1").exists()
+    assert not (tmp_path / "simc_20261016_101029").exists()
+    assert (reports / "report_x.html").exists()
+    assert (tmp_path / "unrelated").exists()
+    assert (tmp_path / "worker_sim_notadir").exists()
+    assert _sweep_stale_tmp_dirs(str(tmp_path / "missing")) == 0
+
+
+def test_tmp_dir_regex_rejects_spoofed_paths():
+    """LIFE-10: tmp_dir is rmtree'd, so the regex must not match path escapes."""
+    for spoof in (
+        "/tmp/simc_a/../../../../home/user",
+        "/tmp/simc_../../etc",
+    ):
+        m = re.search(r"Temporary files are in (\/tmp\/simc_[A-Za-z0-9_]+)",
+                      f"Temporary files are in {spoof}")
+        captured = m.group(1) if m else None
+        assert captured is None or "/" not in captured[len("/tmp/simc_"):]

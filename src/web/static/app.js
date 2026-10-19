@@ -35,7 +35,7 @@ function isElevatedLevel(level) {
 }
 async function loadUpgradeData() {
   try {
-    const response = await fetch('api/upgrade-data');
+    const response = await apiFetch('api/upgrade-data');
     if (!response.ok) return;
     upgradeData = await response.json();
     activeSeason = (upgradeData.seasons || [])
@@ -70,7 +70,7 @@ function detectSeasonFromExport(data) {
   if (matches.length) activeSeason = matches.reduce((a, b) => b.ilvl_band[1] > a.ilvl_band[1] ? b : a);
 }
 
-/* WoW class colors — identity accent only; the accent system stays --accent-color. */
+/* WoW class colors — identity accent only; the accent system stays --accent-*. */
 const CLASS_COLORS = {
   deathknight: '#c41f3b', demonhunter: '#a335ee', druid: '#ff7c0a',
   evoker: '#33937f', hunter: '#aad372', mage: '#3fc7eb',
@@ -102,6 +102,9 @@ let extraSockets = {};
 let slotSorts = {};
 let statScores = {};
 let addedItems = new Map();
+/* Item strings Wowhead resolves to a two-handed weapon (TG3-C slot-conflict
+   hint; filled by hydrateWowheadUpgrades from the upgrades lookup). */
+let twoHandedItems = new Set();
 const STAT_SORT_BATCH = 40;
 let generatedInput = null;
 let generationTimer = null;
@@ -178,28 +181,45 @@ function observeWorkflowSteps() {
 
 /* ---------- Worker status ---------- */
 
+let workerPollFailures = 0;
+
 async function pollWorkerStatus() {
   const chip = document.getElementById('worker-status');
   const text = document.getElementById('worker-status-text');
   if (!chip || !text) return;
   try {
-    const response = await fetch('api/state');
+    const response = await apiFetch('api/state');
+    // 401 = logged out: the banner explains it; the chip stays unknown ("—")
+    // until a successful authenticated poll (A4 — never a misleading chip).
+    if (response.status === 401) return;
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
+    workerPollFailures = 0;
     const workers = data.workers || [];
     const idle = workers.filter(worker => /idle/i.test(worker.status || '')).length;
+    const titles = workers.map(worker => `${worker.name}: ${worker.status}`).join('\n');
     if (!workers.length) {
       chip.className = 'status-chip status-err';
-      text.textContent = 'No workers';
+      text.textContent = 'No idle workers';
       chip.title = 'No SimC worker is connected to the master.';
+    } else if (idle === 0) {
+      // Busy is a queue state, not an error (doc 4.1).
+      chip.className = 'status-chip status-warn';
+      text.textContent = 'All workers busy \u00b7 waiting';
+      chip.title = titles;
     } else {
       chip.className = 'status-chip status-ok';
       text.textContent = `${idle}/${workers.length} workers idle`;
-      chip.title = workers.map(worker => `${worker.name}: ${worker.status}`).join('\n');
+      chip.title = titles;
     }
   } catch {
-    chip.className = 'status-chip status-err';
-    text.textContent = 'Server offline';
-    chip.title = 'The master server could not be reached.';
+    // Only after 3 consecutive failures is "Server offline" honest.
+    workerPollFailures += 1;
+    if (workerPollFailures >= 3) {
+      chip.className = 'status-chip status-err';
+      text.textContent = 'Server offline';
+      chip.title = 'The master server could not be reached.';
+    }
   }
 }
 
@@ -209,7 +229,7 @@ function renderCharChip() {
   const chip = document.getElementById('char-chip');
   if (!chip || !parsedData) return;
   const cls = String(parsedData.char_class || '').toLowerCase();
-  const color = CLASS_COLORS[cls] || 'var(--accent-color)';
+  const color = CLASS_COLORS[cls] || 'var(--accent-text)';
   const slots = Object.keys(parsedData.items_by_slot || {}).length;
   const candidates = Object.values(parsedData.items_by_slot || {})
     .reduce((total, items) => total + items.length, 0);
@@ -292,8 +312,14 @@ function startRunProgress() {
   simulationDone = false;
   runStartedAt = Date.now();
   logLineCount = 0;
+  logLines = [];
+  lastProgressPct = 0;
+  lastMetaAt = 0;
+  const resultSlot = document.getElementById('run-result');
+  if (resultSlot) { resultSlot.hidden = true; resultSlot.innerHTML = ''; }
   document.getElementById('run-progress').hidden = false;
-  document.getElementById('run-progress-meta').textContent = 'Starting…';
+  setRunProgress(0, 'Starting…');
+  setRunStage('');
   document.getElementById('run-elapsed').textContent = '00:00';
   runTimer = setInterval(() => {
     document.getElementById('run-elapsed').textContent = formatElapsed(Date.now() - runStartedAt);
@@ -304,39 +330,132 @@ function stopRunProgress() {
   if (runTimer) { clearInterval(runTimer); runTimer = null; }
 }
 
+// Stage markers printed by src/cli/sim_helper.py (STAGE 1/2/3, BASELINE).
+const RUN_STAGE_LABELS = {
+  'STAGE 1': 'Stage 1 of 3 · Fast filtering',
+  'STAGE 2': 'Stage 2 of 3 · Refinement',
+  'STAGE 3': 'Stage 3 of 3 · Final selection',
+  'BASELINE': 'Baseline only',
+};
+
+let lastProgressPct = 0;
+let lastMetaAt = 0;
+
 function updateRunProgressMeta(text) {
-  const meta = document.getElementById('run-progress-meta');
-  if (!meta) return;
-  const progress = String(text).match(/Progress:\s*(\d+)%\s*\(([^)]+)\)/);
+  const line = String(text).trim();
+  if (!line) return;
+  const progress = line.match(/Progress:\s*(\d+)%\s*\(([^)]+)\)/);
   if (progress) {
-    meta.textContent = `${progress[1]}% · ${progress[2]} profiles`;
+    setRunProgress(Number(progress[1]), `${progress[1]}% · ${progress[2]} profiles`);
     return;
   }
-  const line = String(text).trim();
-  if (line) meta.textContent = line.length > 90 ? `${line.slice(0, 90)}…` : line;
+  for (const marker of Object.keys(RUN_STAGE_LABELS)) {
+    if (line.includes(marker)) { setRunStage(RUN_STAGE_LABELS[marker]); return; }
+  }
+  setRunMeta(line.length > 90 ? `${line.slice(0, 90)}…` : line);
+}
+
+function setRunProgress(pct, meta) {
+  lastProgressPct = Math.min(100, Math.max(0, pct));
+  const fill = document.getElementById('run-progress-fill');
+  if (fill) {
+    fill.style.width = `${lastProgressPct}%`;
+    fill.setAttribute('aria-valuenow', String(lastProgressPct));
+  }
+  setRunMeta(meta);
+  updateRunEta();
+}
+
+function setRunStage(label) {
+  const el = document.getElementById('run-stage');
+  if (el) el.textContent = label;
+}
+
+// aria-live polite throttled to <=1 update/s (doc 4.2) so fast log lines
+// never spam screen readers.
+function setRunMeta(text) {
+  const now = Date.now();
+  if (now - lastMetaAt < 1000) return;
+  lastMetaAt = now;
+  const meta = document.getElementById('run-progress-meta');
+  if (meta) meta.textContent = text;
+}
+
+// t_2ab8f3be: log rendering was O(n^2) (textContent += per line) and froze
+// the tab on long runs. Full lines stay in logLines for the download button;
+// the DOM shows only the last LOG_RENDER_CAP lines, repainted once per frame.
+const LOG_RENDER_CAP = 2000;
+let logLines = [];
+let logRenderQueued = false;
+
+function pushLogLines(lines) {
+  logLines.push(...lines);
+  logLineCount += lines.length;
+  if (!logRenderQueued) {
+    logRenderQueued = true;
+    requestAnimationFrame(renderLogTail);
+  }
+}
+
+function renderLogTail() {
+  logRenderQueued = false;
+  const log = document.getElementById('simulation-log');
+  if (!log) return;
+  log.textContent = logLines.slice(-LOG_RENDER_CAP).join('\n') + '\n';
+  const follow = document.getElementById('log-follow');
+  if (!follow || follow.checked) log.scrollTop = log.scrollHeight;
+}
+
+function downloadLog() {
+  const blob = new Blob([logLines.join('\n')], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `simc-run-${currentTaskId || Date.now()}.log`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+let currentTaskId = '';
+
+function updateRunEta() {
+  const eta = document.getElementById('run-eta');
+  if (!eta) return;
+  // ETA only after 5% so the first noisy samples do not skew it (doc 4.2).
+  if (lastProgressPct < 5 || !runStartedAt) { eta.hidden = true; return; }
+  const remainSec = Math.round((Date.now() - runStartedAt) * (100 - lastProgressPct) / lastProgressPct / 1000);
+  eta.hidden = false;
+  eta.textContent = remainSec < 60 ? `~${remainSec}s left` : `~${Math.round(remainSec / 60)} min left`;
+}
+
+// t_5c33fefb: single write path so the clamped (2-line) status line's title
+// always carries the full message; textContent stays full for aria-live.
+function setWorkflowStatus(text) {
+  const s = document.getElementById('workflow-status');
+  if (!s) return;
+  s.textContent = text;
+  s.title = text;
 }
 
 async function stopSimulation() {
-  const status = document.getElementById('workflow-status');
   let token = window.localStorage.getItem('simc-admin-token') || '';
   const entered = window.prompt(
     'Stopping a simulation requires the master admin token (ADMIN_TOKEN):', token);
   if (entered === null) return;
   token = entered.trim();
   try {
-    const response = await fetch('api/stop-simulation', {
+    const response = await apiFetch('api/stop-simulation', {
       method: 'POST', headers: { 'X-Admin-Token': token }
     });
     if (response.status === 403) {
-      status.textContent = 'The admin token was rejected.';
+      setWorkflowStatus('The admin token was rejected.');
       window.localStorage.removeItem('simc-admin-token');
       return;
     }
     const data = await response.json();
     window.localStorage.setItem('simc-admin-token', token);
-    status.textContent = data.message || 'Stop requested.';
+    setWorkflowStatus(data.message || 'Stop requested.');
   } catch (error) {
-    status.textContent = `Could not stop simulation: ${error.message}`;
+    setWorkflowStatus(`Could not stop simulation: ${error.message}`);
   }
 }
 
@@ -359,12 +478,14 @@ function parseItemParams(item) {
   );
 }
 
-function createWowheadIconLink(itemId, bonusIds = '') {
+// t_2ab8f3be: icon and name merged into ONE anchor (was 2 tab stops per card,
+// 42+ per slot group). nameHtml must arrive pre-escaped.
+function createWowheadIconLink(itemId, bonusIds = '', nameHtml = '') {
   const safeId = encodeURIComponent(itemId || '0');
   const safeBonus = String(bonusIds || '').split('/').filter(value => /^\d+$/.test(value)).join(':');
   const bonusQuery = safeBonus ? `?bonus=${encodeURIComponent(safeBonus)}` : '';
   const tooltipData = safeBonus ? `bonus=${safeBonus}&iconsize=large` : 'iconsize=large';
-  return `<a href="https://www.wowhead.com/item=${safeId}${bonusQuery}" class="item-icon-link wowhead-item-link" data-wowhead="${tooltipData}" data-wh-rename="false" target="_blank"><img src="api/item-icon/${safeId}" alt="" loading="lazy" onerror="this.closest('.item-icon-link').classList.add('icon-missing')"></a>`;
+  return `<a href="https://www.wowhead.com/item=${safeId}${bonusQuery}" class="item-icon-link wowhead-item-link" data-wowhead="${tooltipData}" data-wh-rename="false" target="_blank"><img src="api/item-icon/${safeId}" alt="" loading="lazy" onerror="this.closest('.item-icon-link').classList.add('icon-missing')">${nameHtml}</a>`;
 }
 
 function createEnhancementWowheadLink(enhancement, name) {
@@ -466,6 +587,7 @@ function isAlreadyVoidforgedItem(slot, item, label = '') {
 
 function initializeSelections() {
   selectedItems = {};
+  twoHandedItems = new Set();
   selectedEnchants = {};
   selectedGems = new Set();
   equippedEnchants = {};
@@ -548,16 +670,24 @@ function estimateCombinations() {
 }
 
 function updateSummary() {
-  const count = estimateCombinations();
+  // t_8bf63ec6: in combinations mode the server count is authoritative —
+  // show '…' until the first generate-simc response replaces the estimate.
+  const combosMode = document.getElementById('compare-mode')?.value === 'combinations';
+  const server = combosMode && generatedInput?.mode === 'combinations' ? generatedInput : null;
+  const count = combosMode && !server ? null : (server ? server.combinations : estimateCombinations());
   const countEl = document.getElementById('combo-count');
   const itemCountEl = document.getElementById('selected-item-count');
   const runButton = document.getElementById('btn-run');
-  if (countEl) countEl.textContent = count.toLocaleString();
+  if (countEl) countEl.textContent = count === null ? '…' : count.toLocaleString();
   if (itemCountEl) itemCountEl.textContent = selectedItemCount().toLocaleString();
   const comboWord = document.getElementById('combo-word');
   const itemWord = document.getElementById('item-word');
   if (comboWord) comboWord.textContent = count === 1 ? 'combination' : 'combinations';
   if (itemWord) itemWord.textContent = selectedItemCount() === 1 ? 'item' : 'items';
+  const estimateEl = document.getElementById('work-estimate');
+  if (estimateEl) estimateEl.textContent = server?.work_estimate_minutes != null && count > 0
+    ? ` · ≈${server.work_estimate_minutes} min stage 1 (est.)`
+    : '';
   // t_4485565b: once a character is loaded, Run is always meaningful — a
   // 0-candidate selection runs the baseline current-gear report.
   if (runButton) runButton.disabled = !(generatedInput || parsedData);
@@ -567,11 +697,12 @@ function updateSummary() {
 function selectionChanged() {
   generatedInput = null;
   updateSummary();
+  syncEnhancementChips();
   clearTimeout(generationTimer);
   // t_4485565b: regenerate even at an estimated 0 combinations so the status
   // line reflects the honest baseline-only state instead of a stale count.
-  const status = document.getElementById('workflow-status');
-  if (status) status.textContent = 'Updating comparison…';
+  setWorkflowStatus('Updating comparison…');
+  renderSlotConflict();
   generationTimer = setTimeout(() => generateInput(true), 250);
 }
 
@@ -620,8 +751,12 @@ function targetUpgradeLevel(slot, item) {
   const upgrade = gearUpgrades[slot]?.[item];
   if (!upgrade) return null;
   const ascension = seasonAscension();
-  if (voidforgedItems[slot]?.[item] && ascension.results?.[upgrade.track] != null) {
-    return Number(ascension.results[upgrade.track]);
+  if (voidforgedItems[slot]?.[item]) {
+    // A crafted base ascends to the season's lower crafted_results ilvl
+    // (mirror of backend apply_gear_upgrade); track items use results.
+    const crafted = isCraftedItem(item) ? ascension.crafted_results?.[upgrade.track] : null;
+    const target = crafted != null ? crafted : ascension.results?.[upgrade.track];
+    if (target != null) return Number(target);
   }
   // Export-provided entries carry their own absolute ilvl.
   if (upgrade.source === 'export' && upgrade.item_level != null) {
@@ -630,6 +765,18 @@ function targetUpgradeLevel(slot, item) {
   if (!upgrade.track) return null;
   const levels = seasonTracks()[upgrade.track] || [];
   return levels[upgrade.rank - 1] ?? null;
+}
+
+/* Crafted ascension (t_98470ac5): the backend resolves crafted_results from
+   the upgrade track, so an ascended grade must land on gearUpgrades — but
+   only while the Ascendant checkbox is checked, because crafted bases have
+   no ladder upgrade of their own.  rank is the backend contract's needed
+   placeholder; the ascended ilvl replaces it during generation. */
+function syncCraftedAscensionEntry(slot, item, value) {
+  delete gearUpgrades[slot][item];
+  if (value && value !== 'none' && voidforgedItems[slot]?.[item]) {
+    gearUpgrades[slot][item] = { track: value, rank: 1, user_selected: true };
+  }
 }
 
 function scheduleUpgradePreview(slot, item, card) {
@@ -690,7 +837,7 @@ async function fetchUpgradePreview(slot, item, card) {
   try {
     let data = upgradePreviewCache.get(url);
     if (!data) {
-      const response = await fetch(url);
+      const response = await apiFetch(url);
       if (!response.ok) throw new Error(`status ${response.status}`);
       data = await response.json();
       upgradePreviewCache.set(url, data);
@@ -730,11 +877,10 @@ async function ensureStatScores(slot, items, selectEl) {
   const pending = items.filter(item => !(item in statScores) && parseItemParams(item).id);
   if (!pending.length) return;
   if (selectEl) { selectEl.disabled = true; selectEl.classList.add('is-scoring'); }
-  const status = document.getElementById('workflow-status');
   try {
     for (let start = 0; start < pending.length; start += STAT_SORT_BATCH) {
       const chunk = pending.slice(start, start + STAT_SORT_BATCH);
-      const response = await fetch('api/wowhead/tooltips/batch', {
+      const response = await apiFetch('api/wowhead/tooltips/batch', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           char_class: parsedData.char_class,
@@ -752,10 +898,7 @@ async function ensureStatScores(slot, items, selectEl) {
       });
     }
   } catch (error) {
-    if (status) {
-      status.textContent =
-        `Stat-priority sort unavailable (${error.message}) — sorted by ilvl instead.`;
-    }
+    setWorkflowStatus(`Stat-priority sort unavailable (${error.message}) — sorted by ilvl instead.`);
     if (slotSorts[slot] === 'priority') slotSorts[slot] = 'ilvl';
   } finally {
     if (selectEl) { selectEl.disabled = false; selectEl.classList.remove('is-scoring'); }
@@ -837,7 +980,7 @@ function wireSlotAddForm(group, slot) {
     const itemId = Number(raw);
     showSlotAddMessage(addPreview, 'loading', `Resolving item ${itemId} on Wowhead…`);
     try {
-      const response = await fetch(`api/wowhead/tooltip?item=${itemId}`);
+      const response = await apiFetch(`api/wowhead/tooltip?item=${itemId}`);
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.detail || `status ${response.status}`);
       renderSlotAddPreview(slot, itemId, data.preview || {}, addPreview, addInput);
@@ -852,6 +995,50 @@ function wireSlotAddForm(group, slot) {
   });
 }
 
+// TG2-A (design t_0fbfd0bd §3.1): enhancement state chips on the slot-group
+// header — pure state echo of step-3 selections plus a jump-and-open shortcut.
+// No new state: labels recompute from selectedEnchants/selectedGems live.
+// TG2-F (t_61442157): worn items are pre-checked without entering the selected
+// sets, so the chip counts the UNION with the equipped sets to match the
+// step-3 panel's checked count by construction.
+function enhancementChipLabel(kind, slot) {
+  if (kind === 'enchants') {
+    if (!(appConfig.enchantments?.[slot] || []).length) return null;
+    const k = new Set([...(selectedEnchants[slot] || []), ...(equippedEnchants[slot] || [])]).size;
+    const e = equippedEnchants[slot]?.size || 0;
+    return `Enchants: ${k} selected` + (e > 0 && e < k ? ` · worn ${e}` : '');
+  }
+  if (!(appConfig.gems?.standard || []).length) return null;
+  const k = new Set([...selectedGems, ...equippedGems]).size;
+  return k ? `Gems: ${k} selected` : 'Gems: none';
+}
+
+function syncEnhancementChips() {
+  document.querySelectorAll('.enh-chip').forEach(chip => {
+    const label = enhancementChipLabel(chip.dataset.kind, chip.dataset.slot);
+    if (label) chip.textContent = label;
+  });
+}
+
+function jumpToEnhancement(kind, slot) {
+  document.getElementById('step-enhance')?.scrollIntoView({ block: 'start' });
+  // Mirror generate_input.py's off_hand -> main_hand enchant-list fallback.
+  const titles = kind === 'gems'
+    ? ['Flawless gems']
+    : (slot === 'off_hand'
+      ? [`${slot.replace('_', ' ')} enchants`, 'main hand enchants']
+      : [`${slot.replace('_', ' ')} enchants`]);
+  const sections = [...document.querySelectorAll('#enhancement-options .enh-section')];
+  for (const title of titles) {
+    const section = sections.find(s => s.dataset.enhTitle === title);
+    if (section) {
+      section.open = true;
+      section.querySelector('summary')?.focus();
+      return;
+    }
+  }
+}
+
 function renderGear() {
   const grid = document.getElementById('gear-grid');
   if (!grid) return;
@@ -859,13 +1046,25 @@ function renderGear() {
   for (const [slot, items] of Object.entries(parsedData.items_by_slot)) {
     const group = document.createElement('section');
     group.className = 'slot-group';
+    group.dataset.slot = slot;
+    const chipDefs = [['enchants', 'Open enchantment controls in step 3'],
+      ['gems', 'Open gem controls in step 3']];
+    let chipsHtml = '';
+    for (const [kind, hint] of chipDefs) {
+      const chipLabel = enhancementChipLabel(kind, slot);
+      if (chipLabel) {
+        chipsHtml += `<button type="button" class="enh-chip" data-kind="${kind}" ` +
+          `data-slot="${slot}" title="${hint}">${escapeHtml(chipLabel)}</button>`;
+      }
+    }
     group.innerHTML = `<div class="slot-group-header"><h3>${escapeHtml(slot.replace('_', ' '))}</h3>` +
-      `<span class="slot-count"></span>` +
+      `<span class="slot-count"></span>${chipsHtml}` +
       `<select class="slot-sort-select" aria-label="Sort ${escapeHtml(slot)} candidates" ` +
       `title="Sort candidates. 'Stat priority' is a heuristic class weight order, not a sim result.">` +
       `<option value="ilvl">ilvl ↓</option><option value="name">Name</option>` +
       `<option value="priority">Stat priority*</option></select>` +
-      `<button type="button" class="slot-toggle-all">Select none</button></div>` +
+      `<button type="button" class="slot-toggle-all">Select none</button>` +
+      `<button type="button" class="btn-ghost slot-add-toggle" aria-expanded="false">Add by ID</button></div>` +
       `<div class="slot-add-form">` +
       `<input type="text" class="slot-add-input" inputmode="numeric" autocomplete="off" ` +
       `placeholder="Own it but not in the export? Add by Wowhead item id…" ` +
@@ -887,12 +1086,28 @@ function renderGear() {
       }
     });
     wireSlotAddForm(group, slot);
+    // t_2ab8f3be: add-by-id is a power feature — collapsed until asked for.
+    const addToggle = group.querySelector('.slot-add-toggle');
+    const addForm = group.querySelector('.slot-add-form');
+    addForm.hidden = true;
+    addToggle.addEventListener('click', () => {
+      const open = addForm.hidden;
+      addForm.hidden = !open;
+      addToggle.setAttribute('aria-expanded', String(open));
+      if (open) addForm.querySelector('.slot-add-input').focus();
+    });
     const syncSlotHeader = () => {
       slotCountEl.textContent = `${selectedItems[slot].size}/${items.length} selected`;
       slotToggleAll.textContent = items.length && selectedItems[slot].size === items.length
         ? 'Select none' : 'Select all';
+      // §3.3: chips ride the same listener so counts refresh on select-all
+      // or any item toggle without new state.
+      syncEnhancementChips();
     };
     syncSlotHeader();
+    group.querySelectorAll('.enh-chip').forEach(chip => {
+      chip.addEventListener('click', () => jumpToEnhancement(chip.dataset.kind, chip.dataset.slot));
+    });
     slotToggleAll.addEventListener('click', () => {
       const selectAll = !(items.length && selectedItems[slot].size === items.length);
       selectedItems[slot] = new Set(selectAll ? items : []);
@@ -909,16 +1124,15 @@ function renderGear() {
       const level = itemLevelFromLabel(label) || Number(params.ilevel) || null;
       const card = document.createElement('article');
       card.className = `item-option gear-card ${selectedItems[slot].has(item) ? 'is-selected' : ''}`;
+      card.dataset.slot = slot;
+      card.dataset.item = item;
       card.innerHTML = `
         <label class="item-select-row">
           <input type="checkbox" class="item-select-input" ${selectedItems[slot].has(item) ? 'checked' : ''}>
-          ${createWowheadIconLink(params.id, params.bonus_id)}
-          <span class="gear-card-info"><a href="https://www.wowhead.com/item=${encodeURIComponent(params.id || '0')}${params.bonus_id ? `?bonus=${encodeURIComponent(params.bonus_id.replace(/\//g, ':'))}` : ''}" class="item-option-name gear-card-name wowhead-item-link" data-wowhead="${params.bonus_id ? `bonus=${escapeHtml(params.bonus_id.replace(/\//g, ':'))}` : ''}" target="_blank">${escapeHtml(label.replace(/\s*\(\d+\)/, ''))}</a>${addedItems.has(item) ? '<span class="added-badge">Added</span>' : ''}<span class="gear-card-slot"><span>Item level</span><span class="gear-card-slot-ilvl">${level ? level : '—'}</span></span></span>
+          <span class="gear-card-info">${createWowheadIconLink(params.id, params.bonus_id, `<span class="item-option-name gear-card-name">${escapeHtml(label.replace(/\s*\(\d+\)/, ''))}</span>`)}${addedItems.has(item) ? '<span class="added-badge">Added</span>' : ''}<span class="gear-card-slot"><span>ilvl</span><span class="gear-card-slot-ilvl">${level ? level : '—'}</span></span></span>
         </label>
-        <div class="gear-card-controls">${renderTrackControls(slot, item)}</div>
         ${cardBadges(slot, item)}
-        ${isVoidforgeEligibleSlot(slot) ? `<label class="voidforge-field-container"><input type="checkbox" class="voidforge-input" ${voidforgedItems[slot][item] ? 'checked' : ''}> ${seasonAscension().name || 'Ascendant'} ×${seasonAscension().cost ?? ''}</label>` : ''}
-        <div class="upgrade-preview" hidden></div>
+        ${upgradePopoverMarkup(slot, item)}
         ${addedItems.has(item) ? `<button type="button" class="slot-remove-added" title="Remove this added item from the candidates"><span class="sr-only">Remove ${escapeHtml(label.replace(/\s*\(\d+\)/, ''))} from candidates</span>×</button>` : ''}
       `;
 
@@ -996,12 +1210,58 @@ function renderGear() {
           if (event.target.checked && gearUpgrades[slot]?.[item]) {
             gearUpgrades[slot][item].user_selected = true;
           }
+          const craftedGrade = card.querySelector('.crafted-grade-select');
+          if (craftedGrade) {
+            craftedGrade.disabled = !event.target.checked;
+            syncCraftedAscensionEntry(slot, item, craftedGrade.value);
+          }
           event.currentTarget.closest('.voidforge-field-container')?.classList.toggle('is-active', event.target.checked);
           scheduleUpgradePreview(slot, item, card);
           selectionChanged();
         });
       }
+      const craftedGradeSelect = card.querySelector('.crafted-grade-select');
+      if (craftedGradeSelect) {
+        craftedGradeSelect.addEventListener('change', () => {
+          syncCraftedAscensionEntry(slot, item, craftedGradeSelect.value);
+          scheduleUpgradePreview(slot, item, card);
+          selectionChanged();
+        });
+      }
+      const upgradeTrigger = card.querySelector('.upgrade-trigger');
+      if (upgradeTrigger) {
+        const pop = card.querySelector('.popover');
+        wirePopover(upgradeTrigger, pop);
+        pop.addEventListener('change', () => {
+          card.querySelector('.upgrade-state').textContent = upgradeStateText(slot, item);
+        });
+      }
       itemGrid.appendChild(card);
+    }
+
+    // t_2ab8f3be: slot collapse (doc 4.2) — selected + top 3 visible, rest
+    // behind a toggle so 42-card slots stop dominating the tab order.
+    const cards = [...itemGrid.children];
+    let collapsedCount = 0;
+    cards.forEach((card, index) => {
+      if (index >= 3 && !card.classList.contains('is-selected')) {
+        card.classList.add('is-collapsed');
+        collapsedCount += 1;
+      }
+    });
+    if (collapsedCount) {
+      const showAll = document.createElement('button');
+      showAll.type = 'button';
+      showAll.className = 'btn-ghost slot-show-all';
+      showAll.setAttribute('aria-expanded', 'false');
+      const label = `Show all ${cards.length} items (${collapsedCount} hidden)`;
+      showAll.textContent = label;
+      showAll.addEventListener('click', () => {
+        const open = itemGrid.classList.toggle('is-expanded');
+        showAll.setAttribute('aria-expanded', String(open));
+        showAll.textContent = open ? 'Show fewer' : label;
+      });
+      itemGrid.after(showAll);
     }
 
     if ((appConfig.gems?.standard || []).length) {
@@ -1017,80 +1277,245 @@ function renderGear() {
     grid.appendChild(group);
   }
   refreshWowheadLinks();
+  renderSlotConflict();
 }
+
+// t_2ab8f3be: shared popover behavior (gear upgrade + pre-run diff, doc 5):
+// aria-expanded, Esc, outside-click, focus return, Tab trap.
+function wirePopover(trigger, popover, onOpen) {
+  const focusables = () => [...popover.querySelectorAll('button, select, input, a[href]')]
+    .filter(el => !el.disabled && el.offsetParent !== null);
+  function onKey(event) {
+    if (event.key === 'Escape') { event.preventDefault(); close(); return; }
+    if (event.key !== 'Tab') return;
+    const els = focusables();
+    if (!els.length) return;
+    const first = els[0];
+    const last = els[els.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  }
+  function onDoc(event) {
+    if (!popover.contains(event.target) && event.target !== trigger) close(false);
+  }
+  function open() {
+    popover.hidden = false;
+    trigger.setAttribute('aria-expanded', 'true');
+    if (onOpen) onOpen();
+    focusables()[0]?.focus();
+    document.addEventListener('keydown', onKey, true);
+    document.addEventListener('click', onDoc, true);
+  }
+  function close(focusBack = true) {
+    if (popover.hidden) return;
+    popover.hidden = true;
+    trigger.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('keydown', onKey, true);
+    document.removeEventListener('click', onDoc, true);
+    if (focusBack) trigger.focus();
+  }
+  trigger.setAttribute('aria-expanded', 'false');
+  trigger.addEventListener('click', () => { if (popover.hidden) open(); else close(); });
+}
+
+function upgradeStateText(slot, item) {
+  const upgrade = gearUpgrades[slot]?.[item];
+  const level = targetUpgradeLevel(slot, item);
+  const bits = [];
+  if (upgrade?.track) bits.push(upgrade.track[0].toUpperCase() + upgrade.track.slice(1) + (upgrade.rank ? ` ${upgrade.rank}` : ''));
+  else if (upgrade?.source === 'export') bits.push('Export ladder');
+  else bits.push('No grade');
+  if (level != null) bits.push(`ilvl ${level}`);
+  return bits.join(' \u00b7 ');
+}
+
+function upgradePopoverMarkup(slot, item) {
+  const controls = renderTrackControls(slot, item);
+  const currentLevel = Number(parseItemParams(item).ilevel) ||
+    itemLevelFromLabel(parsedData?.item_names?.[item]);
+  // t_60c19e5d: Elevated Myth gear (344) is not Ascendant-eligible.
+  const ascensionEligible = isVoidforgeEligibleSlot(slot) && !isElevatedLevel(currentLevel);
+  // t_98470ac5: a crafted base has no season ladder to infer a grade from
+  // (crafted ilvls live off-track), so the ascended grade is picked by hand.
+  const craftedTracks = ascensionEligible && isCraftedItem(item)
+    ? Object.keys(seasonAscension().crafted_results || {}) : [];
+  const craftedGrade = craftedTracks.length
+    ? `<select class="crafted-grade-select" aria-label="Ascended grade" ${voidforgedItems[slot][item] ? '' : 'disabled'}>${['none', ...craftedTracks]
+        .map(track => `<option value="${track}" ${gearUpgrades[slot]?.[item]?.track === track ? 'selected' : ''}>${track === 'none' ? 'Ascended grade\u2026' : track[0].toUpperCase() + track.slice(1)}</option>`)
+        .join('')}</select>`
+    : '';
+  const voidforge = ascensionEligible
+    ? `<label class="voidforge-field-container"><input type="checkbox" class="voidforge-input" ${voidforgedItems[slot][item] ? 'checked' : ''}> ${seasonAscension().name || 'Ascendant'} \u00d7${seasonAscension().cost ?? ''}</label>`
+    : '';
+  if (!controls && !voidforge) return '';
+  return `<div class="gear-card-controls popover-host">` +
+    `<span class="upgrade-state">${escapeHtml(upgradeStateText(slot, item))}</span>` +
+    `<button type="button" class="btn-ghost upgrade-trigger" aria-expanded="false" aria-haspopup="dialog">Upgrade\u2026</button>` +
+    `<div class="popover" hidden>${controls}${craftedGrade}${voidforge}<div class="upgrade-preview" hidden></div></div></div>`;
+}
+
+// Pre-run diff (doc 5): client-side summary only; the server combo count in
+// the run bar stays authoritative.
+function renderReviewPopover() {
+  const pop = document.getElementById('review-popover');
+  if (!pop) return;
+  const rows = [];
+  for (const [slot, items] of Object.entries(selectedItems)) {
+    for (const item of items) {
+      const name = parsedData.item_names[item] || item;
+      rows.push(`<tr><td>${escapeHtml(slot.replace('_', ' '))}</td><td>${escapeHtml(String(name).replace(/\s*\(\d+\)/, ''))}</td><td>${escapeHtml(upgradeStateText(slot, item))}</td></tr>`);
+    }
+  }
+  pop.innerHTML = rows.length
+    ? `<table class="diff-table"><thead><tr><th scope="col">Slot</th><th scope="col">Item</th><th scope="col">Grade</th></tr></thead><tbody>${rows.join('')}</tbody></table>`
+    : '<small>No items selected yet.</small>';
+}
+
+// shortcut: PVP meta gems are excluded by name substring; upgrade to item-id
+// filtering when the backend exposes gem ids.
+const PVP_META_NAME_MATCH = /heliotrope/i;
 
 function renderEnhancements() {
   const container = document.getElementById('enhancement-options');
   container.innerHTML = '';
-  for (const [slot, enchants] of Object.entries(appConfig.enchantments || {})) {
-    if (!enchants.length || !parsedData.items_by_slot[slot]) continue;
+  // t_2ab8f3be (doc 4.3): 68 flat checkboxes -> searchable, grouped <details>
+  // sections. t_16e4f177 (leader ruling, supersedes doc 4.2 open-if-checked
+  // clause): ALL groups start closed — the doc's clause forced every group
+  // holding an equipped/checked candidate open, keeping 136 chip stops
+  // permanently in the tab order. Selection state stays visible in the
+  // summary label instead; the search input opens matches on demand.
+  const search = document.createElement('input');
+  search.type = 'search';
+  search.className = 'enh-search';
+  search.placeholder = 'Search enchantments and gems\u2026';
+  search.setAttribute('aria-label', 'Search enchantments and gems');
+  container.appendChild(search);
+
+  const addSection = (title, build) => {
+    const section = document.createElement('details');
+    section.className = 'enh-section';
+    section.dataset.enhTitle = title; // chips open sections by stable title (§3.1)
+    const summary = document.createElement('summary');
     const group = document.createElement('fieldset');
     group.className = 'enhancement-group';
-    group.innerHTML = `<legend>${escapeHtml(slot.replace('_', ' '))} enchants</legend>`;
-    for (const enchant of enchants) {
-      const id = String(typeof enchant === 'object' ? enchant.id : enchant);
-      const name = typeof enchant === 'object' ? enchant.name : `Enchant ${id}`;
-      const label = document.createElement('label');
-      label.className = 'choice-chip';
-      label.innerHTML = `<input type="checkbox">${createEnhancementWowheadLink(enchant, name)}`;
-      const input = label.querySelector('input');
-      input.checked = selectedEnchants[slot].has(id) || equippedEnchants[slot].has(id);
-      input.addEventListener('change', event => {
-        if (event.target.checked) selectedEnchants[slot].add(id);
-        else {
-          selectedEnchants[slot].delete(id);
-          equippedEnchants[slot].delete(id);
-        }
-        selectionChanged();
-      });
-      group.appendChild(label);
-    }
-    container.appendChild(group);
+    build(group);
+    const total = group.querySelectorAll('input').length;
+    const renderLabel = () => {
+      const checked = group.querySelectorAll('input:checked').length;
+      summary.textContent = checked
+        ? `${title} \u00b7 ${checked} selected`
+        : `${title} (${total})`;
+    };
+    renderLabel();
+    group.addEventListener('change', renderLabel);
+    section.append(summary, group);
+    container.appendChild(section);
+  };
+
+  for (const [slot, enchants] of Object.entries(appConfig.enchantments || {})) {
+    if (!enchants.length || !parsedData.items_by_slot[slot]) continue;
+    addSection(`${slot.replace('_', ' ')} enchants`, group => {
+      for (const enchant of enchants) {
+        const id = String(typeof enchant === 'object' ? enchant.id : enchant);
+        const name = typeof enchant === 'object' ? enchant.name : `Enchant ${id}`;
+        const equipped = equippedEnchants[slot].has(id);
+        const label = document.createElement('label');
+        label.className = 'choice-chip';
+        label.innerHTML = `<input type="checkbox">${createEnhancementWowheadLink(enchant, name)}` +
+          (equipped ? '<span class="equipped-badge">equipped</span>' : '');
+        const input = label.querySelector('input');
+        input.checked = selectedEnchants[slot].has(id) || equipped;
+        input.addEventListener('change', event => {
+          if (event.target.checked) selectedEnchants[slot].add(id);
+          else {
+            selectedEnchants[slot].delete(id);
+            equippedEnchants[slot].delete(id);
+          }
+          selectionChanged();
+        });
+        group.appendChild(label);
+      }
+    });
   }
 
   const gems = (appConfig.gems?.standard || []).filter(gem =>
-    !String(gem.name || '').toLowerCase().includes('heliotrope')
+    !PVP_META_NAME_MATCH.test(String(gem.name || ''))
   );
   if (gems.length) {
-    const group = document.createElement('fieldset');
-    group.className = 'enhancement-group gems-group';
-    group.innerHTML = '<legend>Flawless gems</legend>';
-    for (const gem of gems) {
-      const id = String(typeof gem === 'object' ? gem.id : gem);
-      const name = typeof gem === 'object' ? gem.name : `Gem ${id}`;
-      const label = document.createElement('label');
-      label.className = 'choice-chip';
-      label.innerHTML = `<input type="checkbox">${createEnhancementWowheadLink(gem, name)}`;
-      const input = label.querySelector('input');
-      input.checked = selectedGems.has(id) || equippedGems.has(id);
-      input.addEventListener('change', event => {
-        if (event.target.checked) selectedGems.add(id);
-        else {
-          selectedGems.delete(id);
-          equippedGems.delete(id);
-        }
-        selectionChanged();
-      });
-      group.appendChild(label);
-    }
-    container.appendChild(group);
+    addSection('Flawless gems', group => {
+      group.className = 'enhancement-group gems-group';
+      for (const gem of gems) {
+        const id = String(typeof gem === 'object' ? gem.id : gem);
+        const name = typeof gem === 'object' ? gem.name : `Gem ${id}`;
+        const equipped = equippedGems.has(id);
+        const label = document.createElement('label');
+        label.className = 'choice-chip';
+        label.innerHTML = `<input type="checkbox">${createEnhancementWowheadLink(gem, name)}` +
+          (equipped ? '<span class="equipped-badge">equipped</span>' : '');
+        const input = label.querySelector('input');
+        input.checked = selectedGems.has(id) || equipped;
+        input.addEventListener('change', event => {
+          if (event.target.checked) selectedGems.add(id);
+          else {
+            selectedGems.delete(id);
+            equippedGems.delete(id);
+          }
+          selectionChanged();
+        });
+        group.appendChild(label);
+      }
+    });
   }
+
+  // NB4 (review t_89761608): remember which sections the SEARCH opened so
+  // clearing the query re-closes exactly those, never user-opened ones.
+  const searchOpened = new Set();
+  search.addEventListener('input', () => {
+    const needle = search.value.trim().toLowerCase();
+    container.querySelectorAll('.enh-section').forEach(section => {
+      let visible = 0;
+      section.querySelectorAll('.choice-chip').forEach(chip => {
+        const hit = !needle || chip.textContent.toLowerCase().includes(needle);
+        chip.hidden = !hit;
+        if (hit) visible += 1;
+      });
+      section.hidden = Boolean(needle) && visible === 0;
+      if (needle && visible) {
+        if (!section.open) searchOpened.add(section); // user-opened stays user-owned
+        section.open = true;
+      } else if (!needle && searchOpened.has(section)) {
+        section.open = false;
+        searchOpened.delete(section);
+      }
+    });
+  });
   refreshWowheadLinks();
 }
 
 function renderWorkflow() {
   workflowContainer.innerHTML = `
     <section class="panel-card workflow-panel full-width baseline-gear-panel" id="baseline-gear-panel"><div class="step-heading"><span class="num-badge num-badge-lg">2</span><div><h2>Baseline Gear · select candidates for ${escapeHtml(parsedData.char_name)}</h2><small>Grades are inferred from the export and refined with Wowhead. Toggle whole slots with Select all/none.</small></div></div><div id="gear-grid"></div></section>
-    <section class="panel-card workflow-panel full-width" id="step-enhance"><div class="step-heading"><span class="num-badge num-badge-lg">3</span><div><h2>Select gems and enchantments</h2><small>Checked enhancements are included in generated variations; the ones you already wear are pre-checked as the baseline.</small></div></div><div id="enhancement-options" class="enhancement-options"></div></section>
-    <section class="panel-card workflow-panel run-panel full-width" id="step-run"><div class="step-heading"><span class="num-badge num-badge-lg">4</span><div><h2>Run comparison</h2><small>Combinations update automatically as you change gear. Start the run from the bar at the bottom.</small></div></div><div id="run-progress" hidden><div class="progress-card"><span class="progress-dot" aria-hidden="true"></span><span class="progress-elapsed" id="run-elapsed">00:00</span><span class="progress-meta" id="run-progress-meta">Starting…</span><button type="button" id="btn-stop" class="btn-danger">Stop run</button></div></div><div class="log-toolbar" id="log-toolbar" hidden><label class="log-follow"><input type="checkbox" id="log-follow" checked> Follow log</label><span class="char-count" id="log-lines">0 lines</span></div><pre id="simulation-log" class="simulation-log" hidden></pre></section>
+    <section class="panel-card workflow-panel full-width" id="step-enhance"><div class="step-heading"><span class="num-badge num-badge-lg">3</span><div><h2>Select gems and enchantments</h2><small>Checked enhancements are included in generated variations; the ones you already wear are pre-checked as the baseline. You can also jump here from the chips in each gear slot above.</small></div></div><div id="enhancement-options" class="enhancement-options"></div></section>
+    <section class="panel-card workflow-panel run-panel full-width" id="step-run"><div class="step-heading"><span class="num-badge num-badge-lg">4</span><div><h2>Run comparison</h2><small>Combinations update automatically as you change gear. Start the run from the bar at the bottom.</small></div></div><div id="run-progress" hidden><div class="progress-card" aria-live="polite"><div class="progress-head"><span class="progress-elapsed" id="run-elapsed">00:00</span><span class="progress-stage" id="run-stage"></span><span class="progress-eta" id="run-eta" hidden></span><button type="button" id="btn-stop" class="btn-danger">Stop run</button></div><div class="progress-track"><div class="progress-fill" id="run-progress-fill" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Simulation progress"></div></div><span class="progress-meta" id="run-progress-meta">Starting…</span></div></div><div id="run-result" hidden></div><div class="log-toolbar" id="log-toolbar" hidden><label class="log-follow"><input type="checkbox" id="log-follow" checked> Follow log</label><span class="char-count" id="log-lines">0 lines</span><button type="button" id="btn-log-download" class="btn-ghost">Download full log</button></div><pre id="simulation-log" class="simulation-log" role="log" aria-live="off" hidden></pre></section>
   `;
   renderGear();
   renderEnhancements();
   renderCharChip();
   document.getElementById('run-bar').hidden = false;
+  // t_16e4f177 (leader ruling): with the gear list rendered, the skip link
+  // must move focus past it to the run controls in one activation.
+  const skipLink = document.querySelector('.skip-link');
+  if (skipLink) {
+    skipLink.href = '#btn-run';
+    skipLink.textContent = 'Skip to run controls';
+  }
   document.getElementById('btn-run').addEventListener('click', runSimulation);
   document.getElementById('fight-style').addEventListener('change', selectionChanged);
+  document.getElementById('compare-mode').addEventListener('change', selectionChanged);
   document.getElementById('btn-stop').addEventListener('click', stopSimulation);
+  document.getElementById('btn-log-download').addEventListener('click', downloadLog);
+  wirePopover(document.getElementById('btn-review'),
+    document.getElementById('review-popover'), renderReviewPopover);
   observeWorkflowSteps();
   updateSummary();
   void generateInput(true);
@@ -1105,12 +1530,15 @@ async function hydrateWowheadUpgrades(itemsBySlot) {
       const rest = (items || []).filter(item => !parsedData?.item_upgrades?.[item]);
       if (rest.length) lookupItems[slot] = rest;
     }
-    const response = await fetch('api/wowhead-upgrades', {
+    const response = await apiFetch('api/wowhead-upgrades', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ items_by_slot: lookupItems })
     });
     if (!response.ok) return;
     const data = await response.json();
+    for (const items of Object.values(data.two_handed || {})) {
+      for (const item of items) twoHandedItems.add(item);
+    }
     for (const [slot, itemUpgrades] of Object.entries(data.gear_upgrades || {})) {
       for (const [item, upgrade] of Object.entries(itemUpgrades)) {
         if (parsedData?.item_upgrades?.[item]) continue;
@@ -1127,6 +1555,42 @@ async function hydrateWowheadUpgrades(itemsBySlot) {
   }
 }
 
+/* TG3-C slot conflict (design contract t_784b91c7 §3.4): inline role="alert"
+   line under each conflicting weapon card (card grows only while shown) plus
+   the aggregate line in #workflow-status. The authoritative rejection is the
+   server-side 400 from generate-simc, which generateInput() surfaces here too;
+   this is the pre-submit hint mirroring it — we never auto-remove selections. */
+const SLOT_LABELS = { main_hand: 'Main Hand', off_hand: 'Off Hand' };
+
+function twoHandedConflict() {
+  const main = selectedItems.main_hand || new Set();
+  const off = selectedItems.off_hand || new Set();
+  if (!main.size || !off.size) return null;
+  for (const item of main) if (twoHandedItems.has(item)) return { slot: 'main_hand', other: 'off_hand' };
+  for (const item of off) if (twoHandedItems.has(item)) return { slot: 'off_hand', other: 'main_hand' };
+  return null;
+}
+
+function renderSlotConflict() {
+  document.querySelectorAll('.gear-conflict').forEach(el => el.remove());
+  const conflict = twoHandedConflict();
+  if (!conflict) return;
+  const mark = (slot, text) => {
+    for (const card of document.querySelectorAll(`.slot-group[data-slot="${slot}"] .gear-card.is-selected`)) {
+      if (slot === conflict.slot && !twoHandedItems.has(card.dataset.item || '')) continue;
+      const line = document.createElement('p');
+      line.className = 'gear-conflict';
+      line.setAttribute('role', 'alert');
+      line.textContent = text;
+      card.appendChild(line);
+    }
+  };
+  mark(conflict.slot, `Two-handed weapon — cannot be combined with ${SLOT_LABELS[conflict.other]}.`);
+  mark(conflict.other, `Conflicts with the two-handed weapon in ${SLOT_LABELS[conflict.slot]}.`);
+  setWorkflowStatus(
+    `Slot conflict: ${SLOT_LABELS[conflict.slot]} and ${SLOT_LABELS[conflict.other]} cannot be equipped together — a two-handed weapon occupies both weapon slots. Deselect one of the two slots.`);
+}
+
 function buildPayload() {
   const enchantPayload = {};
   for (const slot of Object.keys(appConfig.enchantments || {})) {
@@ -1137,6 +1601,7 @@ function buildPayload() {
     char_name: parsedData.char_name,
     base_profile: parsedData.base_profile,
     fight_style: document.getElementById('fight-style')?.value || 'single_boss',
+    mode: document.getElementById('compare-mode')?.value || 'single_swap',
     equipped_gear: parsedData.equipped_gear,
     selected_items: Object.fromEntries(Object.entries(selectedItems).map(([slot, items]) => [slot, Array.from(items)])),
     selected_enchants: enchantPayload,
@@ -1151,10 +1616,9 @@ function buildPayload() {
 }
 
 async function generateInput(quiet = false) {
-  const status = document.getElementById('workflow-status');
-  if (!quiet) status.textContent = 'Preparing comparison…';
+  if (!quiet) setWorkflowStatus('Preparing comparison…');
   try {
-    const response = await fetch('api/generate-simc', {
+    const response = await apiFetch('api/generate-simc', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(buildPayload())
     });
@@ -1163,12 +1627,17 @@ async function generateInput(quiet = false) {
     generatedInput = data;
     document.getElementById('combo-count').textContent = data.combinations.toLocaleString();
     // t_4485565b: 0 candidates is a valid baseline run, not a doomed job.
-    status.textContent = data.combinations === 0
+    let statusText = data.combinations === 0
       ? 'Ready to run a baseline current-gear report. Select gear changes, gems, or enchants to compare candidates.'
       : `Ready to run ${data.combinations.toLocaleString()} candidate ${data.combinations === 1 ? 'combination' : 'combinations'}.`;
+    if (data.embedded_copies) {
+      // TG3-D2: never let carried copy= blocks disappear silently.
+      statusText += ` Removed ${data.embedded_copies} embedded ${data.embedded_copies === 1 ? 'copy' : 'copies'} carried by the uploaded profile (their gear stays selectable).`;
+    }
+    setWorkflowStatus(statusText);
   } catch (error) {
     generatedInput = null;
-    status.textContent = `Could not generate input: ${error.message}`;
+    setWorkflowStatus(`Could not generate input: ${error.message}`);
   } finally {
     updateSummary();
   }
@@ -1179,14 +1648,14 @@ async function runSimulation() {
   // 0-candidate input is a valid baseline current-gear run.
   if (!generatedInput) await generateInput();
   if (!generatedInput) return;
-  const status = document.getElementById('workflow-status');
   const log = document.getElementById('simulation-log');
-  status.textContent = 'Looking for an idle worker…';
+  setWorkflowStatus('Looking for an idle worker…');
   try {
-    const response = await fetch(`api/run-simulation?input_id=${encodeURIComponent(generatedInput.input_id)}`, { method: 'POST' });
+    const response = await apiFetch(`api/run-simulation?input_id=${encodeURIComponent(generatedInput.input_id)}`, { method: 'POST' });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || 'Simulation could not start');
-    status.textContent = `Simulation ${data.task_id} is running on worker ${data.worker_id}.`;
+    setWorkflowStatus(`Simulation ${data.task_id} is running on worker ${data.worker_id}.`);
+    currentTaskId = data.task_id;
     log.hidden = false;
     log.textContent = '';
     document.getElementById('log-toolbar').hidden = false;
@@ -1196,19 +1665,15 @@ async function runSimulation() {
     events.onmessage = async event => {
       const message = JSON.parse(event.data);
       if (message.type === 'log') {
-        log.textContent += `${message.text}\n`;
-        logLineCount += 1;
+        pushLogLines([message.text]);
         updateRunProgressMeta(message.text);
       }
       if (message.type === 'log_batch') {
-        log.textContent += `${message.lines.join('\n')}\n`;
-        logLineCount += message.lines.length;
+        pushLogLines(message.lines);
       }
       if (message.type === 'log' || message.type === 'log_batch') {
         const linesEl = document.getElementById('log-lines');
         if (linesEl) linesEl.textContent = `${logLineCount.toLocaleString()} lines`;
-        const follow = document.getElementById('log-follow');
-        if (!follow || follow.checked) log.scrollTop = log.scrollHeight;
       }
       if (message.type === 'done' || message.type === 'error') {
         stopRunProgress();
@@ -1216,30 +1681,70 @@ async function runSimulation() {
         if (message.type === 'done') simulationDone = true;
         updateRailState();
         if (message.type === 'done' && message.report_file && message.task_id) {
-          // t_c968bf8d: durable reports live under /reports/<user_id>/<task_id>/,
-          // which only the master can resolve — ask it for the URL.
-          let reportLink = '';
-          try {
-            const urlResp = await fetch(`api/report-url?task_id=${encodeURIComponent(message.task_id)}`);
-            if (urlResp.ok) {
-              const urlData = await urlResp.json();
-              if (urlData.url) reportLink = ` <a href="${urlData.url}" target="_blank">Open report</a>`;
-            }
-          } catch (e) { /* report link is best-effort */ }
-          status.innerHTML = `${escapeHtml(message.text)}${reportLink}`;
-          const baseline = parsedData?.char_name || '';
-          window.location.assign(`results?task_id=${encodeURIComponent(message.task_id)}&baseline=${encodeURIComponent(baseline)}`);
+          await showRunResultCard(message);
         } else {
-          status.textContent = message.text || 'The simulation stopped unexpectedly — see the log above.';
-          status.classList.add('error');
+          showRunFailureCard(message);
         }
         events.close();
       }
     };
     events.onerror = () => { events.close(); stopRunProgress(); };
   } catch (error) {
-    status.textContent = `Could not start simulation: ${error.message}`;
+    setWorkflowStatus(`Could not start simulation: ${error.message}`);
   }
+}
+
+// t_2ab8f3be: the run ends on a card the user acts on — the old code yanked
+// the browser to the results page mid-view (auto-redirect removed).
+async function showRunResultCard(message) {
+  const slot = document.getElementById('run-result');
+  const baseline = parsedData?.char_name || '';
+  const resultsHref = `results?task_id=${encodeURIComponent(message.task_id)}&baseline=${encodeURIComponent(baseline)}`;
+  let reportHref = '';
+  try {
+    // t_c968bf8d: durable reports live under /reports/<user_id>/<task_id>/,
+    // which only the master can resolve — ask it for the URL.
+    const urlResp = await apiFetch(`api/report-url?task_id=${encodeURIComponent(message.task_id)}`);
+    if (urlResp.ok) {
+      const urlData = await urlResp.json();
+      if (urlData.url) reportHref = urlData.url;
+    }
+  } catch (e) { /* report link is best-effort */ }
+  let bestLine = message.text || 'Run complete.';
+  try {
+    const resp = await apiFetch(`api/get-results?task_id=${encodeURIComponent(message.task_id)}`);
+    if (resp.ok) {
+      const results = ((await resp.json()).results || []).filter(r => r && r.dps > 0);
+      const base = results.find(r => r.name === baseline);
+      const candidates = results.filter(r => r.name !== baseline).sort((a, b) => b.dps - a.dps);
+      if (base && candidates.length) {
+        const delta = candidates[0].dps - base.dps;
+        bestLine = `Best: ${delta >= 0 ? '+' : ''}${Math.round(delta).toLocaleString()} DPS \u00b7 ${candidates[0].name}`;
+      }
+    }
+  } catch (e) { /* best-line is best-effort */ }
+  setWorkflowStatus('Run complete.');
+  if (!slot) return;
+  slot.hidden = false;
+  slot.innerHTML = `<div class="success-card"><span class="success-icon" aria-hidden="true">\u2713</span><div><h3>Done in ${escapeHtml(formatElapsed(Date.now() - runStartedAt))}</h3><p>${escapeHtml(bestLine)}</p><div class="success-actions"><a class="btn" href="${resultsHref}">Open results</a>${reportHref ? ` <a class="btn-ghost" href="${escapeHtml(reportHref)}" target="_blank">Open full report</a>` : ''}<button type="button" data-back-gear class="btn-ghost">Back to gear</button></div></div></div>`;
+  slot.querySelector('[data-back-gear]').addEventListener('click', backToGear);
+}
+
+function showRunFailureCard(message) {
+  const status = document.getElementById('workflow-status');
+  const slot = document.getElementById('run-result');
+  setWorkflowStatus(message.text || 'The simulation stopped unexpectedly.');
+  status.classList.add('error');
+  if (!slot) return;
+  const tail = logLines.slice(-12).join('\n');
+  slot.hidden = false;
+  slot.innerHTML = `<div class="success-card is-failed"><span class="success-icon" aria-hidden="true">\u2715</span><div><h3>Run failed</h3><p>${escapeHtml(message.text || 'The simulation stopped unexpectedly \u2014 see the log below.')}</p>${tail ? `<pre class="success-log-tail">${escapeHtml(tail)}</pre>` : ''}<div class="success-actions"><button type="button" data-open-log class="btn-ghost">Open log</button><button type="button" data-back-gear class="btn-ghost">Back to gear</button></div></div></div>`;
+  slot.querySelector('[data-open-log]').addEventListener('click', () => document.getElementById('simulation-log')?.scrollIntoView({ block: 'start' }));
+  slot.querySelector('[data-back-gear]').addEventListener('click', backToGear);
+}
+
+function backToGear() {
+  document.getElementById('step-gear')?.scrollIntoView({ block: 'start' });
 }
 
 async function applyParsedCharacter(data) {
@@ -1270,8 +1775,8 @@ btnParseAddon.addEventListener('click', async () => {
   clearParseError();
   try {
     const [parseResponse, configResponse] = await Promise.all([
-      fetch('api/parse-addon', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ addon_text: text }) }),
-      fetch('api/config')
+      apiFetch('api/parse-addon', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ addon_text: text }) }),
+      apiFetch('api/config')
     ]);
     if (!parseResponse.ok) {
       const detail = await parseResponse.json().catch(() => ({}));
@@ -1331,7 +1836,7 @@ function populateRealmSelect(data) {
 async function loadRealms() {
   if (!armoryRealm) return;
   try {
-    const response = await fetch('static/realms.json');
+    const response = await apiFetch('static/realms.json');
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     populateRealmSelect(await response.json());
   } catch (error) {
@@ -1387,11 +1892,11 @@ btnArmoryLoad?.addEventListener('click', async () => {
   try {
     const payload = buildArmoryPayload(value);
     const [armoryResponse, configResponse] = await Promise.all([
-      fetch('api/armory-load', {
+      apiFetch('api/armory-load', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       }),
-      fetch('api/config')
+      apiFetch('api/config')
     ]);
     if (!armoryResponse.ok) {
       const detail = await armoryResponse.json().catch(() => ({}));
@@ -1422,6 +1927,12 @@ document.getElementById('btn-new-export').addEventListener('click', () => {
   workflowContainer.innerHTML = '';
   document.getElementById('run-bar').hidden = true;
   document.getElementById('char-chip').hidden = true;
+  // t_16e4f177: no gear list and no run bar anymore — restore the plain skip link.
+  const skipLink = document.querySelector('.skip-link');
+  if (skipLink) {
+    skipLink.href = '#main';
+    skipLink.textContent = 'Skip to content';
+  }
   resetPastePanel();
   updateRailState();
   observeWorkflowSteps();

@@ -96,7 +96,7 @@ def test_frontend_escapes_dynamic_values_before_html_insertion():
     assert "escapeHtml(parsedData.char_name)" in js
     assert "escapeHtml(name)" in js
     assert "escapeHtml(label.replace" in js
-    assert "log.textContent +=" in js
+    assert "pushLogLines" in js  # t_2ab8f3be: capped buffer + rAF render
 
 
 def test_ignored_local_config_files_are_not_tracked():

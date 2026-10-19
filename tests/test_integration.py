@@ -108,9 +108,9 @@ talents=0-0-531
 # Off Hand
 ### Gear from Bags
 # head=id=100100
-# Should of Valor
+# Should of Valor (246)
 # shoulder=id=100200
-# Neck of Valor
+# Neck of Valor (246)
 # neck=id=100300
 # Back of Valor
 # back=id=100400
@@ -161,19 +161,17 @@ class TestParseAddonE2E:
         assert "id=100100" in data["items_by_slot"]["head"]
         assert "id=100200" in data["items_by_slot"]["shoulder"]
         # Item names from comments
-        assert data["item_names"].get("id=100200") == "Should of Valor"
-        assert data["item_names"].get("id=100300") == "Neck of Valor"
+        assert data["item_names"].get("id=100200") == "Should of Valor (246)"
+        assert data["item_names"].get("id=100300") == "Neck of Valor (246)"
 
     def test_parse_addon_with_empty_text(self, client):
-        """Parsing empty addon text should return defaults."""
+        """Empty addon text is not a SimC export and gets a 400 (t_0cb6af81)."""
         response = client.post(
             "/api/parse-addon",
             json={"addon_text": ""},
         )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["char_name"] == "Unknown"
-        assert data["char_class"] == "Unknown"
+        assert response.status_code == 400
+        assert "No valid SimC export found" in response.json()["detail"]
 
     def test_parse_addon_invalid_payload_returns_422(self, client):
         """Sending non-dict body should return 422 validation error."""
@@ -607,7 +605,7 @@ class TestRealNightlyReportResultsE2E:
             assert by_name["Hamidriel"]["dps"] == 7865
             assert by_name["Hamidriel_wrist_0"]["dps"] == 7887
             assert by_name["Hamidriel_neck_1"]["dps"] == 7822
-            assert by_name["Fluffy_Pillow"]["dps"] == 0
+            assert "Fluffy_Pillow" not in by_name  # 0-dps pet filtered (E2E-7)
             head = by_name["Hamidriel"]["gear"]["head"]
             assert head.startswith("id=249961")
             assert "enchant_id=8017" in head
