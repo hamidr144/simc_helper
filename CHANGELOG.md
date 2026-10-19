@@ -10,6 +10,19 @@ new version is prepared and reviewer-approved as a mandatory step (see WORKFLOW.
 "Milestone: dev → prod"); the `CHANGELOG.md` update ships in the same merge commit
 that bumps the version and tag.
 
+## [1.0.1] — 2026-10-19
+
+PATCH milestone merged from the `1.0.0-dev.N` line (single user-visible fix, per
+WORKFLOW.md PATCH rule). Merged from dev at tag `v1.0.0-dev.36` (`5df8e33`).
+Entries consolidated from `git log prod..dev`.
+
+### Bug fixes
+
+- Crafted gear cards no longer claim `Crafted · no grade`: the badge, the upgrade
+  popover state line and the review Grade column now show the real craft tier from
+  the addon export (`Crafted · Quality N/5`), falling back to no-grade only when the
+  export genuinely carries no `crafting_quality` (t_0769a998, t_16385044).
+
 ## [1.0.0] — 2026-10-19
 
 First milestone merged from the `1.0.0-dev.N` line to prod; per WORKFLOW.md the
