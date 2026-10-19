@@ -382,3 +382,69 @@ def test_main_stage2_override_is_count_cap_not_selector(tmp_path, monkeypatch, c
     assert "Simcraft Helper complete!" in out
     # A1 and B1 both advance: band rule, not the literal count 1.
     assert "STAGE 2: Refinement" in out
+
+
+# --- TGC-2 (t_662ff323): stage-file shape regressions ---------------------
+# (a) base-file header options must be re-emitted in profile scope before the
+# first copy= block, never in an EOF "Global Settings" block: SimC binds
+# file-scope options to the last-parsed profile, so the EOF shape silently
+# buffs only the lowest-ranked survivor (+2.9% rigged winner, TGC-1 report).
+# (b) every clone's copy-source must be emitted before the dependent, even
+# when the source was culled (missing source = simc exit 70, E-7).
+
+_TGC2_BASE = (
+    'paladin="T"\n'
+    'race=blood_elf\n'
+    'omnium_talents=136814:1/136818:1\n'
+    'professions=blacksmithing=100/mining=100\n'
+    'duration=300\n'
+)
+
+
+def test_prepare_stage_header_options_before_first_copy(tmp_path):
+    f_in = tmp_path / "in.simc"
+    f_in.write_text(
+        _TGC2_BASE + 'copy="T_C1,T"\nhead=,id=1\n' 'copy="T_C2,T"\nhead=,id=2\n'
+    )
+    f_out = tmp_path / "out.simc"
+    prepare_stage(str(f_in), ["T_C1", "T_C2"], str(f_out), "iterations=100")
+    text = f_out.read_text()
+    lines = [
+        ln.strip()
+        for ln in text.splitlines()
+        if ln.strip() and not ln.strip().startswith("#")
+    ]
+    first_copy = next(i for i, ln in enumerate(lines) if ln.startswith("copy="))
+    for opt in (
+        "omnium_talents=136814:1/136818:1",
+        "professions=blacksmithing=100/mining=100",
+        "duration=300",
+        "race=blood_elf",
+    ):
+        assert opt in lines, f"{opt!r} missing from stage file"
+        assert lines.index(opt) < first_copy, (
+            f"{opt!r} appears at/after the first copy= block (EOF shape)"
+        )
+    assert "Global Settings" not in text
+
+
+def test_prepare_stage_clone_sources_precede_dependents(tmp_path):
+    f_in = tmp_path / "in.simc"
+    f_in.write_text(
+        _TGC2_BASE
+        + 'copy="T_Src,T"\nhead=,id=1\n'
+        + 'copy="T_Alias,T_Src"\nhead=,id=2\n'
+        + 'copy="T_Other,T"\nhead=,id=3\n'
+    )
+    f_out = tmp_path / "out.simc"
+    # T_Src culled (not in combos), its alias survives; T_Alias outscores its
+    # source in rank order — the source must be re-emitted and precede it.
+    prepare_stage(str(f_in), ["T_Alias", "T_Other"], str(f_out), "iterations=100")
+    text = f_out.read_text()
+    assert 'copy="T_Src' in text, "culled copy-source was dropped"
+    assert text.index('copy="T_Src') < text.index('copy="T_Alias')
+    # Dependent-before-source in the rank list is re-ordered, never duplicated.
+    prepare_stage(str(f_in), ["T_Alias", "T_Src"], str(f_out), "iterations=100")
+    text = f_out.read_text()
+    assert text.count('copy="T_Src') == 1
+    assert text.index('copy="T_Src') < text.index('copy="T_Alias')

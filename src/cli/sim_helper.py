@@ -444,14 +444,19 @@ def prepare_stage(base_simc, combos, output_simc, extra_params, current_name=Non
     Generates a new .simc input file for the next simulation stage.
     Streams the base file to extract only the needed profiles (current + survivors)
     and preserves global configuration settings.
-    """
-    target_names = set(combos)
-    if current_name:
-        target_names.add(current_name)
 
-    found_profiles = {}
+    TGC-2 (t_662ff323): base-file header options are re-emitted verbatim
+    BEFORE the first copy= block instead of an EOF "Global Settings" block —
+    SimC binds file-scope options to the last-parsed profile, so the EOF
+    shape kept the base context (omnium_talents etc.) on only the
+    lowest-ranked survivor: a +2.9% rigged winner (TGC-1 report). Culled
+    copy-sources are re-emitted before their dependents: a missing source
+    made simc die with exit 70 ('not found as source for profile copy').
+    """
+    all_profiles = {}
+    copy_sources = {}
     header = ""
-    global_settings = []
+    header_options = []
 
     class_keywords = {
         "head", "neck", "shoulder", "back", "chest", "wrist", "hands", "waist", "legs", "feet",
@@ -461,23 +466,31 @@ def prepare_stage(base_simc, combos, output_simc, extra_params, current_name=Non
         "monk", "druid", "rogue", "hunter", "evoker", "demonhunter"
     }
 
-    # Pass 1: Stream and extract only what we need
+    # Pass 1: Stream the base file; keep every profile block (a culled
+    # copy-source must stay re-emittable) and each profile's copy-sources.
     with open(base_simc, encoding='utf-8', errors='replace') as f:
         current_profile_name = None
         current_profile_content = []
         in_header = True
 
+        def flush_profile():
+            if current_profile_name:
+                all_profiles[current_profile_name] = "".join(current_profile_content)
+
         for line in f:
-            copy_match = re.match(r"^copy=[\"']?([^,\"']+)[^\"']*[\"']?", line)
+            copy_match = re.match(r"^copy=[\"']?([^,'\"\n]+)(.*)$", line)
             if copy_match:
                 in_header = False
-                # Save previous profile if it was a target
-                if current_profile_name and current_profile_name in target_names:
-                    found_profiles[current_profile_name] = "".join(current_profile_content)
-
-                # Extract first part of comma-separated names
-                full_name = copy_match.group(1).strip()
-                current_profile_name = full_name.split(',')[0].strip()
+                flush_profile()
+                current_profile_name = copy_match.group(1).strip()
+                # Sources are the remaining comma-separated values of
+                # copy="Target,Source[,Source2…]"; a quote or '#' ends the value.
+                rest = copy_match.group(2)
+                for end_ch in ('"', "'", "#"):
+                    rest = rest.split(end_ch, 1)[0]
+                copy_sources[current_profile_name] = [
+                    s.strip() for s in rest.split(",") if s.strip()
+                ]
                 current_profile_content = [line]
             elif in_header:
                 line_strip = line.strip()
@@ -485,38 +498,55 @@ def prepare_stage(base_simc, combos, output_simc, extra_params, current_name=Non
                     header += "\n"
                     continue
 
-                # Check if it's a global setting (not related to character gear/stats)
-                if "=" in line_strip and not any(line_strip.startswith(k) for k in class_keywords):
+                # Comment lines are inert wherever they sit — keep them in
+                # place (the bare '=' test used to sweep '# loot_spec=' and
+                # saved-loadout '# talents=' lines off into the options).
+                if ("=" in line_strip and not line_strip.startswith("#")
+                        and not any(line_strip.startswith(k) for k in class_keywords)):
                     header += "# " + line
-                    global_settings.append(line_strip)
+                    header_options.append(line_strip)
                 else:
                     # It's part of the base actor definition
                     header += line
             elif current_profile_name:
                 current_profile_content.append(line)
 
-        # Save last profile
-        if current_profile_name and current_profile_name in target_names:
-            found_profiles[current_profile_name] = "".join(current_profile_content)
+        flush_profile()
 
     # Pass 2: Write output
     with open(output_simc, "w", encoding='utf-8') as f:
-        f.write(header + "\n" + extra_params + "\n\n")
+        f.write(header + "\n")
+        if header_options:
+            # TGC-2: options land in profile scope (after the base actor's
+            # definition, before the first copy= block) so every profile
+            # parses with the same context the base file had, and before
+            # extra_params so the stage args still win on overlap.
+            f.write("\n# Options extracted from base file header\n"
+                    + "\n".join(header_options) + "\n")
+        f.write("\n" + extra_params + "\n\n")
 
-        # 1. Current profile first
-        if current_name in found_profiles:
-            f.write(f"# Current Character Profile\n{found_profiles[current_name]}\n")
+        emitted = set()
 
-        # 2. Selected combos in order
+        def emit(name, chain, comment=""):
+            if name in emitted:
+                return
+            for src in copy_sources.get(name, ()):
+                if src not in chain and src in all_profiles:
+                    emit(src, chain | {name})
+            if comment:
+                f.write(comment)
+            f.write(all_profiles[name] + "\n")
+            emitted.add(name)
+
+        # 1. Current profile first, then selected combos in order; a
+        # dependent's not-yet-emitted copy-source hoists before it.
+        if current_name and current_name in all_profiles:
+            emit(current_name, frozenset(), "# Current Character Profile\n")
         for name in combos:
-            if name in found_profiles and name != current_name:
-                f.write(found_profiles[name] + "\n")
+            if name in all_profiles and name != current_name:
+                emit(name, frozenset())
 
-        if global_settings:
-            f.write("\n# Global Settings extracted from base file\n" + "\n".join(global_settings) + "\n")
-
-    total_count = (1 if current_name in found_profiles else 0) + len([c for c in combos if c in found_profiles and c != current_name])
-    print(f"Created {output_simc} with {total_count} profiles.")
+    print(f"Created {output_simc} with {len(emitted)} profiles.")
 
 def main():
     """
