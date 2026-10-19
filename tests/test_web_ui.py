@@ -1,6 +1,9 @@
 import os
+import shutil
+import subprocess
 import sys
 
+import pytest
 from fastapi.testclient import TestClient
 
 # Add src to sys.path
@@ -292,6 +295,10 @@ def test_crafted_items_do_not_auto_infer_midnight_grade_from_item_level_label():
     assert "crafting_quality=" in js
     assert "crafted_stats=" in js
     assert "if (isCraftedItem(item)) return null;" in js
+    # G7 (t_0769a998): the badge derives the tier from crafting_quality;
+    # "no grade" survives only as the honest fallback for exports without it.
+    assert "Crafted · Quality ${n}/5" in js
+    assert "Crafted · Grade ${n}" in js
     assert "Crafted · no grade" in js
 
 
@@ -324,6 +331,43 @@ def test_crafted_ascension_reveals_ascended_grade_selector():
     assert "gearUpgrades[slot][item] = { track: value, rank: 1, user_selected: true };" in js
     # A crafted grade only exists while the Ascendant checkbox is checked.
     assert "if (value && value !== 'none' && voidforgedItems[slot]?.[item])" in js
+def test_crafted_upgrade_state_shows_crafted_not_no_grade():
+    # C2 (t_0769a998): crafted items print "Crafted" in the popover state
+    # line and review-popover Grade column instead of the "No grade" lie.
+    js = client.get("/static/app.js").text
+    assert "else if (isCraftedItem(item)) bits.push('Crafted');" in js
+
+
+def test_crafted_badge_mapping_g4():
+    # G4 (t_0769a998) synthetic self-check: run the real helpers extracted
+    # from app.js through node (skipped where node is unavailable).
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    js = client.get("/static/app.js").text
+
+    def _fn(name):
+        start = js.index(f"function {name}")
+        return js[start:js.index("\n}", start) + 2]
+
+    script = _fn("parseItemParams") + "\n" + _fn("craftedBadgeHtml") + """
+const cases = [
+  ["chest=,id=1,crafted_stats=36/32", "Crafted \u00b7 no grade"],
+  ["chest=,id=1,crafted_stats=36/32,crafting_quality=3", "Crafted \u00b7 Quality 3/5"],
+  ["chest=,id=1,crafted_stats=36/32,crafting_quality=x5", "Crafted \u00b7 no grade"],
+  ["chest=,id=1,crafted_stats=36/32,crafting_quality=7", "Crafted \u00b7 Grade 7"],
+  ["finger1=,id=251513,crafting_quality=5", "Crafted \u00b7 Quality 5/5"],
+  ["chest=,id=1,crafted_stats=1/1,crafting_quality=0", "Crafted \u00b7 Quality 0/5"],
+];
+let fail = 0;
+for (const [item, want] of cases) {
+  const got = craftedBadgeHtml(item).replace(/<[^>]*>/g, "");
+  if (got !== want) { console.error(item + " -> " + got + " (want " + want + ")"); fail = 1; }
+}
+process.exit(fail);
+"""
+    result = subprocess.run([node, "-e", script], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
 
 
 def test_gear_selection_hydrates_exact_grades_from_wowhead():
