@@ -5,8 +5,8 @@ NB1 hero extras replace-not-stack | NB2 --danger token | NB3 btn-danger tokens
 NB4 search re-closes its own sections | NB5 chip wording | NB6 D1 quarantine
 NB7 sticky offset token | plus the cache-bust sweep (followed by the
 TG2-A sweep to 20261017-enh-chips, TG2-B sweep to 20261018-mean-err-1, the
-TG2-F sweep to 20261018-chip-worn-1 and the t_4d8563f2 merge sweep to
-20261018-tg3f2-1).
+TG2-F sweep to 20261018-chip-worn-1, the t_4d8563f2 merge sweep to
+20261018-tg3f2-1 and the t_0769a998 GSE-2 sweep to 20261019-gse2-1).
 
 """
 from pathlib import Path
@@ -79,8 +79,8 @@ def test_cache_bust_token_everywhere():
     # to 20261018-chip-worn-1, t_4d8563f2 merge sweep to 20261018-merge-1, t_9fdd2c1b
     # TG3-D compact-rows sweep to 20261018-tg3d-1, TG3-D2 sweep to 20261018-d2-1,
     # TG3-G results-polish sweep to 20261018-tg3g-1, t_79a87102 F2 batch sweep
-    # to 20261018-tg3f2-1).
+    # to 20261018-tg3f2-1, t_0769a998 GSE-2 craft-grade sweep to 20261019-gse2-1).
     for page in PAGES:
         html = Path(f"src/web/static/{page}").read_text()
-        assert "20261018-tg3f2-1" in html, page
+        assert "20261019-gse2-1" in html, page
         assert "20261017-enh-chips" not in html, page

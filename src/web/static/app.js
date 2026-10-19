@@ -727,10 +727,24 @@ function renderTrackControls(slot, item) {
 
 /* Grade-state badges get one slot on every card (.gear-card-badges) so
    their placement never varies between cards. */
+/* GSE-2 t_0769a998: crafting_quality is the addon's raw craft tier (Blizzard
+   GetItemCraftedQualityByItemInfo), a five-tier scale 0-5; out-of-range
+   integers stay raw. Never infer a tier from crafted_stats or ilvl. */
+function craftedBadgeHtml(item) {
+  const raw = parseItemParams(item).crafting_quality;
+  if (/^\d+$/.test(raw || '')) {
+    const n = Number(raw);
+    const label = n <= 5 ? `Crafted · Quality ${n}/5` : `Crafted · Grade ${n}`;
+    const quality = n <= 5 ? `${n}/5` : `${n}`;
+    return `<span class="crafted-badge" title="Crafting quality ${quality} from the addon export">${label}</span>`;
+  }
+  return '<span class="crafted-badge" title="The addon export did not include a crafting quality">Crafted · no grade</span>';
+}
+
 function cardBadges(slot, item) {
   const badges = [];
   if (isCraftedItem(item)) {
-    badges.push('<span class="crafted-badge">Crafted · no grade</span>');
+    badges.push(craftedBadgeHtml(item));
   } else {
     const currentLevel = Number(parseItemParams(item).ilevel) ||
       itemLevelFromLabel(parsedData?.item_names?.[item]);
@@ -1324,6 +1338,7 @@ function upgradeStateText(slot, item) {
   const bits = [];
   if (upgrade?.track) bits.push(upgrade.track[0].toUpperCase() + upgrade.track.slice(1) + (upgrade.rank ? ` ${upgrade.rank}` : ''));
   else if (upgrade?.source === 'export') bits.push('Export ladder');
+  else if (isCraftedItem(item)) bits.push('Crafted');  // GSE-2: crafted has no track ladder
   else bits.push('No grade');
   if (level != null) bits.push(`ilvl ${level}`);
   return bits.join(' \u00b7 ');
