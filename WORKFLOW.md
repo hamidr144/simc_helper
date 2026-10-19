@@ -24,21 +24,21 @@ Tags always point at the **merge commit** on the target branch, never at a pre-m
 
 ## Identity and permissions
 
-Three GitHub App bots, three roles (GHWR-5 identity matrix, user-approved 2026-10-18). The personal account and the old shared fine-grained PAT are **out of the daily flow** (PAT = break-glass until the GHWR-6 pilot is green, then it is revoked).
+Three GitHub App bots, three roles (GHWR-5 identity matrix, user-approved 2026-10-18). The shared fine-grained PAT was **revoked 2026-10-19 — no fallback identity exists**; the apps are the only automation identity. The personal account is out of the daily flow too. If a token cannot be minted, block the card — there is nothing to fall back to.
 
 | Role | App (id) | Held by | May |
 |------|----------|---------|-----|
 | CODING | Hamidr144's Hermes Agent (5371925) | every worker profile (developer, frontend, tester, writer, devops, architect, researcher) | push branches, commit, open PRs, push review fixes |
-| REVIEW | Hermes Agent Reviewer (5372752) | reviewer profile only | post review threads + real `APPROVE`/`REQUEST_CHANGES` **state** reviews; cannot push or merge by construction (no `contents:write`) |
+| REVIEW | Hermes Agent Reviewer (5372752) | reviewer profile only | post review threads + real `APPROVE`/`REQUEST_CHANGES` **state** reviews; holds `contents:write` (granted 2026-10-19) so its approvals **count** toward the required-approvals gate; still never pushes or merges (lane rule; direct pushes are ruleset-blocked anyway) |
 | MERGE | Hermes Agent Leader (5372784) | leader profile only | merge PRs, repo management incl. the only protection-write grant; never pushes branches and never reviews |
 
 - **Auth plumbing:** every `gh`/`git push` runs on a freshly minted 1h installation token: `GH_TOKEN=$(~/.hermes/bin/gh-mint) gh ...` (helper resolves the app from `$HERMES_PROFILE`: leader→MERGE, reviewer→REVIEW, anything else→CODING). Tokens never touch disk or logs; **never** persist one with `gh auth login`. Keys: `~/.hermes/secrets/*.pem` chmod 600. Gotcha: the mint JWT `alg` must be exactly `RS256` (GitHub's own docs' `Rs256` casing returns 401 on every endpoint).
 - **Cross-app approval is the mechanism:** PR authors are always the CODING app; GitHub forbids self-approval, so the REVIEW app — a *different* app — casts the approving review. The ruleset (below) requires **1 approving review** server-side before any merge can land, so a real `APPROVE` state review at the current head — not `VERDICT:` prose alone — is what gates merges.
-- **Protection truth:** the repository ruleset `pr-only-dev-prod` (targeting `refs/heads/dev` and `refs/heads/prod`) is the single protection mechanism: updates restricted, deletions blocked, force-pushes blocked, PR required **with 1 approving review**, and **no bypass actors** — nobody, repo owner included, merges or pushes past these requirements. Agents never create, edit or delete rulesets or branch protection except on an explicitly leader-authorized card (precedents: GHWR-2, GHWR-5) and then only with the MERGE app's token; the user remains the ultimate authority via the browser.
+- **Protection truth:** the repository ruleset `pr-only-dev-prod` (id **25353043**, targeting `refs/heads/dev` and `refs/heads/prod`) is the single protection mechanism: updates restricted, deletions blocked, force-pushes blocked, PR required with **`required_approving_review_count = 1`**, **`dismiss_stale_reviews` on** (any push after an approval invalidates it), **no direct pushes**. Bypass list (live and read-back-verified 2026-10-19): the **repo admin role** (always — the user's browser break-glass) and the **MERGE (leader) app with `pull_requests_only`** — the leader may merge approved PRs but cannot push. Agents never create, edit or delete rulesets or branch protection except on an explicitly leader-authorized card (precedents: GHWR-2, GHWR-5, the 2026-10-19 merge-lane bypass) and then only with the MERGE app's token; the user remains the ultimate authority via the browser.
 
 ## Day-to-day: change → dev
 
-All changes reach `dev` (and `prod`) **only through a GitHub PR merged by the leader via `gh`**. The ruleset rejects **every** direct push to these branches — including pushing the exact head sha of an open PR, which legacy protection alone used to silently accept and auto-merge the PR (t_5f7990f2). There is no local `git merge` into `dev`/`prod` and no `git push origin dev` anymore; don't try, it fails (`GH013: Cannot update this protected ref` / `GH006: Protected branch update failed`).
+All changes reach `dev` (and `prod`) **only through a GitHub PR merged by the leader via the REST merge endpoint (step 8)**. The ruleset rejects **every** direct push to these branches — including pushing the exact head sha of an open PR, which legacy protection alone used to silently accept and auto-merge the PR (t_5f7990f2). There is no local `git merge` into `dev`/`prod` and no `git push origin dev` anymore; don't try, it fails (`GH013: Cannot update this protected ref` / `GH006: Protected branch update failed`).
 
 **CI runs on every PR** whose base is `main`, `dev` or `prod` (`ci.yml` triggers on `pull_request.branches`, which filters on the PR's base branch; there are no path filters, so docs PRs get checks too). If `gh pr checks <pr>` shows *no checks at all*, CI did not run — that is not a pass. The dev line's suite has never run on GitHub runners; expect early red dev-PR runs — treat each as a finding to investigate or fix, not an automatic merge blocker.
 
@@ -60,10 +60,11 @@ All changes reach `dev` (and `prod`) **only through a GitHub PR merged by the le
    ```
    (`line` must fall inside a diff hunk or the whole call 422s.) Author addresses **every** comment with follow-up commits pushed to the same branch and replies on each inline thread (`gh api repos/hamidr144/simc_helper/pulls/<pr>/comments/<comment-id>/replies -f body="…"`), then requests re-review.
 7. **Version bump:** as the last commit before requesting final review, `git fetch origin dev` and bump `pyproject.toml` to the next `X.Y.Z-dev.N` — recompute N from the freshly fetched tip at that moment (another PR may have merged while you worked). Docs-only PR: skip (version-exempt).
-8. Once **1 approving review from the REVIEW bot sits at the current head** (the ruleset rejects the merge server-side otherwise — no identity can bypass it, see Identity above) and CI has run, **the leader merges with the MERGE identity. The author never merges their own PR; workers never merge:**
+8. Once **1 approving review from the REVIEW bot sits at the current head** (the ruleset rejects the merge server-side otherwise; only the bypass actors above could override it and the lane rule forbids merging unapproved PRs — the leader included) and CI has run, **the leader merges with the MERGE identity via the REST merge endpoint. The author never merges their own PR; workers never merge:**
    ```bash
-   GH_TOKEN=$(~/.hermes/bin/gh-mint) gh pr merge <pr> --merge --delete-branch   # leader profile only
+   GH_TOKEN=$(~/.hermes/bin/gh-mint) gh api --method PUT repos/hamidr144/simc_helper/pulls/<pr>/merge -f merge_method=merge   # leader profile only
    ```
+   **Gotcha — do not "fix" this back to `gh pr merge`:** even with the Leader token, `gh pr merge` aborts in its own precheck (`mergeStateStatus: BLOCKED`) because gh does not apply the PR-context ruleset bypass. The REST `PUT …/merge` call above is what the `pull_requests_only` bypass actually lets through server-side. (The endpoint does not delete the head branch; branch cleanup, if wanted at all, is a separate call — milestone heads must never be deleted.)
 9. Tag + deploy: **the leader** tags the merge commit `vX.Y.Z-dev.N` and pushes the tag explicitly. The merge commit exists only on the remote, and `dev` itself needs no push (the merge already updated it; pushing it would hit protection anyway):
    ```bash
    git fetch origin dev                      # brings the merge commit into origin/dev
@@ -74,7 +75,7 @@ All changes reach `dev` (and `prod`) **only through a GitHub PR merged by the le
 
 ### Review verdicts
 
-Reviews are **real state reviews** cast by the REVIEW app (see Identity above): GitHub's cross-app approval satisfies the ruleset's required-approvals gate. The ruleset does **not** auto-dismiss approvals on new pushes, so drift discipline stays manual: the reviewer pins the review to the exact head (`commit_id`) and the leader verifies the merge commit contains exactly the reviewed head before merging (GHWR-4 practice). Keep the first body line as `VERDICT: APPROVE` / `VERDICT: REQUEST-CHANGES` for human and Kanban parity. The Hermes kanban reviewer card remains the binding process record — the GitHub review is its mirror.
+Reviews are **real state reviews** cast by the REVIEW app (see Identity above): GitHub's cross-app approval satisfies the ruleset's required-approvals gate, and since the reviewer app's `contents:write` grant its approvals **count** toward it. The ruleset **auto-dismisses stale approvals on new pushes** (`dismiss_stale_reviews`), so any fix-round commit voids the previous approval: the reviewer must re-approve after the final commit. The reviewer still pins the review to the exact head (`commit_id`) and the leader verifies the reviewed head is the merge tip before merging (GHWR-4 practice). Keep the first body line as `VERDICT: APPROVE` / `VERDICT: REQUEST-CHANGES` for human and Kanban parity. The Hermes kanban reviewer card remains the binding process record — the GitHub review is its mirror.
 
 ## Milestone: dev → prod
 
@@ -87,8 +88,8 @@ Only the leader opens and merges the `dev → prod` PR:
 ```bash
 # version bump + changelog go in a branch cut from dev (same bump rule as day-to-day), pushed:
 gh pr create --base prod --head milestone/<version> --title "milestone: v<NEW.VERSION>" --body "<milestone summary>"
-# leader merges once approved and CI has run (no --delete-branch: the milestone head is a protected long-lived branch — gh would try to delete it), then tags the merge commit (same tag mechanics as day-to-day):
-gh pr merge <pr> --merge
+# leader merges once approved and CI has run — same REST merge call as day-to-day (never gh pr merge, see the step-8 gotcha; it never deletes the protected milestone head), then tags the merge commit (same tag mechanics as day-to-day):
+gh api --method PUT repos/hamidr144/simc_helper/pulls/<pr>/merge -f merge_method=merge
 git fetch origin prod && git tag vX.Y.Z refs/remotes/origin/prod && git push origin vX.Y.Z
 # deploy prod system (see below) and verify /health
 ```
