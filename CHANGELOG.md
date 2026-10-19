@@ -10,12 +10,12 @@ new version is prepared and reviewer-approved as a mandatory step (see WORKFLOW.
 "Milestone: dev → prod"); the `CHANGELOG.md` update ships in the same merge commit
 that bumps the version and tag.
 
-## [Unreleased] — next prod milestone
+## [1.0.0] — 2026-10-19
 
-Candidate version: `v1.0.0` — per WORKFLOW.md the first milestone merged from the
-`1.0.0-dev.N` line ships as `v1.0.0`; the final number (MINOR/MAJOR/PATCH) is ruled
-at merge time. Entries consolidated from `git log prod..dev` (dev at `v1.0.0-dev.29`,
-72 commits ahead of `v0.1.1`).
+First milestone merged from the `1.0.0-dev.N` line to prod; per WORKFLOW.md the
+prerelease suffix drops (`1.0.0-dev.35` → `v1.0.0`; MINOR/MAJOR/PATCH confirmation
+is ruled at merge time). Merged from dev at tag `v1.0.0-dev.35` (`e8daea6`),
+131 commits ahead of `v0.1.1`. Entries consolidated from `git log prod..dev`.
 
 ### Features
 
@@ -36,13 +36,21 @@ at merge time. Entries consolidated from `git log prod..dev` (dev at `v1.0.0-dev
 - Closing one browser tab no longer kills another tab's live progress stream (t_5d6903e4).
 - Run attribution and history rows survive a master restart (t_2c718ca6).
 - Gear links keep their item icons in tooltips with colored link text (t_268f5264).
+- Gear selection rows are compact single-line cards, fitting the reference export without scrolling (t_9fdd2c1b).
+- Slot-conflict guard: selecting an off-hand together with a two-handed weapon is rejected instead of building an invalid gear set (t_8d577e52).
+- Results view polish: run mode chip, a single ranked comparison table, and replaced-context tooltips.
 - Accessibility: enhancement groups closed by default with a checked-count summary and skip-link fix, results table gets a screen-reader caption and proper column headers, gear slot headers wrap instead of overflowing at 390px, and the whole GUI-redesign chain passed a tab-stop/keyboard audit (t_16e4f177, t_dccc2343, t_ab5b5f2e, t_27ceb173, t_c918da68).
 
 ### Bug fixes
 
-- Security hardening (ownership/authz): all API and report endpoints now require a session (`/api/get-results`, `/api/task-status`, `/api/report-url`, `/api/state`, SSE streams, `/reports`, `/inputs`); logout revokes sessions server-side; inputs and tasks are owner-checked per user; a simulation never falls back to another user's input and `latest` results are caller-scoped (t_5071ad92, t_550f7d79, t_8d011d53, t_e1b11498, t_28df6d81, t_2447fdbd, t_0e328148, t_a4ff7b5d, t_2f386596, t_ff260cdb, t_1e5e7fb4).
+- Security hardening (ownership/authz): all API and report endpoints now require a session (`/api/get-results`, `/api/task-status`, `/api/report-url`, `/api/state`, SSE streams, `/reports`, `/inputs`); logout revokes sessions server-side; inputs and tasks are owner-checked per user; the `/reports` mount is per-owner; a simulation never falls back to another user's input and `latest` results are caller-scoped (t_5071ad92, t_550f7d79, t_8d011d53, t_e1b11498, t_28df6d81, t_2447fdbd, t_0e328148, t_a4ff7b5d, t_2f386596, t_ff260cdb, t_1e5e7fb4, t_71013ac2).
 - Worker upload failures now raise instead of being silently swallowed (t_a13e5be8).
 - Non-SimC export text is rejected with a 400 error on addon parsing (t_0cb6af81).
+- 344-level Elevated Mythic gear no longer offers the Ascendant Venomstone option, and crafted-base ascension now actually generates the ascended override via an explicit Hero/Mythic grade selector (t_60c19e5d, t_98470ac5).
+- Combinations results are no longer skewed by relocated profile options, and culled copy sources no longer crash the sim run (t_662ff323).
+- Oversized combinations requests are budget-checked on the pre-dedup product before any generation, answering 422 instead of exhausting server memory; baseline integrity is enforced upload→generate→dispatch (t_acfe75a9, t_2afcc382).
+- Gear labels in nightly reports are whitespace-normalized so they match the slot map, and item names parsed from addon exports are no longer corrupted by export meta comments (t_ebcd03f1, t_f3a2ec36).
+- Long workflow-status messages in the run bar clamp to two lines with an ellipsis and tooltip instead of breaking the layout (t_5c33fefb).
 
 ## [0.1.1] — 2026-10-16
 
