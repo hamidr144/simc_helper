@@ -333,3 +333,22 @@ def test_budget_cap_rejects_over_cap_product_before_materializing(monkeypatch):
     files_after = set(os.listdir(inputs_dir)) if os.path.isdir(inputs_dir) else set()
     assert files_after == files_before
     assert dict(master.generated_inputs_by_user) == record_before
+
+
+def test_crafted_ascension_selection_yields_crafted_override_ilvls():
+    """AV-2F (t_98470ac5): the payload the UI sends for an Ascendant-checked
+    max-quality crafted base (track entry + voidforged flag) must generate the
+    season's crafted ascension overrides (midnight-s2: hero 325, myth 338)."""
+    crafted = "id=280514,ilevel=320,crafting_quality=4"
+    for track, expected in (("hero", 325), ("myth", 338)):
+        response = client.post("/api/generate-simc", json={
+            **BASE_PAYLOAD,
+            "selected_items": {"neck": [crafted]},
+            "gear_upgrades": {"neck": {
+                crafted: {"track": track, "rank": 1, "user_selected": True}}},
+            "voidforged_items": {"neck": {crafted: True}},
+        })
+        assert response.status_code == 200, response.text
+        with open(response.json()["file_path"], encoding="utf-8") as f:
+            text = f.read()
+        assert f"ilevel={expected}" in text, f"{track} ascension missing 325/338 override"

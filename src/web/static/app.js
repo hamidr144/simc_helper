@@ -767,6 +767,18 @@ function targetUpgradeLevel(slot, item) {
   return levels[upgrade.rank - 1] ?? null;
 }
 
+/* Crafted ascension (t_98470ac5): the backend resolves crafted_results from
+   the upgrade track, so an ascended grade must land on gearUpgrades — but
+   only while the Ascendant checkbox is checked, because crafted bases have
+   no ladder upgrade of their own.  rank is the backend contract's needed
+   placeholder; the ascended ilvl replaces it during generation. */
+function syncCraftedAscensionEntry(slot, item, value) {
+  delete gearUpgrades[slot][item];
+  if (value && value !== 'none' && voidforgedItems[slot]?.[item]) {
+    gearUpgrades[slot][item] = { track: value, rank: 1, user_selected: true };
+  }
+}
+
 function scheduleUpgradePreview(slot, item, card) {
   const key = `${slot}|${item}`;
   clearTimeout(upgradePreviewTimers.get(key));
@@ -1198,7 +1210,20 @@ function renderGear() {
           if (event.target.checked && gearUpgrades[slot]?.[item]) {
             gearUpgrades[slot][item].user_selected = true;
           }
+          const craftedGrade = card.querySelector('.crafted-grade-select');
+          if (craftedGrade) {
+            craftedGrade.disabled = !event.target.checked;
+            syncCraftedAscensionEntry(slot, item, craftedGrade.value);
+          }
           event.currentTarget.closest('.voidforge-field-container')?.classList.toggle('is-active', event.target.checked);
+          scheduleUpgradePreview(slot, item, card);
+          selectionChanged();
+        });
+      }
+      const craftedGradeSelect = card.querySelector('.crafted-grade-select');
+      if (craftedGradeSelect) {
+        craftedGradeSelect.addEventListener('change', () => {
+          syncCraftedAscensionEntry(slot, item, craftedGradeSelect.value);
           scheduleUpgradePreview(slot, item, card);
           selectionChanged();
         });
@@ -1306,14 +1331,27 @@ function upgradeStateText(slot, item) {
 
 function upgradePopoverMarkup(slot, item) {
   const controls = renderTrackControls(slot, item);
-  const voidforge = isVoidforgeEligibleSlot(slot)
+  const currentLevel = Number(parseItemParams(item).ilevel) ||
+    itemLevelFromLabel(parsedData?.item_names?.[item]);
+  // t_60c19e5d: Elevated Myth gear (344) is not Ascendant-eligible.
+  const ascensionEligible = isVoidforgeEligibleSlot(slot) && !isElevatedLevel(currentLevel);
+  // t_98470ac5: a crafted base has no season ladder to infer a grade from
+  // (crafted ilvls live off-track), so the ascended grade is picked by hand.
+  const craftedTracks = ascensionEligible && isCraftedItem(item)
+    ? Object.keys(seasonAscension().crafted_results || {}) : [];
+  const craftedGrade = craftedTracks.length
+    ? `<select class="crafted-grade-select" aria-label="Ascended grade" ${voidforgedItems[slot][item] ? '' : 'disabled'}>${['none', ...craftedTracks]
+        .map(track => `<option value="${track}" ${gearUpgrades[slot]?.[item]?.track === track ? 'selected' : ''}>${track === 'none' ? 'Ascended grade\u2026' : track[0].toUpperCase() + track.slice(1)}</option>`)
+        .join('')}</select>`
+    : '';
+  const voidforge = ascensionEligible
     ? `<label class="voidforge-field-container"><input type="checkbox" class="voidforge-input" ${voidforgedItems[slot][item] ? 'checked' : ''}> ${seasonAscension().name || 'Ascendant'} \u00d7${seasonAscension().cost ?? ''}</label>`
     : '';
   if (!controls && !voidforge) return '';
   return `<div class="gear-card-controls popover-host">` +
     `<span class="upgrade-state">${escapeHtml(upgradeStateText(slot, item))}</span>` +
     `<button type="button" class="btn-ghost upgrade-trigger" aria-expanded="false" aria-haspopup="dialog">Upgrade\u2026</button>` +
-    `<div class="popover" hidden>${controls}${voidforge}<div class="upgrade-preview" hidden></div></div></div>`;
+    `<div class="popover" hidden>${controls}${craftedGrade}${voidforge}<div class="upgrade-preview" hidden></div></div></div>`;
 }
 
 // Pre-run diff (doc 5): client-side summary only; the server combo count in

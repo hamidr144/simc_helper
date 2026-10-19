@@ -269,7 +269,7 @@ def test_app_js_wires_debounced_preview():
     assert "UPGRADE_PREVIEW_DEBOUNCE_MS = 400" in js
     assert "scheduleUpgradePreview" in js
     assert "preview unavailable" in js
-    assert js.count("scheduleUpgradePreview(slot, item, card);") == 3  # track, rank, ascension
+    assert js.count("scheduleUpgradePreview(slot, item, card);") == 4  # track, rank, ascension, crafted grade
 
 
 def test_style_css_defines_preview_classes():
@@ -282,4 +282,4 @@ def test_style_css_defines_preview_classes():
 def test_app_html_cache_busted():
     html = _static("app.html")
     assert "style.css?v=20261018-tg3f2-1" in html
-    assert "app.js?v=20261018-tg3f2-1" in html
+    assert "app.js?v=20261019-venomstone-ui-fix-1" in html

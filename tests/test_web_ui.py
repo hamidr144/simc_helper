@@ -295,6 +295,37 @@ def test_crafted_items_do_not_auto_infer_midnight_grade_from_item_level_label():
     assert "Crafted · no grade" in js
 
 
+def test_voidforge_option_is_hidden_for_elevated_items():
+    """t_60c19e5d: ilvl-344 Elevated Myth must not offer Ascendant ascension."""
+    response = client.get("/static/app.js")
+    assert response.status_code == 200
+    js = response.text
+
+    assert (
+        "ascensionEligible = isVoidforgeEligibleSlot(slot) && !isElevatedLevel(currentLevel)"
+        in js
+    )
+    # The checkbox markup is gated on that flag, not on the raw slot check.
+    assert "const voidforge = ascensionEligible" in js
+    assert "const voidforge = isVoidforgeEligibleSlot(slot)\n" not in js
+
+
+def test_crafted_ascension_reveals_ascended_grade_selector():
+    """t_98470ac5: ticking Ascendant on a crafted base needs an explicit
+    hero/myth grade; the picked track hydrates the gearUpgrades entry the
+    backend resolves crafted_results (325/338) from."""
+    response = client.get("/static/app.js")
+    assert response.status_code == 200
+    js = response.text
+
+    assert "crafted-grade-select" in js
+    assert "Object.keys(seasonAscension().crafted_results || {})" in js
+    assert "function syncCraftedAscensionEntry(slot, item, value)" in js
+    assert "gearUpgrades[slot][item] = { track: value, rank: 1, user_selected: true };" in js
+    # A crafted grade only exists while the Ascendant checkbox is checked.
+    assert "if (value && value !== 'none' && voidforgedItems[slot]?.[item])" in js
+
+
 def test_gear_selection_hydrates_exact_grades_from_wowhead():
     response = client.get("/static/app.js")
     assert response.status_code == 200

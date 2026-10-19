@@ -231,4 +231,4 @@ def test_style_css_defines_step4_classes():
 def test_app_html_cache_busted_step4():
     html = _static("app.html")
     assert "style.css?v=20261018-tg3f2-1" in html
-    assert "app.js?v=20261018-tg3f2-1" in html
+    assert "app.js?v=20261019-venomstone-ui-fix-1" in html
