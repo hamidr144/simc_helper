@@ -385,6 +385,29 @@ async def process_logs(master_fd, active_process, websocket, task_id, full_log, 
 
         await asyncio.sleep(0.01)
 
+    # Post-exit PTY drain (t_537242a9): the loop above exits as soon as
+    # poll() sees the process gone, silently dropping any PTY tail it had
+    # not read yet. Linux keeps data written before the slave closed and
+    # only then returns EIO, so one final drain recovers the tail — on
+    # macOS the scheduler happened to deliver it, on Linux a fast-exiting
+    # process lost its last lines (symptom: report_*.html line gone and
+    # _execute_task returning report=None; ubuntu-only CI failure).
+    # shortcut: 0.5s select budget; a live grandchild holding the slave
+    # only adds one idle tick per drain, upgrade to an event if slow.
+    while select.select([master_fd], [], [], 0.5)[0]:
+        try:
+            raw_data = os.read(master_fd, 4096)
+        except OSError:
+            break
+        if not raw_data:
+            break
+        text = raw_data.decode('utf-8', errors='replace').replace('\r\n', '\n')
+        for line in text.split('\n'):
+            if line:
+                full_log.append(line)
+                if "Progress:" not in line:
+                    log_batch.append(line)
+
     if log_batch:
         try:
             await websocket.send(json.dumps({"type": "log_batch", "task_id": task_id, "lines": log_batch}))

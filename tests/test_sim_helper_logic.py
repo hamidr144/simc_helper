@@ -99,7 +99,10 @@ def test_prepare_stage_with_header(tmp_path):
     assert "# iterations=1000" in f_out.read_text()
 
 def test_get_memory_based_batch_size_fallbacks():
-    with patch("cli.sim_helper.psutil", None):
+    # also mask /proc/meminfo: the fallback contract is "no RAM source at
+    # all"; Linux (CI ubuntu) has /proc even when psutil is patched away,
+    # macOS happens not to — macos-only pass was masking RAM-detected values.
+    with patch("cli.sim_helper.psutil", None), patch("builtins.open", side_effect=FileNotFoundError):
         assert get_memory_based_batch_size() == 200
 
 def test_main_with_server(tmp_path):

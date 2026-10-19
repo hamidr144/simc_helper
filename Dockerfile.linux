@@ -1,5 +1,7 @@
 # Dockerfile.linux – builds Linux x86_64 binaries for SimC Helper
-FROM --platform=linux/amd64 python:3.9-slim
+# py3.11 to match the fastapi pin (requirements.txt needs >=3.10) and the
+# runtime image (Dockerfile) + CI matrix python.
+FROM --platform=linux/amd64 python:3.11-slim
 
 # Install build dependencies (including bash for script)
 RUN apt-get update && \
