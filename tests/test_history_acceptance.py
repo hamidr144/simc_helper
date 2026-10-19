@@ -115,11 +115,24 @@ def _read_until_terminal(stream, timeout: float = 20.0) -> str:
     raise AssertionError("SSE stream closed without a terminal event")
 
 
-def _history_row(client: TestClient, task_id: str) -> dict:
-    """The history row whose report lives under ``<user>/<task_id>/``."""
-    runs = client.get("/api/history").json()["runs"]
-    matches = [r for r in runs if r["report_path"] and f"/{task_id}/" in r["report_path"]]
-    assert matches, f"no history row for task {task_id} in {[r['run_id'] for r in runs]}"
+def _history_row(client: TestClient, task_id: str, timeout: float = 5.0) -> dict:
+    """The history row whose report lives under ``<user>/<task_id>/``.
+
+    Polls within a bounded deadline: the task-done hook writes the row
+    asynchronously *after* the SSE terminal event (~31ms lag seen in CI run
+    39210595915), so a single immediate GET races and flakes.
+    """
+    deadline = time.time() + timeout
+    while True:
+        runs = client.get("/api/history").json()["runs"]
+        matches = [r for r in runs if r["report_path"] and f"/{task_id}/" in r["report_path"]]
+        if matches or time.time() >= deadline:
+            break
+        time.sleep(0.2)
+    assert matches, (
+        f"no history row for task {task_id} in {[r['run_id'] for r in runs]} "
+        f"(waited {timeout}s)"
+    )
     return matches[0]
 
 
