@@ -7,14 +7,47 @@ from itertools import product
 from src.core.addon_parser import parse_addon_lines
 
 
+# Midnight enchant-group keys (MGE-1 catalog) -> the gear-slot keys the whole
+# pipeline consumes (MGE-2 design contract §8.3). Configs that already use
+# gear-slot keys pass through unchanged. profession_tool has no combat-gear
+# slot: it stays backend-side seed data only and is filtered out here, so it
+# never reaches /api/config.enchantments or combination generation.
+ENCHANT_GROUP_TO_SLOT = {
+    "helm": "head",
+    "shoulders": "shoulder",
+    "chest": "chest",
+    "legs": "legs",
+    "boots": "feet",
+    "rings": "finger",
+    "weapon": "main_hand",
+    "profession_tool": None,
+}
+
+
+def map_enchant_groups(enchantments):
+    """Rewrite Midnight enchant-group keys to gear-slot keys, dropping
+    group-less entries (None targets). Unknown keys pass through as-is."""
+    mapped = {}
+    for group, entries in enchantments.items():
+        slot = ENCHANT_GROUP_TO_SLOT.get(group, group)
+        if slot is not None:
+            mapped[slot] = entries
+    return mapped
+
+
 def load_config(config_path="config.json"):
-    """Loads enchant and gem options from a JSON config file."""
+    """Loads enchant and gem options from a JSON config file, mapping
+    Midnight enchant-group keys to gear-slot keys at this single load edge
+    (callers and /api/config only ever see gear-slot keys)."""
     default_config = {"enchantments": {}, "gems": {}, "max_concurrent_jobs": 4}
     if not os.path.exists(config_path):
         return default_config
     try:
         with open(config_path, encoding='utf-8') as f:
-            return json.load(f)
+            config = json.load(f)
+        if isinstance(config.get("enchantments"), dict):
+            config["enchantments"] = map_enchant_groups(config["enchantments"])
+        return config
     except Exception as e:
         print(f"Error loading config: {e}")
         return default_config
