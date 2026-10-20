@@ -10,6 +10,43 @@ new version is prepared and reviewer-approved as a mandatory step (see WORKFLOW.
 "Milestone: dev → prod"); the `CHANGELOG.md` update ships in the same merge commit
 that bumps the version and tag.
 
+## [1.1.0] — 2026-10-20
+
+MINOR milestone merged from the `1.0.0-dev.N` line carrying the Midnight GUI
+epic (features, per WORKFLOW.md MINOR rule). Merged from dev at tag
+`v1.0.0-dev.38` (`d4d1dd6`), 15 commits ahead of `v1.0.1`. Entries consolidated
+from `git log prod..dev`.
+
+### Features
+
+- Midnight gems and enchant selection: the full Midnight catalog ships in the
+  config (44 selectable enchants plus 35 + 4 gems), and the server maps
+  enchant groups to gear slots when generating simc input (t_3da0efb2,
+  t_94a15fe3).
+- Results open automatically when a run finishes: the top-ranked combination
+  per slot plus the other combinations as rows diffed against the best,
+  listing only the changed items with their DPS and delta (t_94a15fe3).
+- Gear setup rebuilt as a two-column paper-doll layout following the in-game
+  character/armory slot order; every slot and enhancement section is shown
+  instead of hidden, while only equipped items stay selected by default
+  (t_94a15fe3).
+- The running app version is displayed in the page footer and served at the
+  public `GET /api/version` endpoint (t_3da0efb2, t_94a15fe3).
+
+### Improvements
+
+- Smarter stage splitting for combination runs: a survivor floor of
+  `max(4, ceil(N/4))` keeps the last stage meaningful, stage 1 is skipped
+  below 17 combos and all stages below 5, so small-combination runs no longer
+  end in a one-combo last stage; explicit stage-percent overrides opt out of
+  the floor (t_3da0efb2).
+- The page stays static when simulation options change — elements no longer
+  shift position (t_94a15fe3).
+- More space between page elements (t_94a15fe3).
+- Docs: the docker-compose `config.json` bind-mount caveat — a missing file
+  becomes an empty directory and the app silently falls back to defaults
+  (t_2ec06f33).
+
 ## [1.0.1] — 2026-10-19
 
 PATCH milestone merged from the `1.0.0-dev.N` line (single user-visible fix, per
