@@ -27,6 +27,14 @@ cp examples/config.example.json config.json
 
 *Empty arrays bypass testing for that specific slot.*
 
+> **Docker Compose caveat:** the compose stack bind-mounts `./config.json`
+> read-only into the master. If the file is missing, Docker silently creates
+> it as an empty *directory* and the app keeps running on built-in defaults
+> (`{"enchantments":{},"gems":{},"max_concurrent_jobs":4}`) — verify the bind
+> source is a real file after the first `up`. The example carries a live
+> enchant/gem set, so copying it into an existing deployment changes its
+> behavior; `cp` it only when that is intended.
+
 ---
 
 ## 2. Deployment Config (`deploy_configs/*.json`)
