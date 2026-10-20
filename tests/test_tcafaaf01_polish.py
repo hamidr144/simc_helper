@@ -83,5 +83,5 @@ def test_cache_bust_token_everywhere():
     # older sweeps; t_94a15fe3 swept all pages to the single MGE-2 token).
     for page in PAGES:
         html = Path(f"src/web/static/{page}").read_text()
-        assert "20261020-guir-2" in html, page  # MGE-2 sweep (t_94a15fe3)
+        assert "20261020-guir-3" in html, page  # MGE-2 sweep (t_94a15fe3)
         assert "20261017-enh-chips" not in html, page

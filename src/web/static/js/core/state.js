@@ -1,5 +1,5 @@
 // js/core/state.js — shared mutable state singleton (gui-rewrite §3.2)
-import { exportRanksFor, inferMidnightUpgrade, isAlreadyVoidforgedItem, normalizedEquippedItems, parseItemParams } from './items.js';
+import { exportRanksFor, inferMidnightUpgrade, isAlreadyVoidforgedItem, normalizedEquippedItems, PAPER_DOLL_SLOTS, parseItemParams } from './items.js';
 export const state = {
   parsedData: null,
   appConfig: { enchantments: {}, gems: { meta: [], standard: [] } },
@@ -66,6 +66,15 @@ export function initializeSelections() {
       state.voidforgedItems[slot][item] = isAlreadyVoidforgedItem(
         slot, item, state.parsedData.item_names[item]
       );
+    }
+  }
+  // Armory payloads omit slots without an item; gear.js reads a Set for every
+  // doll slot, so missing ones must still seed as empty (0/0 selected).
+  for (const slot of PAPER_DOLL_SLOTS) {
+    if (!(slot in state.selectedItems)) {
+      state.selectedItems[slot] = new Set();
+      state.gearUpgrades[slot] = {};
+      state.voidforgedItems[slot] = {};
     }
   }
   for (const slot of Object.keys(state.appConfig.enchantments || {})) {

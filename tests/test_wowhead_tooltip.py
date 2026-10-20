@@ -282,5 +282,5 @@ def test_style_css_defines_preview_classes():
 
 def test_app_html_cache_busted():
     html = _static("app.html")
-    assert "tokens.css?v=20261020-guir-2" in html  # MGE-2 split assets (t_94a15fe3)
-    assert "pages/setup.js?v=20261020-guir-2" in html  # MGE-2 split assets (t_94a15fe3)
+    assert "tokens.css?v=20261020-guir-3" in html  # MGE-2 split assets (t_94a15fe3)
+    assert "pages/setup.js?v=20261020-guir-3" in html  # MGE-2 split assets (t_94a15fe3)

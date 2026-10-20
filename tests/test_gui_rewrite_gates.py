@@ -9,9 +9,14 @@ redirected legacy pins:
   * A3     no items[0] fallback in the selection initializer.
   * A6     zero version literal in static/ (chip text comes from /api/version).
 """
+import json
 import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 import static_assets  # noqa: F401  (shares the split-asset bundle helpers)
 
@@ -147,3 +152,149 @@ def test_a6_no_version_literal_in_static():
         blob += (STATIC / page).read_text()
     # version-shaped tokens (1.2.3 / v1.2.3); "WCAG 2.4.11" is a guideline ref.
     assert not re.search(r"(?<!WCAG )\bv?\d+\.\d+\.\d+\b", blob)
+
+
+# ---- A7 armory-2H smoke harness (t_d5290455) ------------------------------
+# api/armory-load only emits items_by_slot keys for slots that HAVE an item
+# (any 2H character -> no off_hand key), unlike api/parse-addon which always
+# emits all 14 doll slots. initializeSelections must seed every doll slot as
+# an empty Set or gear.js throws reading .size (crash shipped at b4fc61e2).
+# This harness boots the real core/state + setup/gear graph with the exact
+# live defect payload (13 slot keys, missing off_hand) against a minimal DOM
+# stub, then runs initializeSelections() and renderGear() for real.
+
+def _node_binary() -> str:
+    # same lookup as test_realms_dropdown._node_binary, duplicated so this
+    # gate never imports the app just to locate node.
+    node = shutil.which("node")
+    if node:
+        return node
+    bundled = sorted(
+        Path.home().glob(".hermes/tools/node-*/bin/node"),
+        key=lambda p: p.parts[-4] if len(p.parts) > 3 else str(p),
+    )
+    if bundled:
+        return str(bundled[-1])
+    pytest.skip("node not available; gear smoke harness needs it")
+
+
+GEAR_ARMORY_HARNESS = r"""
+class El {
+  constructor(tag) {
+    this.tagName = tag;
+    this.children = [];
+    this.dataset = {};
+    this.className = '';
+    this.textContent = '';
+    this.value = '';
+    this.hidden = false;
+    this.disabled = false;
+    this._q = new Map();
+  }
+  set innerHTML(v) { this._html = String(v); }
+  get innerHTML() { return this._html || ''; }
+  setAttribute() {}
+  getAttribute() { return null; }
+  appendChild(child) { this.children.push(child); return child; }
+  addEventListener() {}
+  removeEventListener() {}
+  focus() {}
+  contains() { return false; }
+  closest() { return null; }
+  after() {}
+  scrollIntoView() {}
+  querySelector(sel) {
+    if (!this._q.has(sel)) this._q.set(sel, new El('div'));
+    return this._q.get(sel);
+  }
+  querySelectorAll() { return []; }
+}
+El.prototype.classList = { add() {}, remove() {}, toggle: () => false, contains: () => false };
+
+const P = new Proxy(function () {}, {
+  get: (t, p) => {
+    if (typeof p === 'symbol') return p === Symbol.toPrimitive ? () => '' : undefined;
+    if (p === 'then') return undefined;
+    return P;
+  },
+  set: () => true,
+  apply: () => P,
+});
+
+const byId = new Map();
+globalThis.window = globalThis;
+globalThis.document = {
+  getElementById: (id) => { if (!byId.has(id)) byId.set(id, new El('div')); return byId.get(id); },
+  createElement: (tag) => new El(tag),
+  querySelector: () => P,
+  querySelectorAll: () => [],
+  addEventListener: () => {},
+  activeElement: null,
+  body: new El('body'),
+  documentElement: new El('html'),
+};
+globalThis.location = { search: '', href: 'http://x/', assign() {} };
+globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
+globalThis.sessionStorage = globalThis.localStorage;
+globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, addListener() {} });
+globalThis.requestAnimationFrame = () => 0;
+
+const J = (r) => 'file://__STATIC__/js/' + r;
+const { PAPER_DOLL_SLOTS } = await import(J('core/items.js'));
+// Live armory defect payload shape (t_7b4c4c42): 13 slot keys, no off_hand.
+const bySlot = Object.fromEntries(
+  ['back', 'chest', 'feet', 'hands', 'head', 'finger', 'trinket', 'legs',
+    'neck', 'shoulder', 'waist', 'main_hand', 'wrist']
+    .map((slot) => [slot, ['2111,0,0,686,17717']])
+);
+bySlot.trinket.push('2112,0,0,686,17717');
+
+const { state, initializeSelections } = await import(J('core/state.js'));
+const { renderGear } = await import(J('setup/gear.js'));
+
+state.parsedData = { items_by_slot: bySlot, item_names: {}, equipped_gear: {} };
+initializeSelections();
+
+const missing = PAPER_DOLL_SLOTS.filter((s) => !(s in bySlot));
+const setSlots = Object.keys(state.selectedItems)
+  .filter((s) => state.selectedItems[s] instanceof Set);
+renderGear();
+const grid = document.getElementById('gear-grid');
+const groups = grid.children.filter((c) => c.className === 'slot-group');
+const offHand = groups.find((c) => c.dataset.slot === 'off_hand');
+console.log(JSON.stringify({
+  missing,
+  setSlots,
+  dollSlots: PAPER_DOLL_SLOTS,
+  groupSlots: groups.map((c) => c.dataset.slot),
+  offHandCount: offHand ? offHand.querySelector('.slot-count').textContent : null,
+}));
+"""
+
+
+def _run_gear_harness() -> dict:
+    script = GEAR_ARMORY_HARNESS.replace("__STATIC__", str(STATIC))
+    result = subprocess.run(
+        [_node_binary(), "--input-type=module", "-e", script],
+        capture_output=True, text=True, timeout=60,
+    )
+    assert result.returncode == 0, f"gear smoke harness failed: {result.stderr[-2000:]}"
+    return json.loads(result.stdout)
+
+
+def test_a7_armory_missing_slot_seeds_empty_set():
+    out = _run_gear_harness()
+    assert out["missing"] == ["off_hand"], "harness must mirror the defect payload"
+    assert set(out["dollSlots"]) <= set(out["setSlots"]), (
+        "initializeSelections must seed a Set for every doll slot"
+        f" (missing: {sorted(set(out['dollSlots']) - set(out['setSlots']))})"
+    )
+
+
+def test_a7_armory_payload_renders_all_doll_groups():
+    out = _run_gear_harness()
+    assert out["groupSlots"] == out["dollSlots"], (
+        "gear grid must render all 14 doll groups in fixed order for an "
+        f"armory payload without off_hand, got {out['groupSlots']}"
+    )
+    assert out["offHandCount"] == "0/0 selected"
