@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from static_assets import read_css, read_js, resp  # t_94a15fe3 split pins
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
@@ -91,9 +92,9 @@ def test_debug_cli_uses_request_timeouts():
 
 
 def test_frontend_escapes_dynamic_values_before_html_insertion():
-    js = Path("src/web/static/app.js").read_text()
+    js = read_js()
     assert "function escapeHtml" in js
-    assert "escapeHtml(parsedData.char_name)" in js
+    assert "escapeHtml(state.parsedData.char_name)" in js
     assert "escapeHtml(name)" in js
     assert "escapeHtml(label.replace" in js
     assert "pushLogLines" in js  # t_2ab8f3be: capped buffer + rAF render

@@ -1,3 +1,4 @@
+from static_assets import read_css, read_js, resp  # t_94a15fe3 split pins
 """Tests for the Armory integration (Step 7): src/core/armory.py + POST /api/armory-load.
 
 All upstream data comes from the REAL fixtures in ``tests/fixtures/armory/``
@@ -687,13 +688,11 @@ class TestArmoryUiWiring:
         assert 'id="btn-parse-addon"' in html
 
     def test_app_js_calls_armory_endpoint(self):
-        with open("src/web/static/app.js", "r", encoding="utf-8") as handle:
-            script = handle.read()
+        script = read_js()  # t_94a15fe3 split pins
         assert "api/armory-load" in script
         assert "applyParsedCharacter" in script
 
     def test_style_has_armory_classes(self):
-        with open("src/web/static/style.css", "r", encoding="utf-8") as handle:
-            css = handle.read()
+        css = read_css()  # t_94a15fe3 split pins
         for css_class in (".armory-import", ".armory-input", ".armory-region-select", ".armory-hint"):
             assert css_class in css

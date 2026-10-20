@@ -1,28 +1,12 @@
-// Hermetic harness for the realm dropdown: extracts the REAL
-// populateRealmSelect/loadRealms functions from src/web/static/app.js and runs
-// them against a minimal DOM stub and a realms.json passed on argv.
+// Hermetic harness for the realm dropdown: boots the REAL module graph
+// (js/setup/realms.js since the MGE2 split t_94a15fe3; the pages/setup boot
+// now wires loadRealms itself — t_f9a0df27 — so the dropdown populates via a
+// fetch stub serving the realms.json passed on argv) and runs it against a
+// minimal DOM stub.
 // Usage: node realms_dropdown_harness.mjs <realms.json> [--fail-fetch] [--bad-shape]
 // Prints one JSON result object on stdout; exits non-zero on harness bugs.
 import { readFileSync } from 'node:fs';
-
-const appJs = readFileSync(new URL('../../src/web/static/app.js', import.meta.url), 'utf8');
-
-function extract(name) {
-  const start = appJs.indexOf(`function ${name}(`);
-  if (start < 0) throw new Error(`function ${name} not found in app.js`);
-  // Keep a leading `async ` modifier if present (loadRealms is async).
-  const asyncStart = appJs.lastIndexOf('async ', start);
-  const from = asyncStart >= 0 && start - asyncStart <= 6 ? asyncStart : start;
-  let depth = 0;
-  for (let i = appJs.indexOf('{', start); i < appJs.length; i++) {
-    if (appJs[i] === '{') depth++;
-    else if (appJs[i] === '}') {
-      depth--;
-      if (depth === 0) return appJs.slice(from, i + 1);
-    }
-  }
-  throw new Error(`unbalanced braces extracting ${name}`);
-}
+import { fileURLToPath } from 'url';
 
 class El {
   constructor(tag) {
@@ -34,35 +18,80 @@ class El {
     this.title = '';
     this.disabled = true;
     this.hidden = true;
+    // app boot (pages/setup self-wire) tags rail sections with dataset step ids.
+    this.dataset = {};
   }
+  setAttribute() {}
   appendChild(child) { this.children.push(child); return child; }
+  addEventListener() {}
+  removeEventListener() {}
+  setAttribute() {}
+  focus() {}
+  querySelector() { return null; }
+  querySelectorAll() { return []; }
   options() { return this.children.filter((c) => c.tagName === 'option'); }
   optgroups() { return this.children.filter((c) => c.tagName === 'optgroup'); }
 }
 
+// P: permissive stub for every element the module graph touches at import.
+const P = new Proxy(function () {}, {
+  get: (t, p) => {
+    if (p === Symbol.toPrimitive || p === 'valueOf') return () => '';
+    if (typeof p === 'symbol') return undefined;
+    if (p === 'then') return undefined;
+    if (p === 'size' || p === 'length') return 0;
+    return P;
+  },
+  set: () => true,
+  apply: () => P,
+});
+
 const armoryRealm = new El('select');
-const realmIndex = new Map();
-const document = { createElement: (tag) => new El(tag) };
+const byId = new Map([['armory-realm', armoryRealm]]);
+globalThis.window = globalThis;
+globalThis.document = new Proxy({
+  getElementById: (id) => {
+    if (!byId.has(id)) byId.set(id, new El(id === 'armory-region' ? 'select' : 'div'));
+    return byId.get(id);
+  },
+  createElement: (tag) => new El(tag),
+  querySelector: () => P,
+  querySelectorAll: () => [],
+  addEventListener: () => {},
+}, { get: (t, p) => (p in t ? t[p] : P) });
+globalThis.location = { search: '', href: 'http://x/', assign() {} };
+globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
+globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, addListener() {} });
+globalThis.requestAnimationFrame = () => 0;
+// wire() arms poll/debounce intervals; keep the harness one-shot and quiet.
+globalThis.setInterval = () => 0;
+globalThis.setTimeout = () => 0;
+globalThis.IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} };
+globalThis.sessionStorage = globalThis.localStorage;
+globalThis.alert = () => {};
+globalThis.confirm = () => true;
+globalThis.getComputedStyle = () => ({ getPropertyValue: () => '' });
+try { globalThis.navigator = { clipboard: { writeText: () => Promise.resolve() } }; }
+catch { try { Object.defineProperty(globalThis, 'navigator', { value: { clipboard: { writeText: () => Promise.resolve() } }, configurable: true }); } catch {} }
 
 const data = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 const flags = process.argv.slice(3);
-const globalThisFetch = flags.includes('--bad-shape')
+globalThis.fetch = flags.includes('--bad-shape')
   ? async () => ({ ok: true, json: async () => ({ nope: true }) })
   : flags.includes('--fail-fetch')
     ? async () => { throw new Error('network down'); }
     : async () => ({ ok: true, json: async () => data });
 
-const body = `
-  ${extract('populateRealmSelect')}
-  ${extract('loadRealms')}
-  return { populateRealmSelect, loadRealms };
-`;
-const fns = new Function('document', 'armoryRealm', 'realmIndex', 'fetch', body)(
-  document, armoryRealm, realmIndex, globalThisFetch,
+const { realmIndex } = await import(
+  fileURLToPath(new URL('../../src/web/static/js/setup/realms.js', import.meta.url))
 );
+// Let the queued boot microtask run and settle its fetch chain (nextTick drains
+// the microtask queue; a handful of ticks covers the apiFetch/json awaits).
+for (let i = 0; i < 10; i++) await new Promise(process.nextTick);
 
 if (flags.includes('--fail-fetch') || flags.includes('--bad-shape')) {
-  await fns.loadRealms(); // must swallow the error, not throw
+  // boot's loadRealms must swallow the fetch/shape error, not throw (reaching
+  // this line proves it); the select stays hidden+disabled.
   console.log(JSON.stringify({
     degraded: true,
     disabled: armoryRealm.disabled,
@@ -70,7 +99,7 @@ if (flags.includes('--fail-fetch') || flags.includes('--bad-shape')) {
     childCount: armoryRealm.children.length,
   }));
 } else {
-  fns.populateRealmSelect(data);
+  // boot's wireRealms() populated armoryRealm via the fetch stub.
   const groups = armoryRealm.optgroups().map((g) => ({
     label: g.label,
     options: g.options().map((o) => ({ value: o.value, text: o.textContent, title: o.title })),

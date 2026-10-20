@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 # Add src to sys.path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 from web.main import app
+from static_assets import read_css, read_js, resp  # t_94a15fe3 split pins
 
 client = TestClient(app)
 
@@ -64,7 +65,7 @@ def test_web_ui_removes_engine_update_controls():
 
 
 def test_web_ui_styles_include_responsive_dense_layout():
-    response = client.get("/static/style.css")
+    response = resp(read_css())
     assert response.status_code == 200
     css = response.text
 
@@ -79,7 +80,7 @@ def test_web_ui_styles_include_responsive_dense_layout():
 
 
 def test_web_ui_applies_linear_design_system_tokens():
-    response = client.get("/static/style.css")
+    response = resp(read_css())
     assert response.status_code == 200
     css = response.text
 
@@ -93,8 +94,8 @@ def test_web_ui_applies_linear_design_system_tokens():
 
 
 def test_gear_selection_uses_midnight_track_rank_upgrades():
-    js_response = client.get("/static/app.js")
-    css_response = client.get("/static/style.css")
+    js_response = resp(read_js())
+    css_response = resp(read_css())
     assert js_response.status_code == 200
     assert css_response.status_code == 200
     js = js_response.text
@@ -103,7 +104,7 @@ def test_gear_selection_uses_midnight_track_rank_upgrades():
     assert "seasonTracks()" in js
     assert "gear-track-select" in js
     assert "gear-rank-select" in js
-    assert "gear_upgrades: gearUpgrades" in js
+    assert "gear_upgrades: state.gearUpgrades" in js
     assert "item_levels: itemLevels" not in js
     assert "inferMidnightUpgrade" in js
     assert "itemLevelFromLabel" in js
@@ -114,8 +115,8 @@ def test_gear_selection_uses_midnight_track_rank_upgrades():
 
 def test_gear_selection_uses_compact_icon_tiles_instead_of_text_rows():
     html_response = client.get("/")
-    js_response = client.get("/static/app.js")
-    css_response = client.get("/static/style.css")
+    js_response = resp(read_js())
+    css_response = resp(read_css())
     assert html_response.status_code == 200
     assert js_response.status_code == 200
     assert css_response.status_code == 200
@@ -144,7 +145,7 @@ def test_gear_selection_stacks_cards_vertically():
     widths — .slot-items must be a single column, never an auto-fill grid."""
     import re
 
-    css_response = client.get("/static/style.css")
+    css_response = resp(read_css())
     assert css_response.status_code == 200
     css = css_response.text
 
@@ -167,32 +168,32 @@ def test_zero_combination_run_is_labelled_baseline():
     """t_4485565b: a 0-candidate selection must be offered as a baseline
     current-gear run — never hidden behind a fake '1 combination' or a
     silently-disabled Run button."""
-    response = client.get("/static/app.js")
+    response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
     assert "Ready to run a baseline current-gear report." in js
     # Run generates input even when the client-side estimate is 0.
-    assert "if (!generatedInput) await generateInput();" in js
+    assert "if (!state.generatedInput) await generateInput();" in js
     # Run stays enabled once a character is loaded.
-    assert "runButton.disabled = !(generatedInput || parsedData);" in js
+    assert "runButton.disabled = !(state.generatedInput || state.parsedData);" in js
     # The old early-return that froze generation at 0 combinations is gone.
     assert "if (!estimateCombinations()) return;" not in js
 
 
 def test_gear_selection_allows_marking_voidforged_weapons_and_trinkets():
-    response = client.get("/static/app.js")
+    response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
     assert "voidforge-input" in js
     assert "isVoidforgeEligibleSlot" in js
-    assert "voidforged_items: voidforgedItems" in js
+    assert "voidforged_items: state.voidforgedItems" in js
     assert "seasonAscension().name" in js
 
 
 def test_voidforged_control_toggles_itself_inside_item_tile():
-    response = client.get("/static/app.js")
+    response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
@@ -202,7 +203,7 @@ def test_voidforged_control_toggles_itself_inside_item_tile():
 
 
 def test_voidforged_items_are_detected_from_season_ascension_data():
-    response = client.get("/static/app.js")
+    response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
@@ -212,7 +213,7 @@ def test_voidforged_items_are_detected_from_season_ascension_data():
 
 
 def test_named_voidforged_items_start_with_ascendant_flag_enabled():
-    response = client.get("/static/app.js")
+    response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
@@ -222,7 +223,7 @@ def test_named_voidforged_items_start_with_ascendant_flag_enabled():
 
 
 def test_plain_item_level_labels_do_not_start_with_ascendant_flag_enabled():
-    response = client.get("/static/app.js")
+    response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
@@ -232,7 +233,7 @@ def test_plain_item_level_labels_do_not_start_with_ascendant_flag_enabled():
 
 
 def test_voidforged_items_are_detected_from_bonus_ids_not_plain_item_levels():
-    response = client.get("/static/app.js")
+    response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
@@ -242,7 +243,7 @@ def test_voidforged_items_are_detected_from_bonus_ids_not_plain_item_levels():
 
 
 def test_voidforged_track_rank_inference_uses_base_level_before_ascension():
-    response = client.get("/static/app.js")
+    response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
@@ -287,7 +288,7 @@ def test_generate_accepts_upgrade_season_override():
 
 
 def test_crafted_items_do_not_auto_infer_midnight_grade_from_item_level_label():
-    response = client.get("/static/app.js")
+    response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
@@ -304,7 +305,7 @@ def test_crafted_items_do_not_auto_infer_midnight_grade_from_item_level_label():
 
 def test_voidforge_option_is_hidden_for_elevated_items():
     """t_60c19e5d: ilvl-344 Elevated Myth must not offer Ascendant ascension."""
-    response = client.get("/static/app.js")
+    response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
@@ -321,7 +322,7 @@ def test_crafted_ascension_reveals_ascended_grade_selector():
     """t_98470ac5: ticking Ascendant on a crafted base needs an explicit
     hero/myth grade; the picked track hydrates the gearUpgrades entry the
     backend resolves crafted_results (325/338) from."""
-    response = client.get("/static/app.js")
+    response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
@@ -330,11 +331,11 @@ def test_crafted_ascension_reveals_ascended_grade_selector():
     assert "function syncCraftedAscensionEntry(slot, item, value)" in js
     assert "gearUpgrades[slot][item] = { track: value, rank: 1, user_selected: true };" in js
     # A crafted grade only exists while the Ascendant checkbox is checked.
-    assert "if (value && value !== 'none' && voidforgedItems[slot]?.[item])" in js
+    assert "if (value && value !== 'none' && state.voidforgedItems[slot]?.[item])" in js
 def test_crafted_upgrade_state_shows_crafted_not_no_grade():
     # C2 (t_0769a998): crafted items print "Crafted" in the popover state
     # line and review-popover Grade column instead of the "No grade" lie.
-    js = client.get("/static/app.js").text
+    js = resp(read_js()).text
     assert "else if (isCraftedItem(item)) bits.push('Crafted');" in js
 
 
@@ -344,7 +345,7 @@ def test_crafted_badge_mapping_g4():
     node = shutil.which("node")
     if not node:
         pytest.skip("node not on PATH")
-    js = client.get("/static/app.js").text
+    js = resp(read_js()).text
 
     def _fn(name):
         start = js.index(f"function {name}")
@@ -371,20 +372,20 @@ process.exit(fail);
 
 
 def test_gear_selection_hydrates_exact_grades_from_wowhead():
-    response = client.get("/static/app.js")
+    response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
-    assert "hydrateWowheadUpgrades(parsedData.items_by_slot);" in js
+    assert "hydrateWowheadUpgrades(state.parsedData.items_by_slot);" in js
     assert "apiFetch('api/wowhead-upgrades'" in js  # t_2ab8f3be: 401-banner wrapper
-    assert "(gearUpgrades[slot] ||= {})[item] = upgrade;" in js
+    assert "(state.gearUpgrades[slot] ||= {})[item] = upgrade;" in js
     assert "renderGear();" in js
 
 
 def test_user_chosen_upgrades_are_marked_user_selected():
     """t_ef33100b: user-chosen grades carry user_selected so the backend
     keeps them off the baseline; inferred-current entries stay unmarked."""
-    response = client.get("/static/app.js")
+    response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
@@ -393,13 +394,13 @@ def test_user_chosen_upgrades_are_marked_user_selected():
     assert "entry.user_selected = true;" in js
     assert "if (entry.rank === 0) delete entry.user_selected;" in js
     # Wowhead hydration must not clobber a pick the user already made.
-    assert "if (gearUpgrades[slot]?.[item]?.user_selected) continue;" in js
+    assert "if (state.gearUpgrades[slot]?.[item]?.user_selected) continue;" in js
     # The estimator counts a user-chosen upgrade as a real variation.
-    assert "Boolean(gearUpgrades[slot]?.[item]?.user_selected)" in js
+    assert "Boolean(state.gearUpgrades[slot]?.[item]?.user_selected)" in js
 
 
 def test_item_icons_use_local_proxy_without_requiring_wowhead_javascript():
-    response = client.get("/static/app.js")
+    response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
@@ -411,10 +412,10 @@ def test_item_icons_use_local_proxy_without_requiring_wowhead_javascript():
 def test_item_icons_and_names_use_default_wowhead_tooltips():
     page_response = client.get("/")
     assert page_response.status_code == 200
-    assert 'src="api/wowhead-tooltips.js?v=20260718-proxy"' in page_response.text
+    assert 'src="api/wowhead-tooltips.js?v=20261020-guir-3"' in page_response.text
     assert "power.js" not in page_response.text
 
-    response = client.get("/static/app.js")
+    response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
@@ -425,7 +426,7 @@ def test_item_icons_and_names_use_default_wowhead_tooltips():
 
 
 def test_gems_and_enchantments_use_default_wowhead_tooltips():
-    response = client.get("/static/app.js")
+    response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
@@ -438,7 +439,7 @@ def test_gems_and_enchantments_use_default_wowhead_tooltips():
 
 
 def test_heliotrope_gems_are_not_rendered_as_selectable_gems():
-    response = client.get("/static/app.js")
+    response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
@@ -446,7 +447,7 @@ def test_heliotrope_gems_are_not_rendered_as_selectable_gems():
 
 
 def test_current_gear_is_ready_to_run_and_selected_enhancements_are_checked():
-    response = client.get("/static/app.js")
+    response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
@@ -458,18 +459,18 @@ def test_current_gear_is_ready_to_run_and_selected_enhancements_are_checked():
 
 
 def test_report_gear_summary_shows_only_slot_and_item_link():
-    response = client.get("/static/app.js")
+    response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
     assert "const statsTd = statsRow.querySelector('td.small');" not in js
     assert "const stats = statsTd ? statsTd.textContent.trim() : '';" not in js
     assert "${stats}" not in js
-    assert '<strong>${escapeHtml(item.slot)}:</strong> ${item.itemLink}' in js
+    # (MGE-2 A2, t_94a15fe3) gearSummary was dead in app.js; removed with the card.
 
 
 def test_report_separates_baseline_and_only_lists_combo_differences():
-    response = client.get("/static/app.js")
+    response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
@@ -490,7 +491,7 @@ def test_results_page_is_a_dedicated_user_friendly_view():
 
 
 def test_successful_simulation_exposes_uploaded_report_link():
-    response = client.get("/static/app.js")
+    response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
@@ -498,7 +499,7 @@ def test_successful_simulation_exposes_uploaded_report_link():
     # t_c968bf8d: durable reports live under /reports/<user_id>/<task_id>/, so
     # the frontend resolves the URL via /api/report-url instead of building it.
     assert "api/report-url?task_id=" in js
-    assert '>Open full report</a>' in js
+    assert "report.textContent = 'Open full SimC report'" in js  # MGE-2 A2 hero link (t_94a15fe3)
 
 
 # ---------------------------------------------------------------------------
@@ -530,7 +531,7 @@ def test_realm_dropdown_markup_starts_hidden_and_disabled():
 
 
 def test_app_fetches_static_realms_json_and_groups_by_region():
-    js = client.get("/static/app.js").text
+    js = resp(read_js()).text
 
     assert "apiFetch('static/realms.json')" in js  # t_2ab8f3be: 401-banner wrapper
     # EU/US optgroups, region-qualified keys (Kel'thuzad exists in both).
@@ -540,7 +541,7 @@ def test_app_fetches_static_realms_json_and_groups_by_region():
 
 
 def test_realm_dropdown_degrades_gracefully_when_realms_json_missing():
-    js = client.get("/static/app.js").text
+    js = resp(read_js()).text
 
     load_realms = js.split("async function loadRealms", 1)[1].split("function buildArmoryPayload", 1)[0]
     # Failure path: log-and-keep-hidden only — no user-facing error panel,
@@ -552,7 +553,7 @@ def test_realm_dropdown_degrades_gracefully_when_realms_json_missing():
 
 
 def test_realm_dropdown_pick_feeds_armory_payload():
-    js = client.get("/static/app.js").text
+    js = resp(read_js()).text
 
     build_payload = js.split("function buildArmoryPayload", 1)[1].split("loadRealms();", 1)[0]
     # Pasted Armory links still win outright.
@@ -604,7 +605,7 @@ def test_enhancement_state_chips_on_slot_headers():
     """TG2-A §3.4: step-2 slot headers echo step-3 enhancement state in
     jump-and-open chips (design t_0fbfd0bd §3.1): chip class + label strings,
     section-open target, and the step-3 hint."""
-    js = client.get("/static/app.js").text
+    js = resp(read_js()).text
     assert js, "app.js must be served"
 
     # Chip markup + label strings. TG2-F (t_61442157): chips count the UNION
@@ -613,8 +614,8 @@ def test_enhancement_state_chips_on_slot_headers():
     assert 'class="enh-chip"' in js
     assert "Enchants: ${k} selected" in js
     assert "· worn ${e}" in js
-    assert "new Set([...(selectedEnchants[slot] || []), ...(equippedEnchants[slot] || [])]).size" in js
-    assert "new Set([...selectedGems, ...equippedGems]).size" in js
+    assert "new Set([...(state.selectedEnchants[slot] || []), ...(state.equippedEnchants[slot] || [])]).size" in js
+    assert "new Set([...state.selectedGems, ...state.equippedGems]).size" in js
     assert "`Gems: ${k} selected`" in js
     assert "'Gems: none'" in js
 

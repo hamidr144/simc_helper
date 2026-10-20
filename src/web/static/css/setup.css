@@ -1,0 +1,1177 @@
+/* css/setup.css — split of style.css by t_94a15fe3 (gui-rewrite §3.1); source order preserved */
+
+/* Setup card spans the full content width so it shares both edges with
+   the run bar; on wide screens the Armory block fills the right half
+   instead of leaving dead space. The paste flow stays first in DOM and
+   in the left (primary) column. */
+#addon-input-card { grid-column: 1 / -1; }
+
+@media (min-width: 1200px) {#addon-input-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.85fr);
+    column-gap: var(--space-5);
+    align-items: start;
+  }}
+
+@media (min-width: 1200px) {#addon-input-card > .paste-guide,
+  #addon-input-card > #addon-input,
+  #addon-input-card > .paste-footer { grid-column: 1; }}
+
+@media (min-width: 1200px) {#addon-input-card > .armory-import {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+    margin-top: 0;
+    padding-left: var(--space-5);
+    border-left: 1px solid var(--border-hairline);
+  }}
+
+@media (min-width: 1200px) {#addon-input-card > .error-panel,
+  #addon-input-card > .warning-panel { grid-column: 1 / -1; }}
+
+/* --- Gear Grid & Options --- */
+.item-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.item-option {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-control);
+  padding: 12px;
+  text-align: center;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.item-option:hover {
+  background: rgba(157, 156, 255, 0.05);
+  border-color: rgba(157, 156, 255, 0.3);
+}
+
+.item-icon-link {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  background-color: var(--surface-raised);
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  padding-left: 0 !important;
+  text-indent: -9999px;
+  overflow: hidden;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border-hairline);
+}
+
+.item-icon-link img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.item-option-name {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  display: block;
+}
+
+/* --- Dropdown Selectors --- */
+.gear-track-select,
+.gear-rank-select {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-control);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  border-radius: var(--radius-control);
+  outline: none;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.gear-track-select:focus,
+.gear-rank-select:focus {
+  border-color: var(--accent-text);
+  box-shadow: 0 0 0 2px rgba(157, 156, 255, 0.15);
+}
+
+/* --- Smart Reworked Layout & Badges --- */
+/* Gear selection is a single vertical stack at every width (t_ffc60f47).
+   Legacy two-column hook kept at 1fr; the live card rows are .slot-items. */
+.gear-grid-columns {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+/* TG3-D §3.1 (t_9fdd2c1b): card -> dense 44px row. The contract's column
+   list maps to this DOM as [label | badges | controls | remove-added];
+   checkbox, 28px icon, ellipsized name and ilvl ride inside the label.
+   overflow:hidden dropped: on a 44px row it clipped the upgrade popover
+   (was already clipping 3px at the 120px card height). */
+.gear-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-card);
+  padding: 6px 12px;
+  min-height: 44px; /* target pitch <= 52px incl. the 8px row gap */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  column-gap: 12px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  /* One alignment per column: the .item-option tile centering must not
+     leak into card rows (controls, preview, voidforge). */
+  text-align: left;
+}
+
+/* TG3-C §3.4 anchor: the inline conflict line joins the row flow beneath
+   the controls (grid-column 1/-1), so the row grows only while shown. */
+.gear-card .gear-conflict { grid-column: 1 / -1; }
+
+/* Added-item remove button: was position:absolute, which would overlap
+   the controls cell now that controls sit on the row's right edge. */
+.gear-card button.slot-remove-added { position: static; }
+
+.gear-card:hover {
+  background: var(--surface-hover);
+  border-color: rgba(157, 156, 255, 0.3);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+}
+
+/* TG3-C slot-conflict hint (design contract t_784b91c7 §3.4): inline row
+   shown only while the card participates in a 2H + off-hand conflict. */
+.gear-conflict {
+  margin: 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--danger);
+  background: rgba(248, 113, 113, 0.08);
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--danger);
+}
+
+.gear-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* TG3-D: info rides one horizontal line: icon link + name + ilvl. */
+.gear-card-info {
+  flex: 1;
+  min-width: 0; /* let the ellipsized name shrink instead of widening the card */
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* TG3-D: compact "ilvl N" pair replacing the stacked "Item level" label. */
+.gear-card-slot {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+/* Item-level number: right-aligned tabular figure (design rule 2). */
+.gear-card-slot-ilvl {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.gear-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* TG3-D: min-width:0 + no cap — the row's 1fr cell now sizes the name. */
+  min-width: 0;
+}
+
+.ilvl-badge {
+  background: rgba(157, 156, 255, 0.15);
+  color: var(--accent-text);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid rgba(157, 156, 255, 0.3);
+}
+
+.gear-card-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gear-card-controls select {
+  flex: 1;
+  min-width: 90px;
+  height: 32px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+/* --- Live upgrade preview (gear cards, Wowhead tooltip proxy) --- */
+.upgrade-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  margin-top: 8px;
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.upgrade-preview[hidden] {
+  display: none;
+}
+
+.upgrade-preview.is-loading,
+.upgrade-preview.is-unavailable {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.upgrade-preview-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  align-self: center;
+}
+
+.upgrade-preview-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  width: 100%;
+}
+
+.gear-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.gear-card-badges:empty {
+  display: none;
+}
+
+/* Grade-state badges (crafted / elevated) live in the badges slot.
+   TG3-D: compact pill inside the row. */
+.gear-card-badges .crafted-badge {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-control);
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.item-enchant-badge, .item-gem-badge {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-control);
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.item-enchant-badge:hover, .item-gem-badge:hover {
+  background: rgba(157, 156, 255, 0.1);
+  border-color: rgba(157, 156, 255, 0.4);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.item-enchant-badge::before {
+  content: '✨';
+  margin-right: 4px;
+}
+
+.item-gem-badge::before {
+  content: '💎';
+  margin-right: 4px;
+}
+
+/* --- Five-step workflow --- */
+#gear-workspace-container {
+  display: contents;
+}
+
+.workflow-panel {
+  margin-top: 4px;
+}
+
+.step-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.step-heading h2 {
+  font-family: var(--font-sans);
+  font-size: 21px;
+}
+
+.step-heading small {
+  display: block;
+  color: var(--text-secondary);
+  margin-top: 3px;
+}
+
+#gear-grid {
+  display: grid;
+  /* MGE-2 §5 (A7) + §7 (A8): two doll columns, 12->18 */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: auto;
+  align-items: start;
+  gap: var(--space-3);
+}
+
+.slot-group {
+  border-top: 1px solid var(--border-hairline);
+  padding-top: var(--space-2); /* MGE-2 §7 (A8): 6->12; intra-row 44px pitch untouched */
+}
+
+.slot-group h3,
+.enhancement-group legend {
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 2px; /* TG3-D G1: row-pitch budget (was 10) */
+}
+
+/* Gear cards stack one per row at all widths (t_ffc60f47): the old
+   repeat(auto-fill, minmax(280px, 1fr)) laid candidates out side-by-side. */
+.slot-items {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0; /* TG3-D §3.1: row-gap <=8 -> spec max density (pitch 44);
+             contract target pitch <=52 was never the point — the gate is
+             panel <=3200, and 8px gaps made the 43 spec'd rows miss it. */
+}
+
+/* TG3-D §3.1/§3.2: group is a grid so the show-all button and the
+   extra-socket control share one footer line (rearrange, not remove). */
+.slot-group {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: var(--space-3); /* MGE-2 §7 (A8): 16->18 */
+}
+
+.slot-group > .slot-group-header,
+.slot-group > .slot-items,
+.slot-group > .slot-add-form,
+.slot-group > .slot-add-preview { grid-column: 1 / -1; }
+
+.slot-group > .slot-show-all { grid-column: 1; }
+
+.slot-group .extra-socket-control {
+  grid-column: 2;
+  justify-self: end;
+  margin-top: 4px; /* TG3-D G1 (was 10) */
+}
+
+.gear-card.is-selected {
+  border-color: var(--accent-text);
+  background: rgba(157, 156, 255, 0.08);
+  box-shadow: 0 0 0 1px rgba(157, 156, 255, 0.16);
+}
+
+.item-select-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+}
+
+.item-select-input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  flex: 0 0 auto;
+}
+
+.item-select-row .item-icon-link {
+  margin: 0;
+  flex: 0 0 32px;
+}
+
+.crafted-badge,
+.extra-socket-control,
+.voidforge-field-container {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.extra-socket-control {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.enhancement-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: var(--space-3); /* MGE-2 §7 (A8): tokenized */
+}
+
+.enhancement-group {
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-control);
+  padding: 14px;
+  min-width: 0;
+}
+
+.enhancement-group legend {
+  padding: 0 6px;
+  /* Pull the legend text back onto the same left edge as its chips. */
+  margin: 0 -6px;
+}
+
+.choice-chip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.choice-chip:hover {
+  color: var(--text-primary);
+}
+
+.choice-chip input {
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+.combo-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 10px 0 6px;
+}
+
+.combo-summary strong {
+  font-family: var(--font-sans);
+  font-size: 42px;
+  color: var(--accent-text);
+}
+
+.combo-summary span,
+.workflow-status {
+  color: var(--text-secondary);
+}
+
+.workflow-status {
+  margin-top: 14px;
+  min-height: 22px;
+}
+
+.workflow-status a {
+  color: var(--accent-text);
+}
+
+.gear-card-name {
+  text-decoration: none;
+}
+
+.gear-card-name:hover,
+.gear-card-name:focus-visible {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Inline anchors ignore vertical margins, which left this flush against the
+   page top; inline-block + a 35px left inset (1px panel border + 34px hero
+   padding) aligns it with the content column text below. */
+.back-link { display: inline-block; grid-column: 1 / -1; color: var(--accent-text); text-decoration: none; margin: 24px 0 14px 35px; }
+
+.back-link:hover { text-decoration: underline; }
+
+.eyebrow { color: var(--accent-text); font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+
+/* TG3-G gap 1 (t_54bad356): compare-mode chip on the baseline card. */
+.mode-chip { align-self: center; margin-left: auto; padding: 3px 12px; border: 1px solid var(--panel-border); border-radius: 999px; color: var(--text-secondary); font-size: 12px; white-space: nowrap; cursor: help; }
+
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex: 0 0 auto;
+}
+
+.char-class-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  box-shadow: 0 0 8px currentColor;
+}
+
+/* --- Paste flow --- */
+.paste-guide {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-bottom: 14px;
+}
+
+.paste-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.paste-step strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.paste-step code {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-hairline);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+.paste-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.paste-actions { display: flex; gap: 10px; align-items: center; }
+
+.char-count { font-size: 12px; color: var(--text-muted); }
+
+#addon-input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a8aebc' stroke-opacity='0.35' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='5' width='14' height='16' rx='2'/%3E%3Crect x='9' y='2.5' width='6' height='4' rx='1'/%3E%3Cpath d='M9 12h6M9 16h4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px bottom 14px;
+  background-size: 26px 26px;
+}
+
+#addon-input:focus {
+  border-color: var(--accent-text);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+  background-image: none;
+}
+
+/* --- Armory load (step 1 alternative to the addon paste) --- */
+.armory-import { margin-top: 20px; }
+
+.armory-divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+
+.armory-divider::before,
+.armory-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-hairline);
+}
+
+.armory-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.armory-controls > button { margin-top: 0; }
+
+/* Input + region select act as one joined control: single border box,
+   one shared right edge, roomy select so the chevron isn't cramped. */
+.armory-field {
+  display: flex;
+  align-items: stretch;
+  flex: 1 1 320px;
+  min-width: 240px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-control);
+  overflow: hidden;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.armory-field:focus-within {
+  border-color: var(--accent-text);
+  box-shadow: 0 0 0 3px rgba(157, 156, 255, 0.2);
+}
+
+.armory-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--text-primary);
+  padding: 12px 14px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  outline: none;
+  box-shadow: none;
+}
+
+.armory-input::placeholder { color: var(--text-muted); }
+
+.armory-input:focus {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.armory-region-select {
+  flex: 0 0 auto;
+  min-width: 96px;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--border-hairline);
+  border-radius: 0;
+  color: var(--text-primary);
+  padding: 12px 10px 12px 14px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  cursor: pointer;
+  outline: none;
+  box-shadow: none;
+}
+
+.armory-region-select:focus {
+  border-color: var(--border-hairline);
+  box-shadow: none;
+  background: rgba(157, 156, 255, 0.08);
+}
+
+/* Realm picker joins the same control box; truncates instead of stretching
+   the field when a long realm name is picked. */
+.armory-realm-select {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 170px;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--border-hairline);
+  border-radius: 0;
+  color: var(--text-primary);
+  padding: 12px 10px 12px 14px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  cursor: pointer;
+  outline: none;
+  box-shadow: none;
+  text-overflow: ellipsis;
+}
+
+.armory-realm-select:focus {
+  border-color: var(--border-hairline);
+  box-shadow: none;
+  background: rgba(157, 156, 255, 0.08);
+}
+
+/* Native popup list is ~500 options deep; keep it on the dark palette. */
+.armory-realm-select option,
+.armory-realm-select optgroup {
+  background-color: var(--surface-raised);
+  color: var(--text-primary);
+}
+
+/* Sentence case, body size — the global uppercase p rule made this shout. */
+.armory-hint {
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text-muted);
+}
+
+.error-panel {
+  margin-top: 14px;
+  border: 1px solid var(--border-hairline);
+  border-left: 3px solid var(--danger);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  border-radius: var(--radius-control);
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.error-panel:focus {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+
+.warning-panel {
+  margin-top: 14px;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  background: rgba(251, 191, 36, 0.08);
+  color: #fde68a;
+  border-radius: var(--radius-control);
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Fighting style selector (sim options in the run bar) */
+.fight-style-control {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.fight-style-label {
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.fight-style-select {
+  width: 210px; /* MGE-2 §3 (A5): reserved, fits longest option */
+  background: rgba(157, 156, 255, 0.1);
+  border: 1px solid rgba(157, 156, 255, 0.28);
+  border-radius: 8px;
+  color: var(--text-primary);
+  padding: 9px 10px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.fight-style-select:focus {
+  outline: none;
+  border-color: var(--accent-text);
+  background: rgba(157, 156, 255, 0.18);
+}
+
+/* --- Slot group headers with counts + bulk toggle --- */
+.slot-group-header {
+  display: flex;
+  flex-wrap: wrap; /* t_ab5b5f2e: controls wrap below 396px min-content; keeps 390px viewport overflow-free */
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 0; /* TG3-D G1 (was 10; h3 margin carries the label gap) */
+}
+
+.slot-group-header h3 { margin-bottom: 0; }
+
+.slot-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  letter-spacing: 0.5px;
+}
+
+/* --- Popover (gear upgrade / pre-run diff, doc section 5) --- */
+.popover-host { position: relative; }
+
+.popover {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 240px;
+  max-width: min(420px, calc(100vw - 48px));
+  background: var(--surface-panel);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-control);
+  padding: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.popover .gear-card-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.popover .gear-card-controls select { flex: 1; min-width: 90px; height: 32px; padding: 4px 8px; font-size: 12px; }
+
+.upgrade-state { color: var(--text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.chip-pending { color: var(--text-muted); font-size: 12px; }
+
+.field-hint { color: var(--text-muted); font-size: 13px; }
+
+@media (max-width: 760px) {.panel { padding: 16px; }}
+
+@media (max-width: 760px) {.panel h2 { font-size: 15px; }}
+
+@media (max-width: 760px) {.panel-toolbar { flex-wrap: wrap; }}
+
+@media (max-width: 760px) {.run-review-host .popover {
+    top: auto;
+    bottom: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    min-width: 0;
+    max-width: none;
+    max-height: 50vh;
+    overflow: auto;
+  }}
+
+@media (max-width: 760px) {.paste-footer .paste-actions { width: 100%; }}
+
+@media (max-width: 760px) {.paste-footer .paste-actions button { flex: 1; min-height: 44px; }}
+
+/* --- Popovers (t_2ab8f3be doc 5): gear upgrade + pre-run diff --- */
+.popover-host { position: relative; }
+
+.popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  min-width: 240px;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-control);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  padding: 12px;
+}
+
+.popover[hidden] { display: none; }
+
+.popover select { width: 100%; height: 34px; }
+
+.popover button { margin-top: 0; }
+
+.popover .voidforge-field-container { margin-top: 0; }
+
+.upgrade-state { font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); }
+
+.run-review-host .popover {
+  top: auto;
+  bottom: calc(100% + 8px);
+  left: auto;
+  right: 0;
+  min-width: 340px;
+  max-width: 520px;
+  max-height: 60vh;
+  overflow: auto;
+}
+
+/* --- Slot collapse + add-by-id collapse (t_2ab8f3be doc 4.2) --- */
+.gear-card.is-collapsed { display: none; }
+
+.slot-items.is-expanded .gear-card.is-collapsed,
+.gear-card.is-collapsed.is-selected { display: grid; }
+
+/* --- Enhancements: search + details sections (t_2ab8f3be doc 4.3) --- */
+.enh-search { width: 100%; max-width: 360px; margin-bottom: 12px; }
+
+.enh-section {
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-control);
+  padding: 0 12px 10px;
+  margin-bottom: 10px;
+}
+
+.enh-section summary {
+  cursor: pointer;
+  padding: 10px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.enh-section summary::-webkit-details-marker { display: none; }
+
+.enh-section summary::before { content: '\25b8'; color: var(--text-muted); transition: transform var(--motion-fast) ease; }
+
+.enh-section[open] summary::before { transform: rotate(90deg); }
+
+.enh-section .enhancement-group { border: none; padding: 0; margin: 0; min-width: 0; }
+
+/* Chrome >=131 hides closed <details> content via paint containment on
+   ::details-content, which leaves descendant rects non-zero — rect-based
+   tab-stop audits (QA t_16e4f177 procedure) then count the closed groups.
+   Explicit display:none keeps the closed state honest for any tool. */
+.enh-section:not([open]) .enhancement-group { display: none; }
+
+.equipped-badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-text);
+  border: 1px solid rgba(157, 156, 255, 0.35);
+  border-radius: 999px;
+  padding: 1px 6px;
+  margin-left: 6px;
+}
+
+.result-err { color: var(--text-muted); font-size: 11px; white-space: nowrap; }
+
+/* --- Icon fallback + run-bar pluralization polish --- */
+.item-icon-link.icon-missing img { display: none; }
+
+.item-icon-link.icon-missing {
+  background: linear-gradient(145deg, rgba(148, 163, 184, 0.16), rgba(148, 163, 184, 0.04));
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-control);
+}
+
+.gear-rank-select:disabled,
+.gear-track-select:disabled {
+  opacity: 1;
+  background: var(--surface-hover);
+  border-color: var(--border-hairline);
+  color: var(--text-secondary);
+  cursor: not-allowed;
+}
+
+/* --- Step 4: per-slot sort control --- */
+.slot-sort-select {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-control);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  padding: 4px 8px;
+  min-height: 26px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.slot-sort-select:hover,
+.slot-sort-select:focus {
+  color: var(--text-primary);
+  border-color: rgba(157, 156, 255, 0.4);
+  outline: none;
+}
+
+.slot-sort-select.is-scoring { opacity: 0.55; cursor: progress; }
+
+/* --- Step 4: add-an-item by Wowhead id --- */
+.slot-add-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.slot-add-input {
+  flex: 1;
+  max-width: 320px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-control);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  padding: 6px 10px;
+  min-height: 30px;
+}
+
+.slot-add-input::placeholder { color: var(--text-muted); }
+
+.slot-add-input:focus {
+  border-color: var(--accent-text);
+  box-shadow: 0 0 0 2px rgba(157, 156, 255, 0.15);
+  outline: none;
+}
+
+.slot-add-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px dashed var(--border-hairline);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.slot-add-preview img {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border-hairline);
+}
+
+.slot-add-preview .slot-add-name { font-weight: 600; }
+
+.slot-add-preview.is-loading { color: var(--text-muted); }
+
+.slot-add-preview.is-error {
+  color: var(--danger);
+  border-color: rgba(251, 113, 133, 0.35);
+}
+
+/* --- Step 4: added-item badge + removal --- */
+.added-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 20px;
+  border: 1px solid rgba(157, 156, 255, 0.45);
+  background: rgba(157, 156, 255, 0.12);
+  color: var(--accent-text);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+
+.gear-card { position: relative; }
+
+/* --- Merged icon+name gear-card link (t_2ab8f3be: one tab stop per card) --- */
+.gear-card-info .item-icon-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  /* TG3-D: override the stale flex:0 0 32px from .item-select-row (name now
+     lives INSIDE this anchor since t_2ab8f3be; 0-shrink caused the 390px
+     min-content overflow). */
+  flex: 0 1 auto;
+  text-indent: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+  overflow: visible;
+}
+
+.gear-card-info .item-icon-link img {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border-hairline);
+  background-color: var(--surface-raised);
+}
+
+.gear-card-info .item-icon-link .gear-card-name {
+  min-width: 0;
+  /* TG3-D: zero flex-basis so the name contributes 0 min-content to the
+     card/track sizing chain (nowrap text otherwise sets a 427px floor and
+     broke the 390px viewport); grow fills, ellipsis truncates. */
+  flex: 1 1 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-icon-link:hover .gear-card-name,
+.item-icon-link:focus-visible .gear-card-name { color: var(--accent-text); }
+
+.item-select-row .item-icon-link {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@media (max-width: 760px) {/* §3.1 narrow fallback: pin the gear grid to the viewport. 1fr tracks      fit-content would otherwise inflate to the slot-group header's      min-content (~427px) and reproduce the horizontal overflow that      overflow:hidden used to mask (t_ab5b5f2e 390px gate). */#gear-grid { grid-template-columns: minmax(0, 1fr); }}
+
+@media (max-width: 760px) {.slot-group { min-width: 0; }}
+
+@media (max-width: 760px) {.slot-group-header { flex-wrap: wrap; }}
+
+@media (max-width: 760px) {.slot-items { grid-template-columns: minmax(0, 1fr); }}
+
+@media (max-width: 760px) {/* §3.1 flex-wrap fallback: below the grid row's minimum the controls      wrap beneath the label instead of overflowing (t_ab5b5f2e 390px rule). */.gear-card,
+  .slot-items.is-expanded .gear-card.is-collapsed,
+  .gear-card.is-collapsed.is-selected { display: flex; flex-wrap: wrap; }}
+
+@media (max-width: 760px) {.gear-card > .item-select-row { flex: 1 1 100%; }}
+
+/* MGE-2 §5/§6 (A7): paper-doll placement — left column head..wrist, right
+   column hands..trinket, weapons one row below, left/right. No absolute hacks. */
+.slot-group[data-slot="head"] { grid-row: 1; grid-column: 1; }
+.slot-group[data-slot="neck"] { grid-row: 2; grid-column: 1; }
+.slot-group[data-slot="shoulder"] { grid-row: 3; grid-column: 1; }
+.slot-group[data-slot="back"] { grid-row: 4; grid-column: 1; }
+.slot-group[data-slot="chest"] { grid-row: 5; grid-column: 1; }
+.slot-group[data-slot="wrist"] { grid-row: 6; grid-column: 1; }
+.slot-group[data-slot="hands"] { grid-row: 1; grid-column: 2; }
+.slot-group[data-slot="waist"] { grid-row: 2; grid-column: 2; }
+.slot-group[data-slot="legs"] { grid-row: 3; grid-column: 2; }
+.slot-group[data-slot="feet"] { grid-row: 4; grid-column: 2; }
+.slot-group[data-slot="finger"] { grid-row: 5; grid-column: 2; }
+.slot-group[data-slot="trinket"] { grid-row: 6; grid-column: 2; }
+.slot-group[data-slot="main_hand"] { grid-row: 7; grid-column: 1; }
+.slot-group[data-slot="off_hand"] { grid-row: 7; grid-column: 2; }
+
+/* A7.4: below the house bp single column in §6 list order (auto flow). */
+@media (max-width: 760px) {
+.slot-group[data-slot] { grid-row: auto; grid-column: auto; }
+}
