@@ -2,6 +2,8 @@
 
 import { state } from '../core/state.js';
 
+import { PAPER_DOLL_SLOTS } from '../core/items.js';
+
 import { createEnhancementWowheadLink, refreshWowheadLinks } from '../core/wowhead.js';
 
 import { selectionChanged } from './runbar.js';

@@ -2,7 +2,7 @@
 // baseline pick, per-slot diff, human labels, A2 best-combination gear list.
 import { PAPER_DOLL_SLOTS } from '../core/items.js';
 
-export function itemId(item) {
+function itemId(item) {
   return String(item || '').match(/(?:^|,)id=(\d+)/)?.[1] || '';
 }
 

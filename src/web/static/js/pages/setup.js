@@ -16,7 +16,11 @@ import { renderEnhancements } from '../setup/enhancements.js';
 
 import { renderGear } from '../setup/gear.js';
 
-import { updateCharCount } from '../setup/paste.js';
+import { updateCharCount, wire as wirePaste } from '../setup/paste.js';
+
+import { wire as wireArmory } from '../setup/armory.js';
+
+import { wire as wireRealms } from '../setup/realms.js';
 
 import { generateInput } from '../setup/payload.js';
 
@@ -61,6 +65,11 @@ export function wire() {
 renderRail();
 observeWorkflowSteps();
 updateCharCount();
+// t_94a15fe3 split dropped these module wires (t_f9a0df27, QA t_23879205):
+// paste/armory listener attach and the realms dropdown fetch.
+wirePaste();
+wireArmory();
+wireRealms();
 pollWorkerStatus();
 setInterval(pollWorkerStatus, 15000);
 loadUpgradeData().then(renderSeasonChip);

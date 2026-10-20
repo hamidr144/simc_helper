@@ -1,7 +1,8 @@
-// Hermetic harness for the realm dropdown: imports the REAL
-// populateRealmSelect/loadRealms modules (js/setup/realms.js since the MGE2
-// split t_94a15fe3; formerly extracted text from app.js) and runs them against
-// a minimal DOM stub and a realms.json passed on argv.
+// Hermetic harness for the realm dropdown: boots the REAL module graph
+// (js/setup/realms.js since the MGE2 split t_94a15fe3; the pages/setup boot
+// now wires loadRealms itself — t_f9a0df27 — so the dropdown populates via a
+// fetch stub serving the realms.json passed on argv) and runs it against a
+// minimal DOM stub.
 // Usage: node realms_dropdown_harness.mjs <realms.json> [--fail-fetch] [--bad-shape]
 // Prints one JSON result object on stdout; exits non-zero on harness bugs.
 import { readFileSync } from 'node:fs';
@@ -81,12 +82,16 @@ globalThis.fetch = flags.includes('--bad-shape')
     ? async () => { throw new Error('network down'); }
     : async () => ({ ok: true, json: async () => data });
 
-const { populateRealmSelect, loadRealms, realmIndex } = await import(
+const { realmIndex } = await import(
   fileURLToPath(new URL('../../src/web/static/js/setup/realms.js', import.meta.url))
 );
+// Let the queued boot microtask run and settle its fetch chain (nextTick drains
+// the microtask queue; a handful of ticks covers the apiFetch/json awaits).
+for (let i = 0; i < 10; i++) await new Promise(process.nextTick);
 
 if (flags.includes('--fail-fetch') || flags.includes('--bad-shape')) {
-  await loadRealms(); // must swallow the error, not throw
+  // boot's loadRealms must swallow the fetch/shape error, not throw (reaching
+  // this line proves it); the select stays hidden+disabled.
   console.log(JSON.stringify({
     degraded: true,
     disabled: armoryRealm.disabled,
@@ -94,7 +99,7 @@ if (flags.includes('--fail-fetch') || flags.includes('--bad-shape')) {
     childCount: armoryRealm.children.length,
   }));
 } else {
-  populateRealmSelect(data);
+  // boot's wireRealms() populated armoryRealm via the fetch stub.
   const groups = armoryRealm.optgroups().map((g) => ({
     label: g.label,
     options: g.options().map((o) => ({ value: o.value, text: o.textContent, title: o.title })),

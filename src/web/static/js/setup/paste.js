@@ -1,6 +1,6 @@
 // js module — mechanical port of app.js regions by t_94a15fe3 (gui-rewrite-contract §3.1: setup/paste)
 
-import { state } from '../core/state.js';
+import { initializeSelections, state } from '../core/state.js';
 
 import { observeWorkflowSteps, renderRail, updateRailState } from '../core/rail.js';
 

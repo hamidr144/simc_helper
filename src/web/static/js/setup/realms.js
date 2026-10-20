@@ -7,7 +7,7 @@ import { apiFetch } from '../core/api.js';
 // BOTH regions with different ids, so the key carries the region and entries
 // are never deduped by name.
 export const realmIndex = new Map();
-export function populateRealmSelect(data) {
+function populateRealmSelect(data) {
   const groups = data && data.realms;
   if (!groups || !Array.isArray(groups.eu) || !Array.isArray(groups.us)) {
     throw new Error('unexpected realms.json shape');
@@ -33,7 +33,7 @@ export function populateRealmSelect(data) {
   armoryRealm.disabled = false;
   armoryRealm.hidden = false;
 }
-export async function loadRealms() {
+async function loadRealms() {
   if (!armoryRealm) return;
   try {
     const response = await apiFetch('static/realms.json');

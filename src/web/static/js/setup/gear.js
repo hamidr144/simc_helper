@@ -4,7 +4,7 @@ import { state } from '../core/state.js';
 
 import { escapeHtml, wirePopover } from '../core/dom.js';
 
-import { exportRanksFor, itemLevelFromLabel, parseItemParams } from '../core/items.js';
+import { exportRanksFor, itemLevelFromLabel, PAPER_DOLL_SLOTS, parseItemParams } from '../core/items.js';
 
 import { seasonTracks } from '../core/season.js';
 
