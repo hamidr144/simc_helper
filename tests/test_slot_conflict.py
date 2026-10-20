@@ -1,3 +1,4 @@
+from static_assets import read_css, read_js, resp  # t_94a15fe3 split pins
 """TG3-C slot-conflict guard: two-handed weapon + off-hand is rejected (400).
 
 Live repro at :8001 (t_8d577e52): generation accepted a 2H main_hand
@@ -156,11 +157,8 @@ def test_upgrades_endpoint_lists_two_handed_items(monkeypatch):
 # ------------------------------------------------------------ client hint
 
 def test_app_js_surfaces_slot_conflict_hint():
-    root = os.path.join(os.path.dirname(__file__), '..', 'src', 'web', 'static')
-    with open(os.path.join(root, "app.js"), encoding="utf-8") as f:
-        js = f.read()
-    with open(os.path.join(root, "style.css"), encoding="utf-8") as f:
-        css = f.read()
+    js = read_js()   # t_94a15fe3 split pins
+    css = read_css()
     assert "twoHandedItems.add(item)" in js          # hydrated from two_handed
     assert "renderSlotConflict" in js
     assert "setAttribute('role', 'alert')" in js     # inline hint is announced

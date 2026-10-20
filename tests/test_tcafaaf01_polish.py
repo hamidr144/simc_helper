@@ -1,3 +1,4 @@
+from static_assets import read_css, read_js, resp  # t_94a15fe3 split pins
 """Regression pins for t_cafaaf01 (post-merge polish, reviewer NB1-NB7 from
 t_89761608). String-pinning style follows test_t2aede9cd_gqa_bugs.py.
 
@@ -6,15 +7,15 @@ NB4 search re-closes its own sections | NB5 chip wording | NB6 D1 quarantine
 NB7 sticky offset token | plus the cache-bust sweep (followed by the
 TG2-A sweep to 20261017-enh-chips, TG2-B sweep to 20261018-mean-err-1, the
 TG2-F sweep to 20261018-chip-worn-1, the t_4d8563f2 merge sweep to
-20261018-tg3f2-1 and the t_0769a998 GSE-2 sweep to 20261019-gse2-1).
+older sweeps; t_94a15fe3 swept the pages to the current token).
 
 """
 from pathlib import Path
 import re
 
-CSS = Path("src/web/static/style.css").read_text()
-APP_JS = Path("src/web/static/app.js").read_text()
-RESULTS_JS = Path("src/web/static/results.js").read_text()
+CSS = read_css()
+APP_JS = read_js()
+RESULTS_JS = read_js()
 PAGES = ["app.html", "history.html", "login.html", "register.html", "results.html"]
 
 
@@ -60,8 +61,8 @@ def test_nb5_worker_chip_empty_state_wording():
 
 def test_nb6_no_gear_difference_rows_are_quarantined():
     # Doc D1: dps>0 rows with no gear difference are quarantined, never ranked.
-    assert "const noDiff = rankedAll.filter(result => !result.changes.length);" in RESULTS_JS
-    assert "const ranked = rankedAll.filter(result => result.changes.length);" in RESULTS_JS
+    assert "const noDiff = rankedAll.filter(result => !changesFromBaseline(result, baseline).length);" in RESULTS_JS
+    assert "const rankedRows = rankedAll.filter(result => changesFromBaseline(result, baseline).length);" in RESULTS_JS  # MGE-2 A2 (t_94a15fe3)
     assert "'no gear difference'" in RESULTS_JS
     # The ranked rows can no longer render the marker; dead fallbacks removed.
     assert "No gear difference was parsed from the report." not in RESULTS_JS
@@ -79,8 +80,8 @@ def test_cache_bust_token_everywhere():
     # to 20261018-chip-worn-1, t_4d8563f2 merge sweep to 20261018-merge-1, t_9fdd2c1b
     # TG3-D compact-rows sweep to 20261018-tg3d-1, TG3-D2 sweep to 20261018-d2-1,
     # TG3-G results-polish sweep to 20261018-tg3g-1, t_79a87102 F2 batch sweep
-    # to 20261018-tg3f2-1, t_0769a998 GSE-2 craft-grade sweep to 20261019-gse2-1).
+    # older sweeps; t_94a15fe3 swept all pages to the single MGE-2 token).
     for page in PAGES:
         html = Path(f"src/web/static/{page}").read_text()
-        assert "20261019-gse2-1" in html, page
+        assert "20261020-guir-1" in html, page  # MGE-2 sweep (t_94a15fe3)
         assert "20261017-enh-chips" not in html, page

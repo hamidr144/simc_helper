@@ -1,3 +1,4 @@
+from static_assets import read_css, read_js, resp  # t_94a15fe3 split pins
 """Hermetic tests for the static realm list (src/web/static/realms.json) and
 the realm dropdown wired in app.js.
 
@@ -33,7 +34,7 @@ from fastapi.testclient import TestClient
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REALMS_PATH = REPO_ROOT / "src" / "web" / "static" / "realms.json"
-APP_JS_PATH = REPO_ROOT / "src" / "web" / "static" / "app.js"
+APP_JS_PATH = REPO_ROOT / "src" / "web" / "static" / "js" / "setup" / "realms.js"  # MGE2 split t_94a15fe3
 APP_HTML_PATH = REPO_ROOT / "src" / "web" / "static" / "app.html"
 FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "realms_dropdown.json"
 HARNESS_PATH = Path(__file__).resolve().parent / "fixtures" / "realms_dropdown_harness.mjs"

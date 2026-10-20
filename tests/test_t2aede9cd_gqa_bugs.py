@@ -1,3 +1,4 @@
+from static_assets import read_css, read_js, resp  # t_94a15fe3 split pins
 """Regression tests for QA task t_2aede9cd (GUI redesign verification).
 
 Red before the fix, green after. String-pinning style follows
@@ -16,9 +17,9 @@ accessible-name and th-scope pins below.
 from pathlib import Path
 import re
 
-CSS = Path("src/web/static/style.css").read_text()
-APP_JS = Path("src/web/static/app.js").read_text()
-RESULTS_JS = Path("src/web/static/results.js").read_text()
+CSS = read_css()
+APP_JS = read_js()
+RESULTS_JS = read_js()
 
 
 def _rule(css, selector):

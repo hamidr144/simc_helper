@@ -23,6 +23,7 @@ from src.core.addon_parser import (
     parse_addon_lines,
 )
 from web.main import app
+from static_assets import read_css, read_js, resp  # t_94a15fe3 split pins
 
 client = TestClient(app)
 
@@ -286,16 +287,16 @@ class TestUiSurfaces:
     def test_warning_panel_exists_and_is_wired(self):
         html = open(os.path.join(REPO_ROOT, "src/web/static/app.html")).read()
         assert 'id="parse-warning"' in html
-        js = open(os.path.join(REPO_ROOT, "src/web/static/app.js")).read()
+        js = read_js()
         assert "showParseWarning" in js
         assert "clearParseWarning" in js
         assert "parsedData.warnings" in js
-        css = open(os.path.join(REPO_ROOT, "src/web/static/style.css")).read()
+        css = read_css()
         assert ".warning-panel" in css
 
     def test_error_message_renders_via_show_parse_error(self):
         # The 400 path surfaces detail.detail through showParseError; make
         # sure that wiring is still in place.
-        js = open(os.path.join(REPO_ROOT, "src/web/static/app.js")).read()
+        js = read_js()
         assert "detail.detail" in js
         assert "showParseError(`Could not parse the export: ${error.message}`)" in js
