@@ -412,7 +412,7 @@ def test_item_icons_use_local_proxy_without_requiring_wowhead_javascript():
 def test_item_icons_and_names_use_default_wowhead_tooltips():
     page_response = client.get("/")
     assert page_response.status_code == 200
-    assert 'src="api/wowhead-tooltips.js?v=20261020-guir-3"' in page_response.text
+    assert 'src="api/wowhead-tooltips.js?v=20261020-rb1-1"' in page_response.text
     assert "power.js" not in page_response.text
 
     response = resp(read_js())

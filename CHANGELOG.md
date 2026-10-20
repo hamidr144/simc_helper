@@ -10,6 +10,19 @@ new version is prepared and reviewer-approved as a mandatory step (see WORKFLOW.
 "Milestone: dev → prod"); the `CHANGELOG.md` update ships in the same merge commit
 that bumps the version and tag.
 
+## [1.1.1] — 2026-10-20
+
+PATCH milestone merged from the `1.1.1-dev.N` line for the ship-blocking
+run-bar defect (t_754e1374). Merged from dev at tag `v1.1.1-dev.1`
+(`ae83356`). Entries regenerated from `git log prod..dev`.
+
+### Bug fixes
+
+- Run button no longer hidden on narrower windows: the run bar now wraps
+  within the viewport instead of overflowing, fixing the Run CTA being
+  clipped below ~1510px width; the sheet-band summary also reflows so it no
+  longer overflows at 390px mobile width (t_754e1374).
+
 ## [1.1.0] — 2026-10-20
 
 MINOR milestone merged from the `1.0.0-dev.N` line carrying the Midnight GUI
