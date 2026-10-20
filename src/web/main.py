@@ -74,6 +74,7 @@ from src.core.addon_parser import (
     strip_embedded_copies,
 )
 from src.core import armory as armory_source
+from src.core.version import get_app_version
 from src.core.armory import (
     ArmoryError,
     ArmoryInputError,
@@ -158,6 +159,10 @@ TG_WORK_ESTIMATE_ITERS_PER_SEC = float(os.environ.get("SIMC_TG_ITERS_PER_SEC", "
 # shortcut: stage-1 iteration cap for the work estimate; rewired to the
 # SIMC_HELPER_STAGE_PLAN knob in TG2-C (t_590f5317).
 TG_STAGE1_ITERATIONS_CAP = 200
+
+# Single-source running version (pyproject via src.core.version); consumed by
+# the OpenAPI doc version= and GET /api/version (MGE-2 design contract §8.1).
+APP_VERSION = get_app_version()
 
 
 class GenerateSimcRequest(BaseModel):
@@ -685,7 +690,7 @@ app = FastAPI(
         "### Rate Limiting\n"
         "- Simulations are rate-limited to one per user every 300 seconds (5 minutes)\n"
     ),
-    version="1.0.0",
+    version=APP_VERSION,
     contact={"name": "simc-helper team"},
     license={"name": "MIT"},
 )
@@ -1883,6 +1888,16 @@ async def get_config():
     """
     from src.cli.generate_input import load_config
     return load_config("config.json")
+
+@app.get("/api/version", tags=["System"])
+async def get_version():
+    """Retrieve the running app version (MGE-3, epic item 6).
+
+    **Tags:** System
+    **Note:** No auth dependency, mirroring GET /api/config (MGE-2 §8.1);
+    same value as the OpenAPI doc version, single source pyproject.toml.
+    """
+    return {"version": APP_VERSION}
 
 @app.post("/api/wowhead-upgrades", response_model=WowheadUpgradesResponse, tags=["Gear"])
 async def get_wowhead_upgrades(payload: WowheadUpgradesRequest):
