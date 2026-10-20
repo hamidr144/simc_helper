@@ -5,7 +5,18 @@ Simcraft Automation Script
 This script automates a 3-stage workflow for SimulationCraft:
 1. Stage 1: Fast Filtering (default 200 iterations at target_error=1%) - Broadly identifies top performers.
 2. Stage 2: Refinement (5000 iterations at target_error=0.2%) - Narrows down the results using higher precision.
-3. Stage 3: Final Selection (20000 iterations at target_error=0.05%) - Produces the final high-precision report.
+3. Stage 3: Final Selection (20000 iterations) - Produces the final report at
+   approximately 0.1% precision. (Label relabel per MGE-1 t_8bfa56f3: under
+   SimC's own +/-1.96*sigma/sqrt(n) error law the 20k cap lands at ~0.1%, not
+   the labelled 0.05% - reaching 0.05% would need ~80k iterations. Labels
+   only; iteration caps and target_error args unchanged.)
+
+Small candidate sets adapt (rule R, MGE-1): N <= K_MIN runs all candidates
+directly at the final stage, 4 < N <= K_MIN/0.25 skips the fast filter, and
+each auto stage keeps at least max(K_MIN, ceil(0.25*N)) survivors - the
+CULL_K error band may only ADD survivors, never re-collapse below the floor.
+An explicit stage1/stage2_percent_best override opts that stage out of the
+floor (the manual knob keeps full control).
 
 Each stage passes explicit 'iterations=<cap> target_error=<err>%' CLI args (early
 stop per actor); the plan is overridable via SIMC_HELPER_STAGE_PLAN and the
@@ -105,7 +116,26 @@ def get_memory_based_batch_size(buffer_gb=4.0, mb_per_profile=90.0):
 # with an explicit iteration cap and target_error so SimC early-stops per actor
 # like Smart Sim — and so stage 3 no longer inherits the export-leaked
 # target_error from the global-settings block (real bug, ruling E3).
-STAGE_PLAN_DEFAULT = [(200, 1.0), (5000, 0.2), (20000, 0.05)]
+STAGE_PLAN_DEFAULT = [(200, 1.0), (5000, 0.2), (20000, 0.05)]  # 20k lands at ~0.1% (MGE-1 relabel)
+K_MIN = 4     # absolute floor of survivors per stage (rule R, MGE-1 t_8bfa56f3)
+KEEP_P = 0.25 # per-stage keep fraction (the existing 25% funnel percentage)
+
+
+def min_survivors(n):
+    """Rule R survivor floor: max(K_MIN, ceil(KEEP_P*n)). A lower bound only -
+    the CULL_K error band may ADD survivors, never re-collapse below it."""
+    return max(K_MIN, math.ceil(KEEP_P * n))
+
+
+def active_stages(n):
+    """Stage-skip by candidate count (rule R): n <= K_MIN -> all at the final
+    stage; n <= K_MIN/KEEP_P (16) -> skip the fast filter; else full ladder."""
+    if n <= K_MIN:
+        return (2,)
+    if n <= K_MIN / KEEP_P:
+        return (1, 2)
+    return (0, 1, 2)
+
 
 def get_stage_plan():
     """Parse SIMC_HELPER_STAGE_PLAN 'iters:err;iters:err;iters:err' (error as
@@ -154,7 +184,7 @@ def _filter_to_count(filter_arg, total):
         return max(1, math.ceil(total * float(arg[:-1]) / 100))
     return int(arg)
 
-def select_survivors(summaries, count, override=None):
+def select_survivors(summaries, count, override=None, floor=None):
     """Decide which actors advance a stage (design t_0fbfd0bd §5.3).
 
     Keep rule is an error band versus the top mean: keep i when
@@ -166,6 +196,11 @@ def select_survivors(summaries, count, override=None):
     keep-set directly anymore. Actors whose error failed to parse (ok=False)
     stay only inside the old count-rule ordering. `summaries` must already be
     in count-rule (ranking) order; the survivor names come back in that order.
+
+    `floor` (rule R, MGE-1) is a lower bound on survivors: if the band kept
+    less, the best-ranked candidates until `floor` top it up — the band may
+    only ADD survivors, never re-collapse below the floor (that re-collapse
+    to 1 finalist is the small-N defect this fixes). None keeps old behavior.
     """
     if not summaries:
         return []
@@ -174,7 +209,8 @@ def select_survivors(summaries, count, override=None):
     k = cull_k()
     banded = [s for s in summaries if s[3]]
     if not banded:
-        return [s[0] for s in summaries[:count]]
+        limit = count if floor is None else max(count, floor)
+        return [s[0] for s in summaries[:limit]]
     top = max(banded, key=lambda s: s[1])
     bound = top[1] - k * top[1] * top[2] / 100.0
     kept = set()
@@ -185,6 +221,11 @@ def select_survivors(summaries, count, override=None):
         elif idx < count:
             kept.add(name)
     survivors = [s[0] for s in summaries if s[0] in kept]
+    if floor is not None and len(survivors) < floor:
+        # Rule R floor (MGE-1): top up with the next best-ranked candidates;
+        # never removes band members (the band may only ADD survivors).
+        kept |= {s[0] for s in summaries[:floor]}
+        survivors = [s[0] for s in summaries if s[0] in kept]
     cap = max(25, 3 * count)
     if len(survivors) > cap:
         culled = len(survivors) - cap
@@ -592,11 +633,13 @@ def main():
     s3_args = stage_args(stage_plan, 2)
     user_s1_filter = args.get("stage1_percent_best")
     user_s2_filter = args.get("stage2_percent_best")
+    # Rule R stage-skip by candidate count (MGE-1); baseline runs final-only.
+    stages = active_stages(initial_combo_count)
 
     s1_filter = user_s1_filter
     if baseline_only:
         s1_filter = s1_filter or "100%"  # unused in baseline mode
-    elif not s1_filter:
+    elif not s1_filter and 0 in stages:
         s1_filter = get_default_filter(1, initial_combo_count)
         print(f"Using dynamic default for Stage 1: {s1_filter}")
 
@@ -630,7 +673,11 @@ def main():
             sys.exit(1)
     else:
         # Stage 1: Fast Filtering
-        if initial_combo_count > BATCH_SIZE:
+        if 0 not in stages:
+            print(f"\n--- STAGE 1: skipped - {initial_combo_count} candidates cannot be "
+                  f"ordered at ±1% precision (rule R, MGE-1) ---")
+            top_combos_s1 = list(all_combos)
+        elif initial_combo_count > BATCH_SIZE:
             print(f"\n--- STAGE 1: Fast Filtering ({s1_args}) using {s1_filter} [BATCHED, size={BATCH_SIZE}] ---")
             chunks = [all_combos[i:i + BATCH_SIZE] for i in range(0, len(all_combos), BATCH_SIZE)]
             all_batch_summaries = []
@@ -654,9 +701,10 @@ def main():
             top_combos_s1 = select_survivors(
                 all_batch_summaries,
                 _filter_to_count(get_default_filter(1, initial_combo_count), initial_combo_count),
-                user_s1_filter)
+                user_s1_filter,
+                floor=None if user_s1_filter else min_survivors(len(all_batch_summaries)))
             print(f"\nAggregated {len(all_batch_summaries)} total profiles across all batches.")
-            print(f"Kept {len(top_combos_s1)} profiles within the error band for Stage 2.")
+            print(f"Kept {len(top_combos_s1)} profiles for Stage 2 (error band + rule R floor).")
         else:
             print(f"\n--- STAGE 1: Fast Filtering ({s1_args}) using {s1_filter} ---")
             stage1_log = os.path.join(tmp_dir, "stage1.log")
@@ -664,32 +712,41 @@ def main():
             if exit_code != 0:
                 print(f"Error: simc failed with exit code {exit_code}. It might have run out of memory.")
                 sys.exit(1)
+            s1_summaries = get_actor_summaries(stage1_log, current_name=char_name)
             top_combos_s1 = select_survivors(
-                get_actor_summaries(stage1_log, current_name=char_name),
+                s1_summaries,
                 _filter_to_count(get_default_filter(1, initial_combo_count), initial_combo_count),
-                user_s1_filter)
+                user_s1_filter,
+                floor=None if user_s1_filter else min_survivors(len(s1_summaries)))
 
         if not top_combos_s1:
             print("Error: No combos found to refine after Stage 1. Stopping.")
             sys.exit(1)
 
-        if not s2_filter:
-            s2_filter = get_default_filter(2, len(top_combos_s1))
-            print(f"Using dynamic default for Stage 2: {s2_filter}")
-        s2_default_n = _filter_to_count(get_default_filter(2, len(top_combos_s1)), len(top_combos_s1))
+        if 1 not in stages:
+            print(f"\n--- STAGE 2: skipped - running all {len(top_combos_s1)} candidates "
+                  f"at final precision (rule R, MGE-1) ---")
+            top_combos_s2 = list(top_combos_s1)
+        else:
+            if not s2_filter:
+                s2_filter = get_default_filter(2, len(top_combos_s1))
+                print(f"Using dynamic default for Stage 2: {s2_filter}")
+            s2_default_n = _filter_to_count(get_default_filter(2, len(top_combos_s1)), len(top_combos_s1))
 
-        stage2_simc = os.path.join(tmp_dir, "stage2.simc")
-        prepare_stage(input_file, top_combos_s1, stage2_simc, s2_args, current_name=char_name)
+            stage2_simc = os.path.join(tmp_dir, "stage2.simc")
+            prepare_stage(input_file, top_combos_s1, stage2_simc, s2_args, current_name=char_name)
 
-        # Stage 2: Refinement
-        print(f"\n--- STAGE 2: Refinement ({s2_args}) using {s2_filter} ---")
-        stage2_log = os.path.join(tmp_dir, "stage2.log")
-        exit_code = run_simc(simc_path, stage2_simc, s2_args, stage2_log, prefix="[Stage 2] ")
-        if exit_code != 0:
-            print(f"Error: simc failed on stage 2 with exit code {exit_code}.")
-            sys.exit(1)
-        top_combos_s2 = select_survivors(
-            get_actor_summaries(stage2_log, current_name=char_name), s2_default_n, user_s2_filter)
+            # Stage 2: Refinement
+            print(f"\n--- STAGE 2: Refinement ({s2_args}) using {s2_filter} ---")
+            stage2_log = os.path.join(tmp_dir, "stage2.log")
+            exit_code = run_simc(simc_path, stage2_simc, s2_args, stage2_log, prefix="[Stage 2] ")
+            if exit_code != 0:
+                print(f"Error: simc failed on stage 2 with exit code {exit_code}.")
+                sys.exit(1)
+            s2_summaries = get_actor_summaries(stage2_log, current_name=char_name)
+            top_combos_s2 = select_survivors(
+                s2_summaries, s2_default_n, user_s2_filter,
+                floor=None if user_s2_filter else min_survivors(len(s2_summaries)))
 
         if not top_combos_s2:
             print("Error: No combos found to refine after Stage 2. Stopping.")

@@ -1,16 +1,15 @@
-// Run history page (t_d34ced81): lists the signed-in user's stored runs and
-// a per-run detail view (?run=<id>) with a working link to the stored report.
+// js/pages/history.js — run history page (t_d34ced81): lists the signed-in
+// user's stored runs and a per-run detail view (?run=<id>) with a working
+// link to the stored report. Ported from history.js by t_94a15fe3 (§3.1).
+import { apiFetch } from '../core/api.js';
+import { escapeHtml } from '../core/dom.js';
+
 const historyQuery = new URLSearchParams(window.location.search);
 const runId = historyQuery.get('run');
 const titleEl = document.getElementById('history-title');
 const subtitleEl = document.getElementById('history-subtitle');
 const contentEl = document.getElementById('history-content');
 const backEl = document.getElementById('history-back');
-
-function escapeHtml(value) {
-  return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
 
 function formatWhen(epoch) {
   if (!epoch) return '—';

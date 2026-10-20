@@ -23,6 +23,7 @@ from core.stat_priorities import (  # noqa: E402
     weights_for_class,
 )
 from web.main import app, wowhead_tooltip_json_cache  # noqa: E402
+from static_assets import read_css, read_js, resp  # t_94a15fe3 split pins
 
 client = TestClient(app)
 
@@ -195,7 +196,7 @@ def _static(name):
 
 
 def test_app_js_wires_sorting():
-    js = _static("app.js")
+    js = read_js()
     assert "function sortItemsForSlot(slot, items)" in js
     assert "for (const item of sortItemsForSlot(slot, items))" in js
     assert "slotSorts[slot] = sortSelect.value;" in js
@@ -208,7 +209,7 @@ def test_app_js_wires_sorting():
 
 
 def test_app_js_wires_add_item():
-    js = _static("app.js")
+    js = read_js()
     assert "function wireSlotAddForm(group, slot)" in js
     assert "wireSlotAddForm(group, slot);" in js
     assert "function commitAddedItem(slot, itemId, preview)" in js
@@ -221,7 +222,7 @@ def test_app_js_wires_add_item():
 
 
 def test_style_css_defines_step4_classes():
-    css = _static("style.css")
+    css = read_css()
     for selector in (".slot-sort-select", ".slot-add-form", ".slot-add-input",
                      "button.slot-add-button", ".slot-add-preview", ".slot-add-preview.is-error",
                      ".added-badge", "button.slot-remove-added"):
@@ -230,5 +231,6 @@ def test_style_css_defines_step4_classes():
 
 def test_app_html_cache_busted_step4():
     html = _static("app.html")
-    assert "style.css?v=20261019-gse2-1" in html
-    assert "app.js?v=20261019-gse2-1" in html
+    # t_94a15fe3 (MGE2 split): cache-bust now rides the token sheet + boot entry.
+    assert "css/tokens.css?v=20261020-guir-3" in html
+    assert "js/pages/setup.js?v=20261020-guir-3" in html
