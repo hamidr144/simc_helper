@@ -2,11 +2,14 @@
 
 These are the new pytest gates the rewrite contract requires on top of the
 redirected legacy pins:
-  * RG-P3  no dead exports anywhere under js/ (entry exports allowed);
+  * RG-P3  no dead exports anywhere under js/ (entry exports allowed),
+           import-aware per export name (t_f9a0df27), and every cross-module
+           name a module uses is imported by it;
            every DOM id referenced from JS exists in some page.
   * A3     no items[0] fallback in the selection initializer.
   * A6     zero version literal in static/ (chip text comes from /api/version).
 """
+import os
 import re
 from pathlib import Path
 
@@ -16,6 +19,10 @@ STATIC = Path(__file__).resolve().parent.parent / "src" / "web" / "static"
 JS_DIR = STATIC / "js"
 
 EXPORT_RE = re.compile(r"^export\s+(?:async\s+)?(?:function|const|let|class)\s+([A-Za-z_$][\w$]*)", re.M)
+IMPORT_RE = re.compile(r"import\s*\{([^}]*)\}\s*from\s*['\"]([^'\"]+)['\"]")
+# destructured dynamic import in the .mjs realm harness
+DYN_IMPORT_RE = re.compile(
+    r"\{([^}]*)\}\s*=\s*(?:await\s+)?import\(\s*(?:fileURLToPath\(\s*new URL\(\s*)?['\"]([^'\"]+)['\"]")
 ENTRY_GLOBS = ("js/pages/", "js/auth.js", "js/boot/")
 
 
@@ -25,24 +32,83 @@ def _entries(touched):
     return touched.startswith(("js/pages/", "js/auth.js"))
 
 
+def _js_files():
+    return {p: p.read_text() for p in sorted(JS_DIR.rglob("*.js"))}
+
+
+def _imported_pairs(text, consumer_path):
+    # (resolved-target-path, name) for every `import { a, b as c } from '...'`
+    # and for the harness's destructured `await import(...)` form.
+    for clause, spec in IMPORT_RE.findall(text) + DYN_IMPORT_RE.findall(text):
+        target = os.path.normpath(os.path.join(os.path.dirname(str(consumer_path)), spec))
+        for part in clause.split(","):
+            name = part.strip().split(" as ")[0].strip()
+            if name:
+                yield target, name
+
+
 def test_rg_p3_no_dead_exports():
-    files = {p.relative_to(STATIC).as_posix(): p.read_text()
-             for p in JS_DIR.rglob("*.js")}
-    # page scripts and the .mjs realm harness count as entry usage.
+    # Import-aware (t_f9a0df27): the old bare \bname\b match passed vacuously
+    # at 9881c8c — pages/setup.js's own `export function wire` counted as usage
+    # for the three setup-module wires nothing imported. Usage = another module
+    # (or a fixture harness) imports the name from this exact module path.
+    files = _js_files()
     consumers = dict(files)
     for fx in (Path(__file__).parent / "fixtures").glob("*.mjs"):
-        consumers[f"tests/fixtures/{fx.name}"] = fx.read_text()
+        consumers[fx] = fx.read_text()
+    imported = set()
+    for cpath, ctext in consumers.items():
+        imported.update(_imported_pairs(ctext, cpath))
     dead = []
     for path, text in files.items():
-        if _entries(path):
+        rel = path.relative_to(STATIC).as_posix()
+        if _entries(rel):
             continue
         for name in EXPORT_RE.findall(text):
-            rx = re.compile(rf"\b{re.escape(name)}\b")
-            used = any(other_path != path and rx.search(other)
-                       for other_path, other in consumers.items())
-            if not used:
-                dead.append(f"{path}: {name}")
+            if (str(path), name) not in imported:
+                dead.append(f"{rel}: {name}")
     assert not dead, f"dead exports (RG-P3): {dead}"
+
+
+def _scan_body(text):
+    # strip import clauses (bindings, not uses), comments and quoted strings so
+    # the unbound-name scan only sees code identifiers. Template literals stay
+    # (their ${...} parts are code); shortcut: a name used ONLY inside a
+    # template's prose is not caught — upgrade to a real parser if that bites.
+    text = IMPORT_RE.sub("", text)
+    text = re.sub(r"/\*[\s\S]*?\*/|//[^\n]*", "", text)
+    text = re.sub(r"'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"", " ", text)
+    return text
+
+
+def _locally_bound(text, name):
+    n = re.escape(name)
+    return (re.search(rf"\b(?:const|let|var|function|class)\s+{n}\b", text)
+            or re.search(rf"[(,]\s*{n}\s*[,)=]", text)  # (params, x, y) / (x = d) =>
+            or re.search(rf"\{{\s*{n}\s*[,}}]", text))  # destructuring { x, ... } = ...
+
+
+def test_rg_p3_used_names_are_imported():
+    # Companion gate (t_f9a0df27): the dropped-import defect class QA found at
+    # 9881c8c (initializeSelections in paste.js, PAPER_DOLL_SLOTS in
+    # gear/enhancements) — ReferenceError only fires on click in the browser.
+    files = _js_files()
+    exporters = {}
+    for path, text in files.items():
+        for name in EXPORT_RE.findall(text):
+            exporters.setdefault(name, set()).add(path)
+    offenders = []
+    for path, text in files.items():
+        body = _scan_body(text)
+        imported_here = {n for _, n in _imported_pairs(text, path)}
+        for name, srcs in sorted(exporters.items()):
+            if path in srcs or name in imported_here:
+                continue
+            if _locally_bound(body, name):
+                continue
+            if re.search(rf"(?<![\w.$]){re.escape(name)}\b", body):
+                offenders.append(f"{path.relative_to(STATIC).as_posix()}: {name}")
+    assert not offenders, f"used without import (RG-P3): {offenders}"
 
 
 def test_rg_p3_markup_ids_referenced():
