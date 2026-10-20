@@ -11,10 +11,11 @@ import web.main
 from fastapi.testclient import TestClient
 from src.core.db import task_owner_upsert
 from web.main import app
+from static_assets import read_css, read_js, resp  # t_94a15fe3 split pins
 
 STATIC = Path(__file__).resolve().parent.parent / "src" / "web" / "static"
-RESULTS_JS = (STATIC / "results.js").read_text()
-CSS = (STATIC / "style.css").read_text()
+RESULTS_JS = read_js()
+CSS = read_css()
 
 client = TestClient(app)
 

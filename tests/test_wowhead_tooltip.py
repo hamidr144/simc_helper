@@ -1,3 +1,4 @@
+from static_assets import read_css, read_js, resp  # t_94a15fe3 split pins
 """Tests for GET /api/wowhead/tooltip - server-side Wowhead tooltip preview proxy.
 
 The tooltip fixtures are REAL payloads captured from
@@ -264,7 +265,7 @@ def _static(name):
 
 
 def test_app_js_wires_debounced_preview():
-    js = _static("app.js")
+    js = read_js()
     assert "api/wowhead/tooltip" in js
     assert "UPGRADE_PREVIEW_DEBOUNCE_MS = 400" in js
     assert "scheduleUpgradePreview" in js
@@ -273,7 +274,7 @@ def test_app_js_wires_debounced_preview():
 
 
 def test_style_css_defines_preview_classes():
-    css = _static("style.css")
+    css = read_css()
     for selector in (".upgrade-preview", ".upgrade-preview-delta.positive",
                      ".upgrade-preview-stat.negative", ".upgrade-preview-stats"):
         assert selector in css
@@ -281,5 +282,5 @@ def test_style_css_defines_preview_classes():
 
 def test_app_html_cache_busted():
     html = _static("app.html")
-    assert "style.css?v=20261019-gse2-1" in html
-    assert "app.js?v=20261019-gse2-1" in html
+    assert "tokens.css?v=20261020-guir-3" in html  # MGE-2 split assets (t_94a15fe3)
+    assert "pages/setup.js?v=20261020-guir-3" in html  # MGE-2 split assets (t_94a15fe3)

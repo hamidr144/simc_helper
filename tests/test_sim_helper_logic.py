@@ -315,9 +315,11 @@ def test_main_stage_commands_carry_precision(tmp_path, monkeypatch, capsys):
     from cli.sim_helper import main
     input_file = tmp_path / "t.simc"
     input_file.write_text('paladin="Test"\ncopy="C1,T"\n')
+    # Rule R (t_3da0efb2): N <= 16 skips stages — use 17 combos to keep
+    # exercising the full 3-stage ladder.
     with patch("sys.argv", ["sim_helper.py", "simc_path=s", f"input_file={input_file}", "start_server=0"]), \
          patch("cli.sim_helper.get_character_name", return_value="Test"), \
-         patch("cli.sim_helper.get_all_combos", return_value=["C1"]), \
+         patch("cli.sim_helper.get_all_combos", return_value=[f"C{i}" for i in range(17)]), \
          patch("cli.sim_helper.run_simc", return_value=0) as run, \
          patch("cli.sim_helper.prepare_stage") as prep, \
          patch("cli.sim_helper.get_actor_summaries", return_value=[("C1", 100.0, 0.5, True)]):
@@ -360,7 +362,10 @@ def test_main_batched_stage1_culls_globally_within_band(tmp_path, monkeypatch, c
          patch("cli.sim_helper.get_actor_summaries", side_effect=per_batch):
         main()
     out = capsys.readouterr().out
-    assert "Kept 2 profiles within the error band for Stage 2." in out
+    # Rule R floor (t_3da0efb2): only 3 of 401 combos parsed summaries and
+    # max(K_MIN, ...) cannot keep fewer than the parsed set — the global
+    # (cross-batch) keep-set derivation itself is what this test pins.
+    assert "Kept 3 profiles for Stage 2 (error band + rule R floor)." in out
     assert "Simcraft Helper complete!" in out
 
 
@@ -369,10 +374,11 @@ def test_main_stage2_override_is_count_cap_not_selector(tmp_path, monkeypatch, c
     input_file = tmp_path / "t.simc"
     input_file.write_text('paladin="Test"\ncopy="C1,T"\n')
     s2 = [("A1", 100.0, 0.5, True), ("B1", 99.0, 0.5, True)]  # banded -> override "1" must NOT pick 1
+    # 17 combos: rule R skips stage 1 below 17, this test needs stage 2 to run.
     with patch("sys.argv", ["sim_helper.py", "simc_path=s", f"input_file={input_file}",
                             "start_server=0", "stage2_percent_best=1"]), \
          patch("cli.sim_helper.get_character_name", return_value="Test"), \
-         patch("cli.sim_helper.get_all_combos", return_value=["C1", "C2"]), \
+         patch("cli.sim_helper.get_all_combos", return_value=[f"C{i}" for i in range(17)]), \
          patch("cli.sim_helper.run_simc", return_value=0), \
          patch("cli.sim_helper.prepare_stage"), \
          patch("cli.sim_helper.get_actor_summaries", return_value=s2):

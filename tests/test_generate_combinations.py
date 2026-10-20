@@ -16,6 +16,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 import web.main as master
 from cli.generate_input import build_combination_copies, count_combination_copies
 from web.main import app
+from static_assets import read_css, read_js, resp  # t_94a15fe3 split pins
 
 client = TestClient(app)
 
@@ -237,7 +238,7 @@ def test_run_bar_shows_compare_mode_dropdown_with_two_choices():
 
 
 def test_app_js_sends_mode_and_replaces_estimate_with_server_count():
-    js = client.get("/static/app.js").text
+    js = resp(read_js()).text
     assert "mode: document.getElementById('compare-mode')?.value || 'single_swap'" in js
     assert "getElementById('compare-mode').addEventListener('change', selectionChanged)" in js
     # Server count replaces the client estimate in combinations mode.

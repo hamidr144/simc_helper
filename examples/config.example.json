@@ -1,94 +1,511 @@
 {
+  "source": "https://www.method.gg/guides/list-of-all-midnight-consumables-enchants-and-gems",
   "enchantments": {
-    "head": [
-      {"id": 8017, "name": "Incandescent Essence"}
+    "legs": [
+      {
+        "id": 240157,
+        "name": "Bright Linen Spellthread",
+        "wowhead_url": "https://www.wowhead.com/item=240157"
+      },
+      {
+        "id": 240133,
+        "name": "Sunfire Silk Spellthread",
+        "wowhead_url": "https://www.wowhead.com/item=240133"
+      },
+      {
+        "id": 240155,
+        "name": "Arcanoweave Spellthread",
+        "wowhead_url": "https://www.wowhead.com/item=240155"
+      },
+      {
+        "id": 244641,
+        "name": "Forest Hunter's Armor Kit",
+        "wowhead_url": "https://www.wowhead.com/item=244641"
+      },
+      {
+        "id": 244643,
+        "name": "Blood Knight's Armor Kit",
+        "wowhead_url": "https://www.wowhead.com/item=244643"
+      },
+      {
+        "id": 244645,
+        "name": "Thalassian Scout Armor Kit",
+        "wowhead_url": "https://www.wowhead.com/item=244645"
+      }
     ],
-    "neck": [],
-    "shoulder": [
-      {"id": 8001, "name": "Gilded Ribbon"}
-    ],
-    "back": [
-      {"id": 223731, "name": "Enchant Cloak - Chant of Winged Grace"},
-      {"id": 223737, "name": "Enchant Cloak - Chant of Leeching Fangs"},
-      {"id": 223800, "name": "Enchant Cloak - Chant of Burrowing Rapidity"}
+    "boots": [
+      {
+        "id": 244009,
+        "name": "Enchant Boots - Farstrider's Hunt",
+        "wowhead_url": "https://www.wowhead.com/item=244009"
+      },
+      {
+        "id": 243953,
+        "name": "Enchant Boots - Lynx's Dexterity",
+        "wowhead_url": "https://www.wowhead.com/item=243953"
+      },
+      {
+        "id": 243983,
+        "name": "Enchant Boots - Shaladrassil's Roots",
+        "wowhead_url": "https://www.wowhead.com/item=243983"
+      }
     ],
     "chest": [
-      {"id": 223683, "name": "Enchant Chest - Stormrider's Agility"},
-      {"id": 223686, "name": "Enchant Chest - Council's Intellect"},
-      {"id": 223692, "name": "Enchant Chest - Crystalline Radiance"},
-      {"id": 223689, "name": "Enchant Chest - Oathsworn's Strength"}
+      {
+        "id": 243947,
+        "name": "Enchant Chest - Mark of Nalorakk",
+        "wowhead_url": "https://www.wowhead.com/item=243947"
+      },
+      {
+        "id": 244003,
+        "name": "Enchant Chest - Mark of the Magister",
+        "wowhead_url": "https://www.wowhead.com/item=244003"
+      },
+      {
+        "id": 243975,
+        "name": "Enchant Chest - Mark of the Rootwarden",
+        "wowhead_url": "https://www.wowhead.com/item=243975"
+      },
+      {
+        "id": 243977,
+        "name": "Enchant Chest - Mark of the Worldsoul",
+        "wowhead_url": "https://www.wowhead.com/item=243977"
+      }
     ],
-    "wrist": [
-      {"id": 223713, "name": "Enchant Bracer - Chant of Armored Avoidance"},
-      {"id": 223719, "name": "Enchant Bracer - Chant of Armored Leech"},
-      {"id": 223725, "name": "Enchant Bracer - Chant of Armored Speed"}
+    "helm": [
+      {
+        "id": 243979,
+        "name": "Enchant Helm - Blessing of Speed",
+        "wowhead_url": "https://www.wowhead.com/item=243979"
+      },
+      {
+        "id": 243981,
+        "name": "Enchant Helm - Empowered Blessing of Speed",
+        "wowhead_url": "https://www.wowhead.com/item=243981"
+      },
+      {
+        "id": 243951,
+        "name": "Enchant Helm - Empowered Hex of Leeching",
+        "wowhead_url": "https://www.wowhead.com/item=243951"
+      },
+      {
+        "id": 244007,
+        "name": "Enchant Helm - Empowered Rune of Avoidance",
+        "wowhead_url": "https://www.wowhead.com/item=244007"
+      },
+      {
+        "id": 243949,
+        "name": "Enchant Helm - Hex of Leeching",
+        "wowhead_url": "https://www.wowhead.com/item=243949"
+      },
+      {
+        "id": 244005,
+        "name": "Enchant Helm - Rune of Avoidance",
+        "wowhead_url": "https://www.wowhead.com/item=244005"
+      }
     ],
-    "hands": [
-      {"id": 2841, "name": "Gilded Thread"}
+    "rings": [
+      {
+        "id": 243955,
+        "name": "Enchant Ring - Amani Mastery",
+        "wowhead_url": "https://www.wowhead.com/item=243955"
+      },
+      {
+        "id": 243957,
+        "name": "Enchant Ring - Eyes of the Eagle",
+        "wowhead_url": "https://www.wowhead.com/item=243957"
+      },
+      {
+        "id": 243987,
+        "name": "Enchant Ring - Nature's Fury",
+        "wowhead_url": "https://www.wowhead.com/item=243987"
+      },
+      {
+        "id": 243985,
+        "name": "Enchant Ring - Nature's Wrath",
+        "wowhead_url": "https://www.wowhead.com/item=243985"
+      },
+      {
+        "id": 244015,
+        "name": "Enchant Ring - Silvermoon's Alacrity",
+        "wowhead_url": "https://www.wowhead.com/item=244015"
+      },
+      {
+        "id": 244017,
+        "name": "Enchant Ring - Silvermoon's Tenacity",
+        "wowhead_url": "https://www.wowhead.com/item=244017"
+      },
+      {
+        "id": 244011,
+        "name": "Enchant Ring - Thalassian Haste",
+        "wowhead_url": "https://www.wowhead.com/item=244011"
+      },
+      {
+        "id": 244013,
+        "name": "Enchant Ring - Thalassian Versatility",
+        "wowhead_url": "https://www.wowhead.com/item=244013"
+      },
+      {
+        "id": 243959,
+        "name": "Enchant Ring - Zul'jin's Mastery",
+        "wowhead_url": "https://www.wowhead.com/item=243959"
+      }
     ],
-    "waist": [],
-    "legs": [
-      {"id": 8159, "name": "Sunset Armor Patch"}
+    "shoulders": [
+      {
+        "id": 243963,
+        "name": "Enchant Shoulders - Akil'zon's Swiftness",
+        "wowhead_url": "https://www.wowhead.com/item=243963"
+      },
+      {
+        "id": 243991,
+        "name": "Enchant Shoulders - Amirdrassil's Grace",
+        "wowhead_url": "https://www.wowhead.com/item=243991"
+      },
+      {
+        "id": 243961,
+        "name": "Enchant Shoulders - Flight of the Eagle",
+        "wowhead_url": "https://www.wowhead.com/item=243961"
+      },
+      {
+        "id": 243989,
+        "name": "Enchant Shoulders - Nature's Grace",
+        "wowhead_url": "https://www.wowhead.com/item=243989"
+      },
+      {
+        "id": 244021,
+        "name": "Enchant Shoulders - Silvermoon's Mending",
+        "wowhead_url": "https://www.wowhead.com/item=244021"
+      },
+      {
+        "id": 244019,
+        "name": "Enchant Shoulders - Thalassian Recovery",
+        "wowhead_url": "https://www.wowhead.com/item=244019"
+      }
     ],
-    "feet": [
-      {"id": 223650, "name": "Enchant Boots - Cavalry's March"},
-      {"id": 223653, "name": "Enchant Boots - Scout's March"},
-      {"id": 223656, "name": "Enchant Boots - Defender's March"}
+    "weapon": [
+      {
+        "id": 244029,
+        "name": "Enchant Weapon - Acuity of the Ren'dorei",
+        "wowhead_url": "https://www.wowhead.com/item=244029"
+      },
+      {
+        "id": 244031,
+        "name": "Enchant Weapon - Arcane Mastery",
+        "wowhead_url": "https://www.wowhead.com/item=244031"
+      },
+      {
+        "id": 243973,
+        "name": "Enchant Weapon - Berserker's Rage",
+        "wowhead_url": "https://www.wowhead.com/item=243973"
+      },
+      {
+        "id": 244027,
+        "name": "Enchant Weapon - Flames of the Sin'dorei",
+        "wowhead_url": "https://www.wowhead.com/item=244027"
+      },
+      {
+        "id": 243971,
+        "name": "Enchant Weapon - Jan'alai's Precision",
+        "wowhead_url": "https://www.wowhead.com/item=243971"
+      },
+      {
+        "id": 243969,
+        "name": "Enchant Weapon - Strength of Halazzi",
+        "wowhead_url": "https://www.wowhead.com/item=243969"
+      },
+      {
+        "id": 243999,
+        "name": "Enchant Weapon - Worldsoul Aegis",
+        "wowhead_url": "https://www.wowhead.com/item=243999"
+      },
+      {
+        "id": 243997,
+        "name": "Enchant Weapon - Worldsoul Cradle",
+        "wowhead_url": "https://www.wowhead.com/item=243997"
+      },
+      {
+        "id": 244001,
+        "name": "Enchant Weapon - Worldsoul Tenacity",
+        "wowhead_url": "https://www.wowhead.com/item=244001"
+      },
+      {
+        "id": 273072,
+        "name": "Enchant Weapon - Rite of the Hash'ey",
+        "wowhead_url": "https://www.wowhead.com/item=273072"
+      }
     ],
-    "finger": [
-      {"id": 223662, "name": "Enchant Ring - Radiant Critical Strike"},
-      {"id": 223674, "name": "Enchant Ring - Radiant Haste"},
-      {"id": 223677, "name": "Enchant Ring - Radiant Mastery"},
-      {"id": 223680, "name": "Enchant Ring - Radiant Versatility"},
-      {"id": 223787, "name": "Enchant Ring - Cursed Critical Strike"},
-      {"id": 223790, "name": "Enchant Ring - Cursed Haste"},
-      {"id": 223793, "name": "Enchant Ring - Cursed Mastery"},
-      {"id": 223796, "name": "Enchant Ring - Cursed Versatility"}
-    ],
-    "main_hand": [
-      {"id": 223775, "name": "Enchant Weapon - Authority of Air"},
-      {"id": 223778, "name": "Enchant Weapon - Authority of Fiery Resolve"},
-      {"id": 223781, "name": "Enchant Weapon - Authority of Radiant Power"},
-      {"id": 223784, "name": "Enchant Weapon - Authority of the Depths"},
-      {"id": 223772, "name": "Enchant Weapon - Authority of Storms"},
-      {"id": 223768, "name": "Enchant Weapon - Oathsworn's Tenacity"},
-      {"id": 223765, "name": "Enchant Weapon - Stonebound Artistry"},
-      {"id": 223762, "name": "Enchant Weapon - Stormrider's Fury"},
-      {"id": 223759, "name": "Enchant Weapon - Council's Guile"}
-    ],
-    "off_hand": []
+    "profession_tool": [
+      {
+        "id": 243965,
+        "name": "Enchant Tool - Amani Perception",
+        "wowhead_url": "https://www.wowhead.com/item=243965"
+      },
+      {
+        "id": 243967,
+        "name": "Enchant Tool - Amani Resourcefulness",
+        "wowhead_url": "https://www.wowhead.com/item=243967"
+      },
+      {
+        "id": 243993,
+        "name": "Enchant Tool - Haranir Finesse",
+        "wowhead_url": "https://www.wowhead.com/item=243993"
+      },
+      {
+        "id": 243995,
+        "name": "Enchant Tool - Haranir Multicrafting",
+        "wowhead_url": "https://www.wowhead.com/item=243995"
+      },
+      {
+        "id": 244025,
+        "name": "Enchant Tool - Ren'dorei Ingenuity",
+        "wowhead_url": "https://www.wowhead.com/item=244025"
+      },
+      {
+        "id": 244023,
+        "name": "Enchant Tool - Sin'dorei Deftness",
+        "wowhead_url": "https://www.wowhead.com/item=244023"
+      }
+    ]
   },
   "gems": {
-    "meta": [
-      {"id": 435392, "name": "Cubic Blasphemia"},
-      {"id": 435318, "name": "Culminating Blasphemite"},
-      {"id": 435319, "name": "Elusive Blasphemite"},
-      {"id": 435230, "name": "Insightful Blasphemite"},
-      {"id": 435321, "name": "Cognitive Bloodstone"},
-      {"id": 435322, "name": "Determined Bloodstone"},
-      {"id": 435320, "name": "Enduring Bloodstone"}
-    ],
     "standard": [
-      {"id": 434563, "name": "Versatile Sapphire"},
-      {"id": 434554, "name": "Quick Sapphire"},
-      {"id": 434553, "name": "Deadly Sapphire"},
-      {"id": 434555, "name": "Masterful Sapphire"},
-      {"id": 434542, "name": "Quick Emerald"},
-      {"id": 434544, "name": "Versatile Emerald"},
-      {"id": 434541, "name": "Deadly Emerald"},
-      {"id": 434543, "name": "Masterful Emerald"},
-      {"id": 434549, "name": "Deadly Ruby"},
-      {"id": 434552, "name": "Versatile Ruby"},
-      {"id": 434550, "name": "Quick Ruby"},
-      {"id": 434551, "name": "Masterful Ruby"},
-      {"id": 434547, "name": "Masterful Onyx"},
-      {"id": 434548, "name": "Versatile Onyx"},
-      {"id": 434546, "name": "Quick Onyx"},
-      {"id": 434545, "name": "Deadly Onyx"},
-      {"id": 434536, "name": "Solid Amber"},
-      {"id": 434540, "name": "Versatile Amber"},
-      {"id": 434538, "name": "Quick Amber"},
-      {"id": 434537, "name": "Deadly Amber"}
+      {
+        "id": 241142,
+        "name": "Determined Heliotrope",
+        "stats": "Increased Primary Stat and getting Snared increases the damage of your next attack",
+        "wowhead_url": "https://www.wowhead.com/item=241142"
+      },
+      {
+        "id": 241143,
+        "name": "Cognitive Heliotrope",
+        "stats": "Increased Primary Stat and opponent’s failed interrupt attempts against you grant Precognition",
+        "wowhead_url": "https://www.wowhead.com/item=241143"
+      },
+      {
+        "id": 241144,
+        "name": "Enduring Heliotrope",
+        "stats": "Increased Primary Stat and reduced damage taken when affected by crowd control",
+        "wowhead_url": "https://www.wowhead.com/item=241144"
+      },
+      {
+        "id": 240912,
+        "name": "Flawless Versatile Lapis",
+        "stats": "Increased Versatility",
+        "wowhead_url": "https://www.wowhead.com/item=240912"
+      },
+      {
+        "id": 240916,
+        "name": "Flawless Quick Lapis",
+        "stats": "Increased Versatility and Haste",
+        "wowhead_url": "https://www.wowhead.com/item=240916"
+      },
+      {
+        "id": 240914,
+        "name": "Flawless Deadly Lapis",
+        "stats": "Increased Versatility and Critical Strike",
+        "wowhead_url": "https://www.wowhead.com/item=240914"
+      },
+      {
+        "id": 240918,
+        "name": "Flawless Masterful Lapis",
+        "stats": "Increased Versatility and Mastery",
+        "wowhead_url": "https://www.wowhead.com/item=240918"
+      },
+      {
+        "id": 240880,
+        "name": "Versatile Lapis",
+        "stats": "Increased Versatility",
+        "wowhead_url": "https://www.wowhead.com/item=240880"
+      },
+      {
+        "id": 240884,
+        "name": "Quick Lapis",
+        "stats": "Increased Versatility and Haste",
+        "wowhead_url": "https://www.wowhead.com/item=240884"
+      },
+      {
+        "id": 240882,
+        "name": "Deadly Lapis",
+        "stats": "Increased Versatility and Critical Strike",
+        "wowhead_url": "https://www.wowhead.com/item=240882"
+      },
+      {
+        "id": 240886,
+        "name": "Masterful Lapis",
+        "stats": "Increased Versatility and Mastery",
+        "wowhead_url": "https://www.wowhead.com/item=240886"
+      },
+      {
+        "id": 240888,
+        "name": "Flawless Quick Peridot",
+        "stats": "Increased Haste",
+        "wowhead_url": "https://www.wowhead.com/item=240888"
+      },
+      {
+        "id": 240894,
+        "name": "Flawless Versatile Peridot",
+        "stats": "Increased Haste and Versatility",
+        "wowhead_url": "https://www.wowhead.com/item=240894"
+      },
+      {
+        "id": 240890,
+        "name": "Flawless Deadly Peridot",
+        "stats": "Increased Haste and Critical Strike",
+        "wowhead_url": "https://www.wowhead.com/item=240890"
+      },
+      {
+        "id": 240892,
+        "name": "Flawless Masterful Peridot",
+        "stats": "Increased Haste and Mastery",
+        "wowhead_url": "https://www.wowhead.com/item=240892"
+      },
+      {
+        "id": 240856,
+        "name": "Quick Peridot",
+        "stats": "Increased Haste",
+        "wowhead_url": "https://www.wowhead.com/item=240856"
+      },
+      {
+        "id": 240862,
+        "name": "Versatile Peridot",
+        "stats": "Increased Haste and Versatility",
+        "wowhead_url": "https://www.wowhead.com/item=240862"
+      },
+      {
+        "id": 240858,
+        "name": "Deadly Peridot",
+        "stats": "Increased Haste and Critical Strike",
+        "wowhead_url": "https://www.wowhead.com/item=240858"
+      },
+      {
+        "id": 240860,
+        "name": "Masterful Peridot",
+        "stats": "Increased Haste and Mastery",
+        "wowhead_url": "https://www.wowhead.com/item=240860"
+      },
+      {
+        "id": 240904,
+        "name": "Flawless Deadly Garnet",
+        "stats": "Increased Critical Strike",
+        "wowhead_url": "https://www.wowhead.com/item=240904"
+      },
+      {
+        "id": 240910,
+        "name": "Flawless Versatile Garnet",
+        "stats": "Increased Critical Strike and Versatility",
+        "wowhead_url": "https://www.wowhead.com/item=240910"
+      },
+      {
+        "id": 240906,
+        "name": "Flawless Quick Garnet",
+        "stats": "Increased Critical Strike and Haste",
+        "wowhead_url": "https://www.wowhead.com/item=240906"
+      },
+      {
+        "id": 240908,
+        "name": "Flawless Masterful Garnet",
+        "stats": "Increased Critical Strike and Mastery",
+        "wowhead_url": "https://www.wowhead.com/item=240908"
+      },
+      {
+        "id": 240872,
+        "name": "Deadly Garnet",
+        "stats": "Increased Critical Strike",
+        "wowhead_url": "https://www.wowhead.com/item=240872"
+      },
+      {
+        "id": 240878,
+        "name": "Versatile Garnet",
+        "stats": "Increased Critical Strike and Versatility",
+        "wowhead_url": "https://www.wowhead.com/item=240878"
+      },
+      {
+        "id": 240874,
+        "name": "Quick Garnet",
+        "stats": "Increased Critical Strike and Haste",
+        "wowhead_url": "https://www.wowhead.com/item=240874"
+      },
+      {
+        "id": 240876,
+        "name": "Masterful Garnet",
+        "stats": "Increased Critical Strike and Mastery",
+        "wowhead_url": "https://www.wowhead.com/item=240876"
+      },
+      {
+        "id": 240896,
+        "name": "Flawless Masterful Amethyst",
+        "stats": "Increased Mastery",
+        "wowhead_url": "https://www.wowhead.com/item=240896"
+      },
+      {
+        "id": 240902,
+        "name": "Flawless Versatile Amethyst",
+        "stats": "Increased Mastery and Versatility",
+        "wowhead_url": "https://www.wowhead.com/item=240902"
+      },
+      {
+        "id": 240900,
+        "name": "Flawless Quick Amethyst",
+        "stats": "Increased Mastery and Haste",
+        "wowhead_url": "https://www.wowhead.com/item=240900"
+      },
+      {
+        "id": 240898,
+        "name": "Flawless Deadly Amethyst",
+        "stats": "Increased Mastery and Critical Strike",
+        "wowhead_url": "https://www.wowhead.com/item=240898"
+      },
+      {
+        "id": 240864,
+        "name": "Masterful Amethyst",
+        "stats": "Increased Mastery",
+        "wowhead_url": "https://www.wowhead.com/item=240864"
+      },
+      {
+        "id": 240870,
+        "name": "Versatile Amethyst",
+        "stats": "Increased Mastery and Versatility",
+        "wowhead_url": "https://www.wowhead.com/item=240870"
+      },
+      {
+        "id": 240868,
+        "name": "Quick Amethyst",
+        "stats": "Increased Mastery and Haste",
+        "wowhead_url": "https://www.wowhead.com/item=240868"
+      },
+      {
+        "id": 240866,
+        "name": "Deadly Amethyst",
+        "stats": "Increased Mastery and Critical Strike",
+        "wowhead_url": "https://www.wowhead.com/item=240866"
+      }
+    ],
+    "meta": [
+      {
+        "id": 240983,
+        "name": "Indecipherable Eversong Diamond",
+        "stats": "Increased Primary Stat",
+        "wowhead_url": "https://www.wowhead.com/item=240983"
+      },
+      {
+        "id": 240967,
+        "name": "Powerful Eversong Diamond",
+        "stats": "Increased Primary Stat and Critical Effect per unique Midnight gem color",
+        "wowhead_url": "https://www.wowhead.com/item=240967"
+      },
+      {
+        "id": 240971,
+        "name": "Stoic Eversong Diamond",
+        "stats": "Increased Primary Stat and Movement Speed per unique Midnight gem color",
+        "wowhead_url": "https://www.wowhead.com/item=240971"
+      },
+      {
+        "id": 240969,
+        "name": "Telluric Eversong Diamond",
+        "stats": "Increased Primary Stat and Mana Pool per unique Midnight gem color",
+        "wowhead_url": "https://www.wowhead.com/item=240969"
+      }
     ]
   }
 }

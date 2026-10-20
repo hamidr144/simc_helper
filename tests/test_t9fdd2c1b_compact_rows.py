@@ -6,10 +6,11 @@ invariants that the compaction must not regress.
 """
 
 from pathlib import Path
+from static_assets import read_css, read_js, resp  # t_94a15fe3 split pins
 
 STATIC = Path(__file__).resolve().parents[1] / "src" / "web" / "static"
-CSS = (STATIC / "style.css").read_text()
-APP_JS = (STATIC / "app.js").read_text()
+CSS = read_css()
+APP_JS = read_js()
 APP_HTML = (STATIC / "app.html").read_text()
 
 
@@ -77,9 +78,10 @@ def test_run_bar_status_clamped_to_two_lines():
 
 
 def test_group_chrome_gaps_match_contract():
-    assert "#gear-grid {\n  display: grid;\n  gap: 12px;" in CSS
-    assert ".slot-group {\n  border-top: 1px solid var(--border-hairline);\n  padding-top: 6px;" in CSS
-    assert "grid-template-columns: 1fr;\n  gap: 0;" in CSS  # TG3-D: pitch 44 (spec row-gap <=8, max density for G1)
+    assert "#gear-grid {\n  display: grid;" in CSS  # MGE-2 A7: two doll columns (t_94a15fe3)
+    assert "gap: var(--space-3);" in CSS  # MGE-2 A8: 12->18 tokenized
+    assert ".slot-group {\n  border-top: 1px solid var(--border-hairline);\n  padding-top: var(--space-2);" in CSS
+    assert "gap: var(--space-3);" in CSS  # MGE-2 A8 tokenized the TG3-D 0-gap (t_94a15fe3)
     # footer merge: show-all + extra-socket share one grid line
     assert ".slot-group > .slot-show-all { grid-column: 1; }" in CSS
     socket_block = CSS.split(".slot-group .extra-socket-control {", 1)[1].split("}", 1)[0]

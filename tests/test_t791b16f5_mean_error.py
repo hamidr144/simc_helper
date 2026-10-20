@@ -8,9 +8,10 @@ Behavioural coverage rides tests/test_master_api.py (parse+merge) and
 tests/test_worker.py (stage-3 log in artifacts.zip).
 """
 from pathlib import Path
+from static_assets import read_css, read_js, resp  # t_94a15fe3 split pins
 
-RESULTS_JS = Path("src/web/static/results.js").read_text(encoding="utf-8")
-STYLE_CSS = Path("src/web/static/style.css").read_text(encoding="utf-8")
+RESULTS_JS = read_js()
+STYLE_CSS = read_css()
 
 
 def test_sidegrade_band_inputs_pinned():

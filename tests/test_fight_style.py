@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 from web.main import app
+from static_assets import read_css, read_js, resp  # t_94a15fe3 split pins
 
 client = TestClient(app)
 
@@ -86,6 +87,6 @@ def test_run_bar_shows_fighting_style_dropdown_with_two_choices():
 
 
 def test_app_js_sends_fight_style_and_regenerates_on_change():
-    js = client.get("/static/app.js").text
+    js = resp(read_js()).text
     assert "fight_style: document.getElementById('fight-style')?.value || 'single_boss'" in js
     assert "getElementById('fight-style').addEventListener('change', selectionChanged)" in js
