@@ -1,0 +1,47 @@
+/* css/tokens.css — split of style.css by t_94a15fe3 (gui-rewrite §3.1); source order preserved */
+
+/* --- Design System & CSS Variables --- */
+:root {
+  /* Surfaces — luminance stack (base < rail < panel < raised < hover) */
+  --surface-bg: #131415;
+  --surface-rail: #17181a;
+  --surface-panel: #1d1e20;
+  --surface-raised: #242629;
+  --surface-hover: #2c2e31;
+
+  /* Text — all >=4.5:1 on every surface they appear on (computed) */
+  --text-primary: #f3f4f6;
+  --text-secondary: #a8aebc;
+  --text-muted: #8b93a3;
+
+  /* Accent — split fill vs text roles (single #7170ff could not serve both) */
+  --accent: #5d5bf0;    /* FILL: buttons, progress bar; white label 4.98:1 AA */
+  --accent-hover: #5351d8;
+  --accent-active: #4a48c4;
+  --accent-text: #9d9cff;    /* TEXT on dark surfaces: links, focus rings, active step */
+  --accent-glow: rgba(157, 156, 255, 0.25); /* focus ring halo only */
+
+  /* Semantic */
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --danger: #f87171;
+
+  /* Item quality (Wowhead language, AA-adjusted for dark) */
+  --rarity-uncommon: #2ee66b;
+  --rarity-rare: #6f9ffd;
+  --rarity-epic: #b45cff;
+  --rarity-legendary: #ff9d45;
+
+  /* Borders */
+  --border-hairline: rgba(255, 255, 255, 0.10);
+  --border-control: #6b6f77; /* inputs/selects: 3.0:1 vs raised (WCAG 1.4.11) */
+
+  /* Typography — system stack, zero network (Google Fonts @import deleted) */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Spacing / radii / motion */
+  --space-1: 6px; --space-2: 12px; --space-3: 18px; --space-4: 24px; --space-5: 32px;
+  --radius-card: 12px; --radius-control: 6px;
+  --motion-fast: 120ms; --motion-base: 180ms;
+}
