@@ -204,6 +204,7 @@
   bottom: 14px;
   z-index: 5;
   display: flex;
+  flex-wrap: wrap; /* RB1 (t_754e1374): wrap before content clips <1510px; item #9 = never hide */
   align-items: center;
   gap: var(--space-3); /* MGE-2 §7 (A8): tokenized */
   margin-top: 26px;
@@ -290,6 +291,10 @@
 
 @media (max-width: 760px) {.run-bar button { width: 100%; }}
 
+/* RB1 (t_754e1374): sheet band only — the summary's nowrap + ch-reserve min-widths
+   made its min-content ~660px and overflowed <=480px viewports; let it reflow. */
+@media (max-width: 760px) {.run-bar-summary { flex-wrap: wrap; white-space: normal; }}
+
 /* Season data chip */
 .season-chip {
   font-size: 11px;
@@ -313,6 +318,8 @@
 
 .status-warn .status-dot { background: var(--warn); box-shadow: 0 0 8px rgba(251, 191, 36, 0.7); }
 
-@media (min-width: 1300px) {/* §3.2: run bar stays a single line on desktop; long aggregate status      text shrinks inside its flex slot instead (min-width:0 above). */.run-bar { flex-wrap: nowrap; }}
+/* RB1 (t_754e1374): the old @media(min-width:1300px) nowrap override clipped
+   Run CTA below ~1510px; wrap now handles the desktop band and the
+   workflow-status min-width:0 shrink rule above still absorbs long status text. */
 
 .rail-version { color: var(--text-muted); font: 12px var(--font-mono); }
