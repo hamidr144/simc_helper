@@ -106,3 +106,14 @@ export function foldChips(host, max) {
 }
 
 export { esc };
+
+/* Contract §toast: shared transient status pill (results apply flow reuses
+   .toast from tokens.css). role=status, auto-dismiss after 5 s. */
+export function toast(text) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.setAttribute('role', 'status');
+  el.textContent = text;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 5000);
+}

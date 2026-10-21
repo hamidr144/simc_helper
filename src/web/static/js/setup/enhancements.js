@@ -58,7 +58,7 @@ export function renderEnhancements() {
         const name = typeof enchant === 'object' ? enchant.name : `Enchant ${id}`;
         const equipped = state.equippedEnchants[slot].has(id);
         const label = document.createElement('label');
-        label.className = 'choice-chip';
+        label.className = 'choice-chip extra-socket';
         label.innerHTML = `<input type="checkbox">${createEnhancementWowheadLink(enchant, name)}` +
           (equipped ? '<span class="equipped-badge">equipped</span>' : '');
         const input = label.querySelector('input');

@@ -53,9 +53,6 @@ export function loadDrafts() {
   } catch { /* storage unavailable: behave as no draft */ }
   return out.sort((a, b) => b.savedAt - a.savedAt);
 }
-export function loadDraft() {
-  return loadDrafts()[0] || null;
-}
 
 /* Restore explicit user state on top of a re-initialized selection layer:
    equipped pre-checks run first (same path as a fresh import), then the

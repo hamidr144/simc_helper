@@ -274,7 +274,7 @@ console.log(JSON.stringify({
   expectedKeys: SLOT_SECTIONS.map((s) => s.key),
   offHandCount: ohStart < 0 ? null
     : `${(ohBlock.match(/class="\w[^"]*vrow/g) || []).length}/${(ohBlock.match(/class="\w[^"]*vrow/g) || []).length} rows;` +
-      ` ${(ohBlock.match(/class="cnt num">(\d+) candidates/) || [])[0] || 'no-count'}`,
+      ` ${(ohBlock.match(/class="cnt num">(\d+) candidates/) || [])[1] ?? 'no-count'}`,
 }));
 """
 

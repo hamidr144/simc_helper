@@ -89,6 +89,6 @@ def test_cache_bust_token_everywhere():
     for page in PAGES:
         html = Path(f"src/web/static/{page}").read_text()
         # RB1 (t_754e1374) bumped only app.html to rb1-1; other pages stay guir-3.
-        token = "20261020-rb1-1" if page == "app.html" else "20261020-guir-3"
+        token = "red3-1"
         assert token in html, page
         assert "20261017-enh-chips" not in html, page

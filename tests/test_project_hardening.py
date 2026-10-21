@@ -96,7 +96,7 @@ def test_frontend_escapes_dynamic_values_before_html_insertion():
     assert "function escapeHtml" in js
     assert "escapeHtml(state.parsedData.char_name)" in js
     assert "escapeHtml(name)" in js
-    assert "escapeHtml(label.replace" in js
+    assert "esc(d.name)" in js  # RED-3: shared item-row component escapes names
     assert "pushLogLines" in js  # t_2ab8f3be: capped buffer + rAF render
 
 

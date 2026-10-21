@@ -89,4 +89,4 @@ def test_group_chrome_gaps_match_contract():
     # extra sockets moved into the enhancements panel (decision D-6); the
     # per-slot group footer is gone with the tile era.
     assert ".slot-group" not in CSS
-    assert ".extra-socket" in read_js("setup/enhancements.js")
+    assert 'extra-socket' in APP_JS

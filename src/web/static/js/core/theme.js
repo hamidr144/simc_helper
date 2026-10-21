@@ -8,7 +8,10 @@
 // media emulation fires no change event, M6 note).
 let pref = 'system';
 try { pref = localStorage.getItem('simc-theme') || 'system'; } catch { /* System */ }
-const mq = matchMedia('(prefers-color-scheme: dark)');
+// headless harnesses have no matchMedia: degrade to a light-OS stub.
+const mq = typeof matchMedia === 'function'
+  ? matchMedia('(prefers-color-scheme: dark)')
+  : { matches: false, addEventListener() {}, removeEventListener() {} };
 let osDark = mq.matches;
 const effective = () => (pref === 'system' ? (osDark ? 'dark' : 'light') : pref);
 

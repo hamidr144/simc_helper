@@ -2,7 +2,7 @@
 
 import { state } from './state.js';
 
-import { season, seasonAscension, seasonTracks } from './season.js';
+import { isElevatedLevel, season, seasonAscension, seasonTracks } from './season.js';
 
 export function parseItemParams(item) {
   return Object.fromEntries(
@@ -26,7 +26,20 @@ export function normalizedEquippedItems(slot) {
 export function isCraftedItem(item) {
   return item.includes('crafting_quality=') || item.includes('crafted_stats=');
 }
-export function isVoidforgeEligibleSlot(slot) {
+/* GSE-2 t_0769a998: crafting_quality is the addon's raw craft tier (Blizzard
+   GetItemCraftedQualityByItemInfo), a five-tier scale 0-5; out-of-range
+   integers stay raw. Never infer a tier from crafted_stats or ilvl. */
+export function craftedBadgeHtml(item) {
+  const raw = parseItemParams(item).crafting_quality;
+  if (/^\d+$/.test(raw || '')) {
+    const n = Number(raw);
+    const label = n <= 5 ? `Crafted · Quality ${n}/5` : `Crafted · Grade ${n}`;
+    return `${label} (from the addon export)`;
+  }
+  return 'Crafted · no grade (the addon export did not include a crafting quality)';
+}
+
+function isVoidforgeEligibleSlot(slot) {
   const base = String(slot || '').split('_')[0];
   const slots = new Set((seasonAscension().eligible_slots || []).map(s => String(s).split('_')[0]));
   return slots.has(base);
@@ -151,7 +164,7 @@ export function ranksForItem(slot, item) {
   }
   const top = exportRanks[exportRanks.length - 1];
   const ascended = isAlreadyVoidforgedItem(slot, item, state.parsedData?.item_names?.[item]);
-  if (!ascended && isVoidforgeEligibleSlot(slot)) {
+  if (!ascended && isVoidforgeEligibleSlot(slot) && !isElevatedLevel(Number(parseItemParams(item).ilevel) || null)) {
     rows.push({ rank: top.rank, track: null, ilvl: top.level, voidforged: true, label: `${seasonAscension().name || 'Ascendant'}` });
   }
   return rows;
@@ -159,80 +172,11 @@ export function ranksForItem(slot, item) {
 
 /* §7: off-hand hides when the EQUIPPED main hand is two-handed (W.two_handed
    arrives async via hydrateWowheadUpgrades; renderGear re-runs after it). */
-export function equippedTwoHanded() {
+function equippedTwoHanded() {
   const main = (state.parsedData?.equipped_gear || {}).main_hand || '';
   return Boolean(main) && state.twoHandedItems.has(main);
 }
 
-
-/* ---- RED-3 design model (contract §9.2): the ONE slot list. Order, labels,
-   ring×2/trinket×2 expansion and the 2H off-hand hide live only here; render
-   loops iterate SLOT_SECTIONS. `slot` = the payload-side key (payload.js
-   frozen: finger/trinket pools and selectedItems keys unchanged); `equipKeys`
-   = equipped_gear keys whose items render as equipped cards in the section. */
-export const SLOT_SECTIONS = [
-  { key: 'head', label: 'Head', slot: 'head', equipKeys: ['head'] },
-  { key: 'neck', label: 'Neck', slot: 'neck', equipKeys: ['neck'] },
-  { key: 'shoulder', label: 'Shoulders', slot: 'shoulder', equipKeys: ['shoulder'] },
-  { key: 'back', label: 'Back', slot: 'back', equipKeys: ['back'] },
-  { key: 'chest', label: 'Chest', slot: 'chest', equipKeys: ['chest'] },
-  { key: 'wrist', label: 'Wrist', slot: 'wrist', equipKeys: ['wrist'] },
-  { key: 'hands', label: 'Hands', slot: 'hands', equipKeys: ['hands'] },
-  { key: 'waist', label: 'Waist', slot: 'waist', equipKeys: ['waist'] },
-  { key: 'legs', label: 'Legs', slot: 'legs', equipKeys: ['legs'] },
-  { key: 'feet', label: 'Feet', slot: 'feet', equipKeys: ['feet'] },
-  { key: 'finger1', label: 'Ring 1', slot: 'finger', equipKeys: ['finger1'] },
-  { key: 'finger2', label: 'Ring 2', slot: 'finger', equipKeys: ['finger2'] },
-  { key: 'trinket', label: 'Trinkets', slot: 'trinket', equipKeys: ['trinket1', 'trinket2'] },
-  { key: 'main_hand', label: 'Main Hand', slot: 'main_hand', equipKeys: ['main_hand'] },
-  { key: 'off_hand', label: 'Off Hand', slot: 'off_hand', equipKeys: ['off_hand'],
-    // data-driven §7: a two-handed main hand occupies both weapon slots.
-    hideWhen: () => equippedTwoHanded() },
-];
-
-/* §7 R-C3: B.quality map — number (tooltip batch) or name fallback; class +
-   grade word resolve through here, never per item/slot. */
-const QUALITY = {
-  common: { cls: 'common', word: 'Common' },
-  uncommon: { cls: 'uncommon', word: 'Uncommon' },
-  rare: { cls: 'rare', word: 'Rare' },
-  epic: { cls: 'epic', word: 'Epic' },
-  legendary: { cls: 'epic', word: 'Legendary' },
-};
-const QUALITY_BY_NUMBER = { 0: 'common', 1: 'common', 2: 'uncommon', 3: 'rare', 4: 'epic', 5: 'legendary', 6: 'epic', 7: 'artifact' };
-export function qualityOf(quality) {
-  const name = String(QUALITY_BY_NUMBER[quality] ?? quality ?? '').toLowerCase();
-  return QUALITY[name] || { cls: 'common', word: name ? name[0].toUpperCase() + name.slice(1) : 'Common' };
-}
-
-/* R-C3 rank/variant expansion (contract §3): base row per item, plus one row
-   per export-ladder upgrade rank (upgrade_levels comment, authoritative),
-   plus a Voidforged twin when the item sits at the top rank of an eligible
-   slot. Season-ladder items keep their single inferred row (the old grade
-   popover is deleted; expanding 6 ranks × every item would flood the list —
-   shortcut: ranks beyond the export ladder stay popover-free, add the rows
-   here when an engine field makes them real candidates). */
-export function ranksForItem(slot, item) {
-  const rows = [{ rank: null, track: null, ilvl: null, voidforged: false }];
-  const exportRanks = exportRanksFor(slot, item);
-  if (!exportRanks) return rows;
-  for (const rank of exportRanks.slice(1)) {
-    rows.push({ rank: rank.rank, track: null, ilvl: rank.level, voidforged: false, label: rank.label });
-  }
-  const top = exportRanks[exportRanks.length - 1];
-  const ascended = isAlreadyVoidforgedItem(slot, item, state.parsedData?.item_names?.[item]);
-  if (!ascended && isVoidforgeEligibleSlot(slot)) {
-    rows.push({ rank: top.rank, track: null, ilvl: top.level, voidforged: true, label: `${seasonAscension().name || 'Ascendant'}` });
-  }
-  return rows;
-}
-
-/* §7: off-hand hides when the EQUIPPED main hand is two-handed (W.two_handed
-   arrives async via hydrateWowheadUpgrades; renderGear re-runs after it). */
-export function equippedTwoHanded() {
-  const main = (state.parsedData?.equipped_gear || {}).main_hand || '';
-  return Boolean(main) && state.twoHandedItems.has(main);
-}
 
 
 export function twoHandedConflict() {

@@ -158,7 +158,7 @@ export function renderGear() {
       ${eqBlock}
       <div class="rows">${rows}</div></section>`;
   }).join('');
-  window.scrollTo(0, y);
+  if (window.scrollTo) window.scrollTo(0, y);
   wireSections(list);
   renderSlotConflict();
 }

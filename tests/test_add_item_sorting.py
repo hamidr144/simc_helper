@@ -198,7 +198,7 @@ def _static(name):
 def test_app_js_wires_sorting():
     js = read_js()
     assert "function sortItemsForSlot(slot, items)" in js
-    assert "for (const item of sortItemsForSlot(slot, items))" in js
+    assert "const items = sortItemsForSlot(slot, bySlot[slot] || []);" in js
     assert "slotSorts[slot] = sortSelect.value;" in js
     assert "async function ensureStatScores(slot, items, selectEl)" in js
     assert "api/wowhead/tooltips/batch" in js
@@ -211,26 +211,26 @@ def test_app_js_wires_sorting():
 def test_app_js_wires_add_item():
     js = read_js()
     assert "function wireSlotAddForm(group, slot)" in js
-    assert "wireSlotAddForm(group, slot);" in js
+    assert "wireSlotAddForm(section, slot);" in js
     assert "function commitAddedItem(slot, itemId, preview)" in js
     assert "function removeAddedItem(slot, item)" in js
     assert "api/wowhead/tooltip?item=" in js
     # Added items land in the same state generation reads from.
     assert "parsedData.items_by_slot[slot]" in js
     assert "selectedItems[slot].add(key)" in js
-    assert "added-badge" in js
+    assert ".row-x" in js
 
 
 def test_style_css_defines_step4_classes():
     css = read_css()
     for selector in (".slot-sort-select", ".slot-add-form", ".slot-add-input",
                      "button.slot-add-button", ".slot-add-preview", ".slot-add-preview.is-error",
-                     ".added-badge", "button.slot-remove-added"):
+                     ".addeditem", ".row-x"):
         assert selector in css
 
 
 def test_app_html_cache_busted_step4():
     html = _static("app.html")
     # t_94a15fe3 (MGE2 split): cache-bust now rides the token sheet + boot entry.
-    assert "css/tokens.css?v=20261020-rb1-1" in html
-    assert "js/pages/setup.js?v=20261020-rb1-1" in html
+    assert "css/tokens.css?v=red3-1" in html
+    assert "js/pages/setup.js?v=red3-1" in html

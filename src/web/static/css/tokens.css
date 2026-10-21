@@ -479,3 +479,20 @@ html[data-pal=light]{--gold:#846500;--eq-bg:var(--surface)}          /* C-2 (was
 .run-copy:hover{color:var(--acc-text);border-color:var(--acc)}
 .gear-conflict{margin:2px 20px 0}
 .armory-controls{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+
+/* RED-3 import-surface controls (armory + runbar selects live in the v11 top
+   bar: keep v11 control language — pill select, ghost button, field row) */
+.armory-controls{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.armory-field{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}
+.armory-field .armory-input{background:var(--sunk);border:1px solid var(--line2);border-radius:var(--r-ctl);
+  color:var(--ink);padding:7px 10px;font:inherit;font-size:12.5px;min-width:0}
+.armory-field .armory-region-select{background:var(--sunk);border:1px solid var(--line2);border-radius:var(--r-ctl);
+  color:var(--ink);padding:7px 8px;font:inherit;font-size:12.5px}
+.armory-field .btn{border:1px solid var(--line2);background:var(--surface);color:var(--ink);
+  border-radius:var(--r-ctl);padding:7px 12px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+.armory-field .btn:hover{border-color:var(--acc);color:var(--acc-text)}
+.armory-hint{color:var(--ink3);font-size:11.5px}
+.fight-style-select{background:var(--sunk);border:1px solid var(--line2);border-radius:var(--r-ctl);
+  color:var(--ink);padding:6px 8px;font:inherit;font-size:12.5px;max-width:260px}
+.fight-style-select:hover{border-color:var(--acc)}
+.gear-conflict{margin:2px 20px 0}

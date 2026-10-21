@@ -33,4 +33,6 @@
 .slot-add-preview{display:block;margin:8px 20px 0;max-width:560px;padding:var(--gap-sm) var(--gap-md);
   border:1px solid var(--line2);border-radius:var(--r-ctl);background:var(--sunk);font-size:12.5px;color:var(--ink)}
 .slot-add-preview[hidden]{display:none}
+.slot-add-preview.is-error{border-color:var(--dn);color:var(--dn)}
+.slot-add-preview.is-ok{border-color:var(--up);color:var(--up)}
 .slot-add-preview .slot-add-meta{color:var(--ink3);font-variant-numeric:tabular-nums}
