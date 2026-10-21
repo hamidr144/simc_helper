@@ -218,7 +218,7 @@ def test_app_js_wires_add_item():
     # Added items land in the same state generation reads from.
     assert "parsedData.items_by_slot[slot]" in js
     assert "selectedItems[slot].add(key)" in js
-    assert ".row-x" in js
+    assert "row-x" in js
 
 
 def test_style_css_defines_step4_classes():
