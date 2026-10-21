@@ -16,6 +16,7 @@ export const state = {
   slotLocks: {},            // RED-3 §3: client-only section locks; survives re-init, persists with draft
   addedItems: new Map(),
   twoHandedItems: new Set(),
+  wowheadQualities: {},       // t_e906dc02: item string -> Wowhead quality number (conflict.js hydration)
   generatedInput: null,
   generationTimer: null,
   runTimer: null,
@@ -32,6 +33,7 @@ export const state = {
 export function initializeSelections() {
   state.selectedItems = {};
   state.twoHandedItems = new Set();
+  state.wowheadQualities = {};
   state.selectedEnchants = {};
   state.selectedGems = new Set();
   state.equippedEnchants = {};

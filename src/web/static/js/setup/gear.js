@@ -10,7 +10,7 @@ import { state } from '../core/state.js';
 
 import { escapeHtml as esc } from '../core/dom.js';
 
-import { SLOT_SECTIONS, craftedBadgeHtml, isCraftedItem, itemLevelFromLabel, normalizedEquippedItems, parseItemParams, ranksForItem } from '../core/items.js';
+import { SLOT_SECTIONS, craftedBadgeHtml, isCraftedItem, itemLevelFromLabel, normalizedEquippedItems, parseItemParams, ranksForItem, resolveRowQuality } from '../core/items.js';
 
 import { removeAddedItem, wireSlotAddForm } from './add-item.js';
 
@@ -89,7 +89,7 @@ export function renderGear() {
       const card = itemRow('eqc', {
         id: params.id,
         name: String(label).replace(/\s*\(\d+\)/, ''),
-        quality: params.quality,
+        quality: resolveRowQuality(item),  // t_e906dc02: one resolver, never params alone (armory strings carry no quality=)
         ilvl: Number(params.ilevel) || itemLevelFromLabel(label),
         slotLabel: section.label,
         slotTag: section.equipKeys.length > 1 ? `slot ${index + 1}` : '',
@@ -120,7 +120,7 @@ export function renderGear() {
         return itemRow('vrow', {
           id: params.id,
           name: cleanName + suffix,
-          quality: variant.voidforged ? 'epic' : params.quality,
+          quality: variant.voidforged ? 'epic' : resolveRowQuality(item),
           ilvl: level,
           sel: variantMatches(slot, item, variant.rank, variant.voidforged),
           disabled: locked,

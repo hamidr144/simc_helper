@@ -29,6 +29,12 @@ export async function hydrateWowheadUpgrades(itemsBySlot) {
     for (const items of Object.values(data.two_handed || {})) {
       for (const item of items) state.twoHandedItems.add(item);
     }
+    // t_e906dc02: grade numbers for resolveRowQuality.  The user_selected
+    // guard below has no analogue here — grade words carry no user-owned
+    // state, and hydration deliberately outranks the Armory payload.
+    for (const byItem of Object.values(data.qualities || {})) {
+      for (const [item, quality] of Object.entries(byItem)) state.wowheadQualities[item] = quality;
+    }
     for (const [slot, itemUpgrades] of Object.entries(data.gear_upgrades || {})) {
       for (const [item, upgrade] of Object.entries(itemUpgrades)) {
         if (state.parsedData?.item_upgrades?.[item]) continue;

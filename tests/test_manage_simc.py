@@ -10,8 +10,11 @@ def test_get_clean_env_replaces_orig_path():
     env["LD_LIBRARY_PATH"] = "/bad/path"
     # Ensure sys.prefix is in PATH to test removal
     env["PATH"] = os.pathsep.join([sys.prefix, "/usr/bin"])
-    # Patch os.environ temporarily
-    original_environ = os.environ
+    # Patch os.environ temporarily. NOTE: must be a copy() — os.environ is a
+    # singleton, so aliasing it here made the finally-restore update the
+    # already-cleared environ, leaking an EMPTY os.environ into every later
+    # test in the process (silent skips of all shutil.which-based probes).
+    original_environ = os.environ.copy()
     try:
         os.environ.clear()
         os.environ.update(env)
@@ -28,7 +31,7 @@ def test_get_clean_env_removes_without_orig():
     env["DYLD_LIBRARY_PATH"] = "/bad/dyld"
     # Ensure sys.prefix not in PATH
     env["PATH"] = "/usr/bin"
-    original_environ = os.environ
+    original_environ = os.environ.copy()  # copy, not alias — see note above
     try:
         os.environ.clear()
         os.environ.update(env)
