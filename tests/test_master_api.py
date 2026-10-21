@@ -63,6 +63,68 @@ def test_parse_wowhead_upgrade_extracts_track_rank_and_item_level():
     assert parse_wowhead_upgrade(xml) == {"track": "myth", "rank": 6, "item_level": 289}
 
 
+# --- t_9b710d75: bonus_id-first track resolution (ruling 1916 on t_58a8fcd8) ---
+
+CF_HERO6_XML = os.path.join(os.path.dirname(__file__), "fixtures", "wowhead_item_271460_hero6.xml")
+
+
+def _cf_hero6_xml():
+    # Live Wowhead answer for item=271460?xml=&bonus=6652:13440:12846 — the
+    # ilvl ladder match (Hero 6/6) that is wrong for this imported item.
+    with open(CF_HERO6_XML, encoding="utf-8") as fh:
+        return fh.read()
+
+
+def test_upgrade_bonus_track_anchors_match_real_imports():
+    from src.core.upgrade_data import bonus_track
+    # 12846: leader ruling (t_58a8fcd8 comment 1916); 12852/12854: the 328 and
+    # 334 anchors in tests/fixtures/armory/armory_model_hamidriel_eu.json.
+    assert bonus_track(12846) == {"season": "midnight-s2", "track": "myth", "rank": 2, "item_level": 321}
+    assert bonus_track(12852) == {"season": "midnight-s2", "track": "myth", "rank": 4, "item_level": 328}
+    assert bonus_track(12854) == {"season": "midnight-s2", "track": "myth", "rank": 6, "item_level": 334}
+    assert bonus_track(6652) is None  # present on hero AND myth items: never a track signal
+
+
+def test_parse_wowhead_upgrade_trusts_known_bonus_over_ambiguous_ilvl():
+    xml = _cf_hero6_xml()
+    # Ladder fallback (unchanged): ilvl 321 sits in two ladders, Wowhead answers hero.
+    assert parse_wowhead_upgrade(xml) == {"track": "hero", "rank": 6, "item_level": 321}
+    # The item's own Blizzard bonus 12846 = myth rank 2 wins and unlocks the
+    # myth-ladder rows (324/328/331/334) the hero 6/6 answer suppressed.
+    assert parse_wowhead_upgrade(xml, ["6652", "13440", "12846"]) == {"track": "myth", "rank": 2, "item_level": 321}
+
+
+def test_parse_wowhead_upgrade_no_bonus_match_falls_back_to_ladder():
+    xml = _cf_hero6_xml()
+    ladder = {"track": "hero", "rank": 6, "item_level": 321}
+    assert parse_wowhead_upgrade(xml, []) == ladder
+    assert parse_wowhead_upgrade(xml, ["6652", "13440", "13694"]) == ladder  # no-bonus-match item
+    # Known id whose ladder ilvl contradicts the XML (12854 = myth 6 at 334)
+    # does not override — cross-season id collision safety.
+    assert parse_wowhead_upgrade(xml, ["12854"]) == ladder
+
+
+def test_wowhead_upgrades_endpoint_prefers_item_bonus_id(monkeypatch):
+    xml = _cf_hero6_xml()
+
+    class _WowheadStub:
+        def __init__(self, *args, **kwargs):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            return False
+        async def get(self, url):
+            return httpx.Response(200, text=xml, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx, "AsyncClient", _WowheadStub)
+    item = "id=271460,bonus_id=6652/13440/12846,ilevel=321"
+    response = client.post("/api/wowhead-upgrades", json={"items_by_slot": {"back": [item]}})
+    assert response.status_code == 200
+    # Response shape unchanged; only track/rank resolution changed.
+    assert response.json()["gear_upgrades"] == {"back": {item: {"track": "myth", "rank": 2, "item_level": 321}}}
+
+
 def test_parse_wowhead_icon_name_accepts_only_safe_icon_names():
     xml = '<wowhead><item><icon displayId="0">inv_helmet_204_plate_raidpaladin</icon></item></wowhead>'
     assert parse_wowhead_icon_name(xml) == "inv_helmet_204_plate_raidpaladin"

@@ -1199,7 +1199,15 @@ def wowhead_xml_url(item: str) -> Optional[str]:
     return f"https://www.wowhead.com/item={parsed['id']}?{query}"
 
 
-def parse_wowhead_upgrade(xml_text: str) -> Optional[Dict[str, Any]]:
+def parse_wowhead_upgrade(xml_text: str, bonuses: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+    """{track, rank, item_level} for a Wowhead item XML.
+
+    t_9b710d75 ruling: when the requested item string carried a Blizzard
+    upgrade bonus we know (``upgrade_bonuses``), that is the authoritative
+    track signal — the tooltip matches ilvl first, which is wrong at ilvls
+    present in two ladders (321 = Hero 6/6 *and* Myth 2/6, Wowhead answers
+    hero).  The tooltip answer is the fallback, unchanged.
+    """
     try:
         root = ElementTree.fromstring(xml_text)
     except ElementTree.ParseError:
@@ -1207,17 +1215,25 @@ def parse_wowhead_upgrade(xml_text: str) -> Optional[Dict[str, Any]]:
     item = root.find("item")
     if item is None:
         return None
+    raw_level = item.findtext("level")
+    item_level = int(raw_level) if raw_level and raw_level.isdigit() else None
+    from src.core.upgrade_data import bonus_track
+    for bonus in bonuses or ():
+        hit = bonus_track(int(bonus)) if bonus.isdigit() else None
+        # ilvl guard: a known id whose ladder level contradicts the XML must
+        # not override (cross-season id collision safety).
+        if hit and (item_level is None or hit["item_level"] == item_level):
+            return {"track": hit["track"], "rank": int(hit["rank"]), "item_level": item_level}
     tooltip = item.findtext("htmlTooltip") or ""
     text = re.sub(r"<[^>]+>", " ", tooltip)
     text = re.sub(r"\s+", " ", text)
     match = re.search(r"Upgrade Level:\s*(Adventurer|Veteran|Champion|Hero|Myth)\s*([1-9]\d*)/6", text)
     if not match:
         return None
-    item_level = item.findtext("level")
     return {
         "track": MIDNIGHT_WOWHEAD_TRACKS[match.group(1)],
         "rank": int(match.group(2)),
-        "item_level": int(item_level) if item_level and item_level.isdigit() else None,
+        "item_level": item_level,
     }
 
 
@@ -1743,7 +1759,8 @@ async def fetch_wowhead_upgrade(item: str) -> Optional[Dict[str, Any]]:
     async with httpx.AsyncClient(timeout=8.0, follow_redirects=True, headers={"User-Agent": "simc-helper/1.0"}) as client:
         response = await client.get(url)
         response.raise_for_status()
-    upgrade = parse_wowhead_upgrade(response.text)
+    identity = parse_simc_item_identity(item)
+    upgrade = parse_wowhead_upgrade(response.text, (identity or {}).get("bonuses"))
     wowhead_upgrade_cache[url] = upgrade
     wowhead_invslot_cache[url] = parse_wowhead_inventory_slot(response.text)
     wowhead_quality_cache[url] = parse_wowhead_quality(response.text)

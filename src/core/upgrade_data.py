@@ -15,6 +15,11 @@ Sources (verified 2026-10-13):
   Venomstone item 280562, cost 10, necklaces added):
   https://www.wowhead.com/guide/midnight/bonus-rolls-item-upgrades
 - Crest currency ids: https://github.com/simulationcraft/simc-addon extras.lua
+- S2 upgrade bonus ids (``upgrade_bonuses``; 12846 = Myth 2/6 ruling): bonus_list
+  of real Armory imports (t_58a8fcd8 leader ruling 1916; 328/334 anchors from
+  tests/fixtures/armory/armory_model_hamidriel_eu.json).  shortcut: only ids
+  observed in real imports are mapped; map more (hero track, Myth 1/3/5) as
+  evidence arrives — unknown ids fall back to ilvl-ladder matching.
 """
 
 from __future__ import annotations
@@ -139,6 +144,28 @@ def is_elevated(season: Dict[str, Any], level: Optional[int]) -> bool:
         return int(level) in set(season.get("elevated_ilvls") or [])
     except (TypeError, ValueError):
         return False
+
+
+def bonus_track(bonus_id: int) -> Optional[Dict[str, Any]]:
+    """Resolve a Blizzard ``bonus_list`` upgrade id to its track/rank.
+
+    t_58a8fcd8 ruling: the imported item string's own upgrade bonus is the
+    authoritative track signal at ilvls present in two ladders (321 = hero 6/6
+    *and* myth 2/6); the ilvl ladder is the fallback.  Returns
+    ``{"season", "track", "rank", "item_level"}`` or None when no season
+    maps the id (crafted/GA/enchant bonuses land here and fall through).
+    """
+    key = str(int(bonus_id))
+    for season in load_upgrade_seasons().get("seasons", []):
+        hit = (season.get("upgrade_bonuses") or {}).get(key)
+        if hit:
+            return {
+                "season": season.get("id"),
+                "track": hit["track"],
+                "rank": hit["rank"],
+                "item_level": track_level(season, hit["track"], hit["rank"]),
+            }
+    return None
 
 
 def season_payload() -> Dict[str, Any]:
