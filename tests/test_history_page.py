@@ -76,6 +76,17 @@ def test_history_page_served_when_auth_disabled():
     response = TestClient(app).get("/history")
     assert response.status_code == 200
     assert "history.js" in response.text
+    css = (os.path.dirname(__file__) + "/../src/web/static/css/tokens.css")
+    css_text = open(css, encoding="utf-8").read()
+    history_js = (os.path.dirname(__file__) + "/../src/web/static/js/pages/history.js")
+    js_text = open(history_js, encoding="utf-8").read()
+    assert "@media(max-width:480px)" in css_text
+    assert ".history-table thead{display:none}" in css_text
+    assert ".history-table td::before{content:attr(data-label)" in css_text
+    assert all(f'data-label="{label}"' in js_text for label in (
+        "When", "Character", "Spec", "Fight", "Top DPS", "Status", "Report", "Run"
+    ))
+    assert "@media(min-width:481px){.history-table-card{overflow-x:visible}}" in css_text
 
 
 def test_history_page_redirects_to_login_when_auth_on(monkeypatch):

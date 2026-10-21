@@ -493,4 +493,13 @@ html[data-pal=light]{--gold:#846500;--eq-bg:var(--surface)}          /* C-2 (was
 .fight-style-select{background:var(--sunk);border:1px solid var(--line2);border-radius:var(--r-ctl);
   color:var(--ink);padding:6px 8px;font:inherit;font-size:12.5px;max-width:260px}
 .fight-style-select:hover{border-color:var(--acc)}
+@media(max-width:480px){
+  .history-table,.history-table tbody,.history-table tr,.history-table td{display:block;width:auto}
+  .history-table thead{display:none}
+  .history-table tr{border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--surface);margin-bottom:10px;padding:6px 12px}
+  .history-table td{display:flex;align-items:center;justify-content:space-between;gap:12px;border:0;padding:5px 0}
+  .history-table td::before{content:attr(data-label);color:var(--ink3);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  .history-table-card{min-width:0;overflow-x:hidden}
+}
+@media(min-width:481px){.history-table-card{overflow-x:visible}}
 .gear-conflict{margin:2px 20px 0}
