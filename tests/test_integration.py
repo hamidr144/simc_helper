@@ -286,8 +286,11 @@ class TestHealthEndpointE2E:
 class TestConfigAndStateE2E:
     """End-to-end: config and state endpoints."""
 
-    def test_get_config_returns_json(self, client):
+    def test_get_config_returns_json(self, client, monkeypatch, tmp_path):
         """GET /api/config should return config.json content."""
+        # t_a856571d: empty dir -> default config, keeps the quality warm
+        # (cached Wowhead XML fetch) offline here.
+        monkeypatch.chdir(tmp_path)
         response = client.get("/api/config")
         assert response.status_code == 200
         data = response.json()

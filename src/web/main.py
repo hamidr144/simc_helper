@@ -2027,9 +2027,74 @@ async def get_config():
 
     **Tags:** System
     **Note:** Intended for internal use by the web UI; not a typed API response.
+    **Note:** t_a856571d: enchant and gem records carry an additive
+    ``quality`` integer (Wowhead quality number, null when unresolvable).
     """
     from src.cli.generate_input import load_config
-    return load_config("config.json")
+    return await attach_catalog_quality(load_config("config.json"))
+
+
+def catalog_quality_item(record: Dict[str, Any]) -> str:
+    """SimC-style item string for a catalog record's Wowhead quality lookup.
+
+    The record's own wowhead_url wins: live enchant records carry a SPELL
+    id whose item page differs from the enchant's item (id=7989 vs
+    item=243979); gems and the seed catalog already use the item id, so they
+    fall back to ``id``.
+    """
+    match = re.search(r"item=(\d+)", record.get("wowhead_url") or "")
+    return f"id={match.group(1)}" if match else f"id={record.get('id', '')}"
+
+
+async def attach_catalog_quality(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Add each enchant/gem catalog record's real WoW quality (t_a856571d).
+
+    Purely additive and derived in code: config.json is gitignored, so
+    quality rides the EXISTING cached Wowhead XML path
+    (fetch_wowhead_upgrade -> parse_wowhead_quality -> wowhead_quality_cache)
+    — no new fetch, import or scrape. Bounded by design: one fetch per unique
+    cache miss, and a resolved lookup caches its answer (even None), so a
+    warm process fetches zero. Fail-soft: an upstream error leaves that
+    record's quality None, the endpoint still answers 200.
+
+    shortcut: quality attach may be None until the Wowhead cache warms;
+    upgrade to a precomputed/permanent catalog quality map if the warm
+    latency or Wowhead rate-limit ever blocks first paint — measure, don't
+    prebuild.
+    """
+    items: Dict[str, str] = {}
+    records: Dict[str, List[Dict[str, Any]]] = {}
+    for section in ("enchantments", "gems"):
+        slots = config.get(section)
+        if not isinstance(slots, dict):
+            continue
+        for entries in slots.values():
+            if not isinstance(entries, list):
+                continue
+            for record in entries:
+                if not isinstance(record, dict):
+                    continue
+                url = wowhead_xml_url(catalog_quality_item(record))
+                if not url:
+                    record["quality"] = None  # unresolvable source: still carries the key
+                    continue
+                items.setdefault(url, catalog_quality_item(record))
+                records.setdefault(url, []).append(record)
+
+    async def warm(url: str, item: str) -> None:
+        if url in wowhead_quality_cache:
+            return
+        try:
+            await fetch_wowhead_upgrade(item)
+        except httpx.HTTPError as exc:
+            logger.warning("Wowhead quality lookup failed for %s: %s", url, exc)
+
+    await asyncio.gather(*(warm(url, item) for url, item in items.items()))
+    for url, section_records in records.items():
+        quality = wowhead_quality_cache.get(url)
+        for record in section_records:
+            record["quality"] = quality
+    return config
 
 @app.get("/api/version", tags=["System"])
 async def get_version():
