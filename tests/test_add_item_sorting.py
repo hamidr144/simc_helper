@@ -10,6 +10,7 @@ Covers:
 
 import json
 import os
+import re
 import sys
 
 import pytest
@@ -234,3 +235,15 @@ def test_app_html_cache_busted_step4():
     # t_94a15fe3 (MGE2 split): cache-bust now rides the token sheet + boot entry.
     assert "css/tokens.css?v=red3-2" in html
     assert "js/pages/setup.js?v=red3-3" in html  # t_1699829f re-pin (was red3-2)
+
+
+def test_setup_circular_import_matches_entry_token():
+    # t_26c5ddef: paste.js's circular import must resolve to the SAME tokenized
+    # URL app.html loads, or the browser serves two pages/setup.js instances
+    # (double wire() -> double POST /api/parse-addon, draft-restore wipes).
+    # Re-pinning the app.html token must move the import too or CI fails.
+    match = re.search(r'static/js/pages/setup\.js\?v=([^"]+)"', _static("app.html"))
+    assert match, "app.html tokenized pages/setup.js entry missing"
+    assert f"import {{ renderWorkflow }} from '../pages/setup.js?v={match.group(1)}';" in _static(
+        os.path.join("js", "setup", "paste.js")
+    )
