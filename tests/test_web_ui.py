@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import subprocess
@@ -372,6 +373,33 @@ process.exit(fail);
 """
     result = subprocess.run([node, "-e", script], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+
+
+def test_gear_row_fold_budget_immune_to_selection():
+    # RED-S5F (t_45ab76c5, RED-S5 FAIL 2): foldChips's 3-row budget counts
+    # every row whatever its selection state — selecting a visible row must
+    # keep the identical visible set and +N count (contract §12 gate 4 "no
+    # layout jitter on selection change"), and selected/excluded rows past
+    # the fold stay visible (doc 4.2 parity). Real foldChips via node.
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    harness = os.path.join(os.path.dirname(__file__), "fixtures", "fold_chips_harness.mjs")
+    result = subprocess.run([node, harness], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, f"harness failed: {result.stderr[-2000:]}"
+    out = json.loads(result.stdout)
+    assert out["baseline6"] == {"vis": [0, 1, 2], "chip": "+3"}
+    # Pre-fix the two sel cases folded away 0/1 rows and revealed an extra
+    # one: sel1of6 was vis [0,1,2,3] chip "+2", sel1of4 vis [0,1,2,3] chip
+    # None — the +46px / +15px downstream shifts measured live.
+    assert out["sel1of6"] == out["baseline6"]
+    assert out["baseline4"] == {"vis": [0, 1, 2], "chip": "+1"}
+    assert out["sel1of4"] == out["baseline4"]
+    assert out["selLastVisible4"] == out["baseline4"]
+    assert out["selBeyondFold"] == {"vis": [0, 1, 2, 4], "chip": "+1"}
+    assert out["exBeyondFold"] == {"vis": [0, 1, 2, 5], "chip": "+2"}
+    assert out["allBeyondFoldSelected"] == {"vis": [0, 1, 2, 3], "chip": None}
+    assert out["expandRevealsAll"] == [0, 1, 2, 3, 4, 5]
 
 
 def test_gear_selection_hydrates_exact_grades_from_wowhead():
