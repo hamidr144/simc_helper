@@ -3,6 +3,7 @@ import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -646,24 +647,29 @@ def test_gems_and_enchantments_use_default_wowhead_tooltips():
     assert js.count("refreshWowheadLinks();") >= 2
 
 
-def test_heliotrope_gems_are_not_rendered_as_selectable_gems():
-    response = resp(read_js())
-    assert response.status_code == 200
-    js = response.text
-
-    assert "gems?.standard" in js
-
-
-def test_current_gear_is_ready_to_run_and_selected_enhancements_are_checked():
-    response = resp(read_js())
-    assert response.status_code == 200
-    js = response.text
-
-    assert "let total = 1;" in js
-    assert "equippedEnchants[slot].has(id)" in js
-    assert "equippedGems.has(id)" in js
-    assert "void generateInput(true);" in js
-    assert "PVP_META_NAME_MATCH" in js
+def test_enhancements_use_gear_buttons_preserve_equipped_baseline_and_filter_green():
+    root = Path(__file__).resolve().parent.parent / "src" / "web" / "static" / "js"
+    state = (root / "core/state.js").read_text()
+    ui = (root / "core/ui.js").read_text()
+    enhancements = (root / "setup/enhancements.js").read_text()
+    payload = (root / "setup/payload.js").read_text()
+    css = (root.parent / "css/setup.css").read_text()
+    assert "state.selectedEnchants[slot] = new Set(state.equippedEnchants[slot])" in state
+    assert "state.selectedGems.add(gemId)" in state
+    assert "else state.selectedEnchants[slot].delete(id)" in enhancements
+    assert "else state.selectedGems.delete(id)" in enhancements
+    assert "state.equippedEnchants[slot].delete" not in enhancements
+    assert "state.equippedGems.delete" not in enhancements
+    assert "Array.from(state.selectedEnchants[slot] || [])" in payload
+    assert "Array.from(state.selectedGems)" in payload
+    assert "createElement(\'button\')" in enhancements
+    assert "aria-pressed" in enhancements
+    assert "quality !== 2" in enhancements
+    assert "search.type = \'search\'" in enhancements
+    assert "extraSockets" in enhancements
+    assert "q-${q.cls}" in ui
+    assert "padding-bottom:220px" in css
+    assert "white-space:nowrap" in css
 
 
 def test_report_gear_summary_shows_only_slot_and_item_link():
