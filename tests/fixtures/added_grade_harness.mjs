@@ -23,7 +23,12 @@ state.gearUpgrades = { trinket: { [EQ]: { track: 'myth', rank: 6, item_level: 28
 // Pre-fix: resolveAddedGrade did not exist (import error -> red harness) and
 // the bare key rendered ZERO rank/VF rows (grade null, off-ladder label).
 out.reuse = resolveAddedGrade('trinket', 170001, { ilvl: 300 });
-out.rowsBeforeSeed = ranksForItem('trinket', ADDED).filter(v => v.rank !== null).length;
+// Re-derived on the rebased tree (t_710d0381): with PR #47's carry-through live,
+// a bare-id add pre-seed renders ONLY #47's ladderless 'Current' row (rank 1, no
+// track) — zero LADDER rows until resolveAddedGrade seeds a grade. Both pinned.
+const pre = ranksForItem('trinket', ADDED).filter(v => v.rank !== null);
+out.rowsBeforeSeed = pre.filter(v => v.track).length;
+out.currentRowBeforeSeed = pre.map(v => `${v.rank}:${v.ilvl}:${v.label}`).join(',');
 state.gearUpgrades.trinket[ADDED] = out.reuse;
 out.vfRow = ranksForItem('trinket', ADDED)
   .filter(v => v.rank !== null && v.voidforged).map(v => `${v.rank}:${v.ilvl}`);

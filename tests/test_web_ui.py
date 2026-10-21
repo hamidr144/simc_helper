@@ -454,6 +454,7 @@ def test_add_by_id_commit_persists_preview_quality():
 const state = { parsedData: { items_by_slot: {}, item_names: {} }, selectedItems: {},
   gearUpgrades: {}, voidforgedItems: {}, statScores: {}, addedItems: new Map() };
 const inferMidnightUpgrade = () => null;
+const resolveAddedGrade = () => null;
 const renderGear = () => {}, renderCharChip = () => {}, updateSummary = () => {}, selectionChanged = () => {};
 """ + commit + "\n" + rem + """
 let fail = 0;
@@ -511,6 +512,7 @@ def test_added_grade_resolution_node_probe():
     out = json.loads(result.stdout)
     assert out["reuse"] == {"track": "myth", "rank": 6, "item_level": 289}
     assert out["rowsBeforeSeed"] == 0
+    assert out["currentRowBeforeSeed"] == "1:300:Current"
     assert out["vfRow"] == ["6:298"]
     assert out["previewOnly"] == {"track": "myth", "rank": 5, "item_level": 285}
     assert out["nothing"] is None

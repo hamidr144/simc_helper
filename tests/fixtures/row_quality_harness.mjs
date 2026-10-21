@@ -34,23 +34,27 @@ out.commonFallback = qualityOf(resolveRowQuality('id=1')).word;        // Common
 // --- draft restore --------------------------------------------------------------
 // Stale SELECTED-only strings are still orphan-dropped (ruling 4), but
 // addedItems keys are authoritative and get re-inserted (t_65bd1b07 ruling).
-const ADDED = 'id=271472';
+// t_710d0381 fold (leader ruling): renamed from ADDED — the union-merge of
+// #48's draft section over #47's committed-add section left TWO top-level
+// `const ADDED` (dev tip 6d2fbda SyntaxError). Rename-only; #47's section
+// below keeps `const ADDED = 'id=268265'` as the single authority.
+const ADDED_DRAFT = 'id=271472';
 state.parsedData.items_by_slot.shoulder = [',id=271463,ilevel=330'];
 state.selectedItems = { neck: new Set(), shoulder: new Set() };
 state.addedItems = new Map();
 applyDraftToState({
   parsedData: {
-    item_names: { [ADDED]: 'Blessed Batplate Spaulders (337)' },
-    item_qualities: { [ADDED]: 4 },  // PR #47 committed shape
+    item_names: { [ADDED_DRAFT]: 'Blessed Batplate Spaulders (337)' },
+    item_qualities: { [ADDED_DRAFT]: 4 },  // PR #47 committed shape
   },
-  selectedItems: { neck: [KNOWN, ORPHAN], shoulder: [ADDED] },
-  addedItems: [[KNOWN, 'neck'], [ADDED, 'shoulder']],
+  selectedItems: { neck: [KNOWN, ORPHAN], shoulder: [ADDED_DRAFT] },
+  addedItems: [[KNOWN, 'neck'], [ADDED_DRAFT, 'shoulder']],
 });
 out.draftSelected = [...state.selectedItems.neck];        // ORPHAN (selected-only) dropped
 out.draftAdded = [...state.addedItems.keys()];
 out.addedReinserted = state.parsedData.items_by_slot.shoulder;
-out.addedName = state.parsedData.item_names[ADDED];
-out.addedQuality = qualityOf(resolveRowQuality(ADDED)).word;
+out.addedName = state.parsedData.item_names[ADDED_DRAFT];
+out.addedQuality = qualityOf(resolveRowQuality(ADDED_DRAFT)).word;
 
 // --- results-apply orphan-drop (replaces, so orphans alone yield an empty set)
 applyPayloadToState({ selected_items: { neck: [ORPHAN] } });
