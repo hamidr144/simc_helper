@@ -668,7 +668,7 @@ def test_enhancements_use_gear_buttons_preserve_equipped_baseline_and_filter_gre
     assert "search.type = \'search\'" in enhancements
     assert "extraSockets" in enhancements
     node = shutil.which("node") or str(Path.home() / ".hermes/tools/node-26.7.0-darwin-arm64/bin/node")
-    module = (root / "setup/enhancements.js").as_uri()
+    module = (Path(__file__).parent / "fixtures/enhancements.mjs").as_uri()
     result = subprocess.run(
         [node, "--input-type=module", "-e", (
             f"import({module!r}).then(m => {{ const rows = m.visibleEnchants(["

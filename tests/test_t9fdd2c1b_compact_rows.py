@@ -11,6 +11,7 @@ from static_assets import read_css, read_js, resp  # t_94a15fe3 split pins
 STATIC = Path(__file__).resolve().parents[1] / "src" / "web" / "static"
 CSS = read_css()
 APP_JS = read_js()
+ENHANCEMENTS_JS = (STATIC / "js/setup/enhancements.js").read_text()
 APP_HTML = (STATIC / "app.html").read_text()
 
 
@@ -89,4 +90,4 @@ def test_group_chrome_gaps_match_contract():
     # extra sockets moved into the enhancements panel (decision D-6); the
     # per-slot group footer is gone with the tile era.
     assert ".slot-group" not in CSS
-    assert 'extra-socket' in APP_JS
+    assert 'extra socket' in ENHANCEMENTS_JS
