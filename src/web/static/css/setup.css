@@ -96,3 +96,6 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
   .eqc .d{display:none}
   .eqc .il,.vrow .il{font-size:12px}
 }
+/* explicit hide for closed enhancement groups: Chrome >=131 hides <details>
+   content via paint containment, leaving rects non-zero for tab-stop audits */
+.enh-section:not([open]) .enhancement-group{display:none}
