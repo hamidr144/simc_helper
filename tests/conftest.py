@@ -46,3 +46,23 @@ def auth_kill_switch(monkeypatch):
         except ImportError:  # pragma: no cover - one alias always importable
             continue
         monkeypatch.setattr(module, "authentication_enabled", lambda: False, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def wowhead_hydration_offline(monkeypatch):
+    """Default the suite to no network for paste-path name hydration.
+
+    t_5fe563ac: /api/parse-addon hydrates missing item names from Wowhead
+    item XML.  Resolving the fetch to None keeps every test offline — names
+    stay exactly as parsed.  Tests that exercise hydration monkeypatch
+    ``fetch_wowhead_name_and_level`` on the module they drive (same fetch-
+    boundary convention as ``fetch_wowhead_tooltip_json`` elsewhere).
+    """
+    async def _offline(item):
+        return None
+    for name in ("web.main", "src.web.main"):
+        try:
+            module = __import__(name, fromlist=["main"])
+        except ImportError:  # pragma: no cover - one alias always importable
+            continue
+        monkeypatch.setattr(module, "fetch_wowhead_name_and_level", _offline, raising=False)

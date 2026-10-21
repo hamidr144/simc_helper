@@ -507,6 +507,9 @@ wowhead_invslot_cache: Dict[str, Optional[int]] = {}
 # t_e906dc02: item quality number (<quality id="4">) per item XML URL, cached
 # alongside — the same cached response feeds all three parses.
 wowhead_quality_cache: Dict[str, Optional[int]] = {}
+# t_5fe563ac: (name, XML ilvl) per item XML URL, for paste-path name
+# hydration (hydrate_missing_item_names).
+wowhead_name_cache: Dict[str, Optional[tuple]] = {}
 # t_1699829f: (inventorySlot id, display name) per bare Wowhead item id, for
 # the tooltip preview's Add-by-ID slot guard (no bonus list — id is invariant).
 wowhead_item_slot_cache: Dict[int, tuple[Optional[int], Optional[str]]] = {}
@@ -1269,6 +1272,25 @@ def parse_wowhead_quality(xml_text: str) -> Optional[int]:
     return int(raw) if raw and raw.isdigit() else None
 
 
+def parse_wowhead_name_and_level(xml_text: str) -> Optional[tuple]:
+    """(item name, XML-reported item level) from a Wowhead item XML document.
+
+    t_5fe563ac: <name> ships CDATA — ElementTree hands it back as plain text.
+    The ilvl is the XML's own <level> for the requested bonus list (the real
+    ilvl of the SimC item string); None when the item carries no <level>.
+    Returns None when there is no usable name.
+    """
+    try:
+        root = ElementTree.fromstring(xml_text)
+    except ElementTree.ParseError:
+        return None
+    name = (root.findtext("item/name") or "").strip()
+    if not name:
+        return None
+    raw = (root.findtext("item/level") or "").strip()
+    return name, int(raw) if raw.isdigit() else None
+
+
 def parse_wowhead_icon_name(xml_text: str) -> Optional[str]:
     """Extract a safe icon name from a Wowhead item XML response."""
     try:
@@ -1728,6 +1750,30 @@ async def fetch_wowhead_upgrade(item: str) -> Optional[Dict[str, Any]]:
     return upgrade
 
 
+async def fetch_wowhead_name_and_level(item: str) -> Optional[tuple]:
+    """(name, ilvl) from the Wowhead item XML for a SimC item string.
+
+    t_5fe563ac: paste-path name truth. Fail-soft to None without caching the
+    miss (same policy as fetch_wowhead_item_slot), so an upstream failure
+    just leaves the item on its comment hint or the client fallback.
+    """
+    url = wowhead_xml_url(item)
+    if not url:
+        return None
+    if url in wowhead_name_cache:
+        return wowhead_name_cache[url]
+    try:
+        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True, headers={"User-Agent": "simc-helper/1.0"}) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.warning("Wowhead name lookup failed for %s: %s", item, exc)
+        return None
+    parsed = parse_wowhead_name_and_level(response.text)
+    wowhead_name_cache[url] = parsed
+    return parsed
+
+
 async def fetch_wowhead_inventory_slot(item: str) -> Optional[int]:
     """InventorySlot DBC id for a SimC item string (17 = two-handed weapon).
 
@@ -2060,6 +2106,40 @@ async def get_wowhead_upgrades(payload: WowheadUpgradesRequest):
     return {"status": "success", "gear_upgrades": results, "two_handed": two_handed,
             "qualities": qualities, "errors": errors}
 
+async def hydrate_missing_item_names(items_by_slot: Dict[str, List[str]],
+                                     item_names: Dict[str, str]) -> None:
+    """Fill missing ``item_names`` from Wowhead item XML (t_5fe563ac).
+
+    Exporters disagree about where to place the ``# Name (ilvl)`` comments:
+    the profile-block shape groups every name ahead of the gear lines, and
+    position guessing on it misattributes identity (head 271465 once rendered
+    as "Maze-roa, Warlord's Fury"). parse_addon_lines keeps only adjacent
+    comments as hints; this is the identity truth for the rest, following the
+    armory-load convention — ``"Name (ilvl)"`` keyed by the exact SimC item
+    string. The label's ilvl prefers the string's own ``ilevel=`` (exporter
+    truth, content tuning included) and falls back to the XML ``<level>``
+    only when the string lacks one (crafted rows render ``—`` otherwise).
+    Fail-soft per item: an item whose XML cannot be fetched keeps its hint
+    or its absence, and no empty-string name is ever stored.
+    """
+    missing: List[str] = []
+    seen = set()
+    for items in items_by_slot.values():
+        for item in items:
+            if item in seen or item_names.get(item) or not wowhead_xml_url(item):
+                continue
+            seen.add(item)
+            missing.append(item)
+    results = await asyncio.gather(*(fetch_wowhead_name_and_level(item) for item in missing))
+    for item, info in zip(missing, results):
+        if not info:
+            continue
+        name, xml_ilvl = info
+        own = re.search(r"(?:^|,)ilevel=(\d+)(?:,|$)", item)
+        ilvl = own.group(1) if own else (str(xml_ilvl) if xml_ilvl else "")
+        item_names[item] = f"{name} ({ilvl})" if ilvl else name
+
+
 @app.post("/api/parse-addon", response_model=ParseAddonResponse, tags=["Addons"])
 async def parse_addon_text(request: Request, payload: ParseAddonRequest, current_user: str = Depends(require_session)):
     """Parse SimulationCraft addon text into structured character data.
@@ -2106,6 +2186,11 @@ async def parse_addon_text(request: Request, payload: ParseAddonRequest, current
                 'paladin="Name").'
             ),
         )
+    # t_5fe563ac: the paste path must never inherit identity from exporter
+    # comment blocks — hydrate names the export did not name adjacently from
+    # the Wowhead item XML (the client then shows real names, never
+    # `item <id>`/`—` fallbacks, whenever Wowhead has the data).
+    await hydrate_missing_item_names(items_by_slot, item_names)
     # t_b3b78acd: remember where this user's character came from so the
     # eventual run_history row can say "addon".
     run_meta_by_user.setdefault(_resolved_user_id(request, current_user), {}).update(

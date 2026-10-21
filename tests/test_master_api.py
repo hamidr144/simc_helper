@@ -112,6 +112,38 @@ def test_parse_addon_without_upgrade_levels_returns_empty_dict():
     assert response.json()["item_upgrades"] == {}
 
 
+def test_parse_addon_hydrates_block_comment_names_from_wowhead():
+    """t_5fe563ac: profile-block exports (names stacked ahead of the gear
+    lines) must render Wowhead truth, never comment position guesses. Head
+    271465 used to render as "Maze-roa, Warlord's Fury"; crafted rows without
+    ilevel= used to render ilvl '—'."""
+    head = ",id=271465,ilevel=321,bonus_id=13334"
+    wrist = ",id=237834,bonus_id=12214"
+    addon_text = (
+        "paladin=Hamidriel\n"
+        "# Warhelm of the Consecrated Flame (321)\n"
+        "# Maze-roa, Warlord's Fury (334)\n"
+        f"head={head}\n"
+        f"wrist={wrist}"
+    )
+    async def fake_lookup(item):
+        if item == head:
+            return ("Warhelm of the Consecrated Flame", 334)
+        if item == wrist:
+            return ("Spellbreaker's Bracers", 331)
+        return None
+    with patch("web.main.fetch_wowhead_name_and_level", new=fake_lookup):
+        response = client.post("/api/parse-addon", json={"addon_text": addon_text})
+    assert response.status_code == 200
+    names = response.json()["item_names"]
+    # The string's own ilevel= wins over the XML level; the block's last
+    # name never lands on head.
+    assert names[head] == "Warhelm of the Consecrated Flame (321)"
+    # No ilevel= in the string -> the XML level fills the crafted row.
+    assert names[wrist] == "Spellbreaker's Bracers (331)"
+    assert not any(value == "" for value in names.values())
+
+
 def test_parse_addon_preserves_base_profile_line_breaks_from_api_payload():
     addon_text = "paladin=Test\nlevel=90\nrace=blood_elf\nhead=id=123"
     response = client.post("/api/parse-addon", json={"addon_text": addon_text})
