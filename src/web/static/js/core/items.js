@@ -76,6 +76,36 @@ export function inferMidnightUpgrade(slot, item, label) {
   return null;
 }
 
+/* t_4149ba6b (A4): a bare-id add has no bonus ids, and the tooltip preview
+   defaults to the item's BEST variant (elevated off-ladder 344 for a myth
+   6/6 piece), so inferMidnightUpgrade on the label alone yields null and the
+   added key — invisible to the pre-add, bonus-string-keyed hydration — never
+   resolves a grade: zero rank/VF rows. Resolve from data already in hand
+   (leader ruling t_4149ba6b: reuse a hydrated same-id string or the preview
+   payload — no new fetch pipeline): first a same-id item in the slot whose
+   grade is resolved (hydrated gearUpgrades entry, else ladder inference on
+   its bonus-string key), then the preview's own "Upgrade Level: Myth 6/6"
+   line when its default tooltip carries one. */
+export function resolveAddedGrade(slot, itemId, preview) {
+  for (const item of state.parsedData?.items_by_slot?.[slot] || []) {
+    if (item === `id=${itemId}` || parseItemParams(item).id !== String(itemId)) continue;
+    let info = state.gearUpgrades[slot]?.[item];
+    if (!info?.track) info = inferMidnightUpgrade(slot, item, state.parsedData?.item_names?.[item]);
+    const ladder = info?.track ? seasonTracks()[info.track] : null;
+    const rank = Number(info?.rank) || 0;
+    if (ladder && rank >= 1 && rank <= ladder.length) {
+      return { track: info.track, rank, item_level: Number(info.item_level) || ladder[rank - 1] };
+    }
+  }
+  const match = /^([A-Za-z]+)\s+(\d+)\/(\d+)$/.exec(String(preview?.upgrade_level || ''));
+  const ladder = match ? seasonTracks()[match[1].toLowerCase()] : null;
+  const rank = match ? Number(match[2]) : 0;
+  if (ladder && rank >= 1 && rank <= ladder.length) {
+    return { track: match[1].toLowerCase(), rank, item_level: Number(preview.ilvl) || ladder[rank - 1] };
+  }
+  return null;
+}
+
 /* Upgrade ranks straight from the export's own `# upgrade_levels=` comment
    (authoritative for this character), preferred over the static season
    ladders whenever present.  The addon lists only levels other than the
@@ -143,8 +173,12 @@ function seasonFallbackRanks(slot, item) {
       label: `${trackName} ${r}/${ladder.length} ×${crest}` });
   }
   const ascension = seasonAscension();
-  const current = Number(parseItemParams(item).ilevel)
+  let current = Number(parseItemParams(item).ilevel)
     || itemLevelFromLabel(state.parsedData?.item_names?.[item]) || null;
+  // t_4149ba6b: for a bare-id add the label ilvl is only the preview default
+  // (Wowhead's best variant — elevated 344 for a myth 6/6 piece); a resolved
+  // grade's own rung is the truth for the ascension/elevation gate below.
+  if (state.addedItems.has(item) && info?.item_level) current = Number(info.item_level) || current;
   if (rank === ladder.length && ascension.results?.[info.track] != null
     && isVoidforgeEligibleSlot(slot) && !isElevatedLevel(current)
     && !isAlreadyVoidforgedItem(slot, item, state.parsedData?.item_names?.[item])) {

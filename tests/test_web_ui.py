@@ -496,6 +496,26 @@ def test_draft_added_items_survive_restore_node_probe():
         "Blessed Batplate Spaulders (337)", "Stonearrow Pauldrons (324)"]
 
 
+def test_added_grade_resolution_node_probe():
+    # t_1321a4a7 (A4/t_4149ba6b): a bare-id add resolves its grade from data
+    # already in hand (same-id sibling grade, else preview Upgrade Level) and
+    # the seeded grade drives the rank/VF row walk — pre-fix the harness import
+    # failed and the bare key produced zero rank rows (red -> green).
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    assert node
+    harness = os.path.join(os.path.dirname(__file__), "fixtures", "added_grade_harness.mjs")
+    result = subprocess.run([node, harness], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, f"harness failed: {result.stderr[-2000:]}"
+    out = json.loads(result.stdout)
+    assert out["reuse"] == {"track": "myth", "rank": 6, "item_level": 289}
+    assert out["rowsBeforeSeed"] == 0
+    assert out["vfRow"] == ["6:298"]
+    assert out["previewOnly"] == {"track": "myth", "rank": 5, "item_level": 285}
+    assert out["nothing"] is None
+
+
 def test_add_by_id_slot_guard_node_probe():
     # t_1699829f: the client-side inventorySlot->slot guard, evaluated in node
     # (same harness pattern as test_crafted_badge_mapping_g4): a mismatch

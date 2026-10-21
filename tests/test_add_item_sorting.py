@@ -219,7 +219,12 @@ def test_app_js_wires_add_item():
     # Added items land in the same state generation reads from.
     assert "parsedData.items_by_slot[slot]" in js
     assert "selectedItems[slot].add(key)" in js
-    assert "row-x" in js
+    # t_77ea4b76: REAL interpolation + wiring, not a bare substring — the old
+    # "row-x" pin stayed green for three releases while addedBlock was computed
+    # but never interpolated (added items unremovable, removeAddedItem dead).
+    assert "${eqBlock}${addedBlock}" in js  # section template renders the added line
+    assert "querySelectorAll('.row-x[data-remove]')" in js
+    assert "removeAddedItem(slot, chip.dataset.remove)" in js
 
 
 def test_style_css_defines_step4_classes():

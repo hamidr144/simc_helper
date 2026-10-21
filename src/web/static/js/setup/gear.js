@@ -161,7 +161,7 @@ export function renderGear() {
           aria-label="Wowhead item id to add to ${esc(section.label)}">
         <button type="button" class="slot-add-button">Preview</button></div>
       <div class="slot-add-preview" hidden></div>
-      ${eqBlock}
+      ${eqBlock}${addedBlock}
       <div class="rows">${rows}</div></section>`;
   }).join('');
   if (window.scrollTo) window.scrollTo(0, y);
@@ -202,6 +202,16 @@ function wireSections(list) {
       if (open) addForm.querySelector('.slot-add-input').focus();
     });
     wireSlotAddForm(section, slot);
+
+    // t_77ea4b76 (BUG-2): the added-line × is the ONLY removal affordance for
+    // add-by-ID items — the dead template that never interpolated addedBlock
+    // made added items permanently unremovable.
+    for (const chip of section.querySelectorAll('.row-x[data-remove]')) {
+      chip.addEventListener('click', () => {
+        removeAddedItem(slot, chip.dataset.remove);
+        persistDraft();
+      });
+    }
 
     toggleAll.addEventListener('click', () => {
       const selectAll = toggleAll.textContent === 'Select all';
