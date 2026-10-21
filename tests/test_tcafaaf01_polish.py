@@ -26,15 +26,17 @@ def _rule(css, selector):
 
 
 def test_nb1_hero_extras_replace_not_stack():
-    # renderHeroExtras re-runs per fetchResults retry; it must remove the
-    # previous .run-id-line before appending, or retries stack duplicates.
-    clear = RESULTS_JS.index("querySelectorAll('.run-id-line')")
-    append = RESULTS_JS.index("hero.append(line)")
-    assert clear < append, "hero extras must be cleared before re-append"
+    # RED-3: the hero extras moved to the results side rail; renderHeroExtras
+    # still re-runs per fetchResults retry and must clear before appending
+    # (kv.replaceChildren() before any kv.append) or retries stack duplicates.
+    assert "kv.replaceChildren()" in RESULTS_JS
+    assert RESULTS_JS.index("kv.replaceChildren()") < RESULTS_JS.index("kv.append(row)")
+    assert "hero.append(line)" not in RESULTS_JS  # old stacking host is gone
 
 
 def test_nb2_danger_token_matches_doc():
-    assert "--danger: #f87171;" in CSS
+    # RED-3 palette (v11 zip): the danger token is --dn; light palette value.
+    assert "--dn:#b3382c;" in CSS
     assert "#f87181" not in CSS
 
 
@@ -43,7 +45,7 @@ def test_nb3_btn_danger_uses_danger_token():
     # chip, history failed badge) are out of scope.
     for selector in ("button.btn-danger", "button.btn-danger:not(:disabled):hover"):
         body = _rule(CSS, selector)
-        assert "var(--danger)" in body, f"{selector} must use var(--danger)"
+        assert "var(--dn" in body, f"{selector} must use the --dn token"
         assert not re.search(r"#fda4af|#fecdd3|rgba\(251, 113, 133", body)
 
 
@@ -69,9 +71,12 @@ def test_nb6_no_gear_difference_rows_are_quarantined():
 
 
 def test_nb7_sticky_column_offset_is_a_token():
-    assert "--results-num-col: 40px" in CSS
-    assert "left: var(--results-num-col)" in CSS
+    # RED-3: the v11 ranked table drops the sticky first column; stickiness
+    # survives in the sticky side rail / jump nav and must stay offset-free:
+    # no raw 40px offset may return, and no hardcoded pixel offsets on sticky.
+    assert "left: var(--results-num-col)" not in CSS
     assert "left: 40px" not in CSS
+    assert "position:sticky" in CSS
 
 
 def test_cache_bust_token_everywhere():
@@ -84,6 +89,6 @@ def test_cache_bust_token_everywhere():
     for page in PAGES:
         html = Path(f"src/web/static/{page}").read_text()
         # RB1 (t_754e1374) bumped only app.html to rb1-1; other pages stay guir-3.
-        token = "20261020-rb1-1" if page == "app.html" else "20261020-guir-3"
+        token = "red3-2"
         assert token in html, page
         assert "20261017-enh-chips" not in html, page

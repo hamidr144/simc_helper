@@ -3,6 +3,14 @@
 // link to the stored report. Ported from history.js by t_94a15fe3 (§3.1).
 import { apiFetch } from '../core/api.js';
 import { escapeHtml } from '../core/dom.js';
+import { wireTheme } from '../core/theme.js';
+import { fetchVersion } from '../core/version.js';
+
+wireTheme(document.querySelector('.pal .seg'));
+fetchVersion();
+
+wireTheme(document.querySelector('.pal .seg'));
+
 
 const historyQuery = new URLSearchParams(window.location.search);
 const runId = historyQuery.get('run');

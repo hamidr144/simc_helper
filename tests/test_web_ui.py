@@ -24,10 +24,10 @@ def test_web_ui_html_content():
 
     # Check for important HTML elements and structure
     assert "<title>SimulationCraft Helper GUI</title>" in html_content
-    assert "<h1>SimC Web Helper</h1>" in html_content
+    assert "<h1>Gear</h1>" in html_content
     assert 'id="addon-input"' in html_content
     assert 'id="btn-parse-addon"' in html_content
-    assert "1. Setup &amp; Addon" in html_content or "1. Setup & Addon" in html_content
+    assert "Import character" in html_content  # RED-3: import <details> replaces the step-1 card
 
 
 def test_web_ui_uses_dashboard_layout():
@@ -35,10 +35,10 @@ def test_web_ui_uses_dashboard_layout():
     assert response.status_code == 200
     html_content = response.text
 
-    assert 'class="app-shell"' in html_content
-    assert 'class="workflow-rail tabs"' in html_content
-    assert 'class="workspace-grid setup-layout"' in html_content
-    assert 'class="panel-card"' in html_content
+    assert 'class="top"' in html_content
+    assert 'class="qj"' in html_content
+    assert 'id="gear-grid"' in html_content
+    assert 'class="runbar"' in html_content
 
 
 def test_web_ui_removes_marketing_copy():
@@ -69,14 +69,14 @@ def test_web_ui_styles_include_responsive_dense_layout():
     assert response.status_code == 200
     css = response.text
 
-    assert "grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr)" in css
-    assert "position: sticky" in css
-    assert "@media (max-width: 760px)" in css  # t_2ab8f3be: 480/760/1200 scale
-    assert "@media (max-width: 480px)" in css
-    assert "@media (min-width: 1200px)" in css
-    assert "@media (max-width: 900px)" not in css
-    assert "@media (max-width: 1200px)" not in css
-    assert "--accent: #5d5bf0" in css  # t_2ab8f3be: fill/text accent split
+    assert "grid-template-columns:minmax(0,1fr) 300px" in css
+    assert "position:sticky" in css
+    assert "@media (min-width:900px)" in css  # RED-3: zip scale 900 gear / 1000 results / 430 phone
+    assert "@media (max-width:430px)" in css
+    assert "@media(min-width:1000px)" in css
+    assert "@media (max-width: 900px)" not in css and "@media (max-width:900px)" not in css
+    assert "@media (max-width: 1200px)" not in css and "@media (max-width:1200px)" not in css
+    assert "--acc:#5b8def" in css  # RED-3: v11 dark accent
 
 
 def test_web_ui_applies_linear_design_system_tokens():
@@ -84,13 +84,13 @@ def test_web_ui_applies_linear_design_system_tokens():
     assert response.status_code == 200
     css = response.text
 
-    assert "--surface-panel: #1d1e20" in css
-    assert "--surface-bg: #131415" in css
-    assert "--radius-card: 12px" in css
-    assert "--radius-control: 6px" in css
-    assert "font-weight: 510" in css
-    assert "background: var(--surface-panel)" in css
-    assert "--border-hairline: rgba(255, 255, 255, 0.10)" in css
+    assert "--surface:#ffffff" in css
+    assert "--canvas:#f5f6f8" in css
+    assert "--r-card:10px" in css
+    assert "--r-ctl:7px" in css
+    assert "font-weight:750" in css
+    assert "background:var(--surface)" in css
+    assert "--line:#dde1e8" in css
 
 
 def test_gear_selection_uses_midnight_track_rank_upgrades():
@@ -102,14 +102,14 @@ def test_gear_selection_uses_midnight_track_rank_upgrades():
     css = css_response.text
 
     assert "seasonTracks()" in js
-    assert "gear-track-select" in js
-    assert "gear-rank-select" in js
+    assert "ranksForItem" in js
+    assert "SLOT_SECTIONS" in js
     assert "gear_upgrades: state.gearUpgrades" in js
     assert "item_levels: itemLevels" not in js
     assert "inferMidnightUpgrade" in js
     assert "itemLevelFromLabel" in js
-    assert ".gear-track-select" in css
-    assert ".gear-rank-select" in css
+    assert ".vrow" in css
+    assert ".eqc" in css
     assert ".item-level-input" not in css
 
 
@@ -129,14 +129,13 @@ def test_gear_selection_uses_compact_icon_tiles_instead_of_text_rows():
     assert "iconizeLinks: false" in html  # t_2ab8f3be: no DOM mutation of our links
     assert "renameLinks: false" in html  # t_27ceb173 (B1): wh.js must not rename our gear links (UI-2)
     assert "createWowheadIconLink" in js
-    assert "slot-items" in js
-    assert "item-option" in js
+    assert "vrow" in js
+    assert "eqc" in js
     assert "item-icon-link" in js
-    assert "item-option-name" in js
-    assert ".item-icon-grid" in css
-    assert ".item-option" in css
+    assert ".vrow" in css
+    assert ".eqc" in css
     assert ".item-icon-link" in css
-    assert "grid-template-columns: repeat(auto-fill, minmax(92px, 1fr))" in css
+    assert "auto-fill" not in css
     assert "sr-only" in css
 
 
@@ -154,11 +153,11 @@ def test_gear_selection_stacks_cards_vertically():
         assert match, f"missing rule for {selector}"
         return match.group(1)
 
-    for selector in (".slot-items", ".gear-grid-columns"):
+    body = rule_body("#gear-grid")
+    assert "columns:2" in body, f"#gear-grid must multicol sections, got: {body.strip()}"
+    assert "break-inside:avoid" in css, "sections must never split across columns (ruling O-3)"
+    for selector in (".vrow", ".slotsec"):
         body = rule_body(selector)
-        assert "grid-template-columns: 1fr" in body, (
-            f"{selector} must be a single-column stack, got: {body.strip()}"
-        )
         assert "auto-fill" not in body and "auto-fit" not in body, (
             f"{selector} must not use an auto-fill/auto-fit grid"
         )
@@ -186,7 +185,7 @@ def test_gear_selection_allows_marking_voidforged_weapons_and_trinkets():
     assert response.status_code == 200
     js = response.text
 
-    assert "voidforge-input" in js
+    assert "row.dataset.vf" in js
     assert "isVoidforgeEligibleSlot" in js
     assert "voidforged_items: state.voidforgedItems" in js
     assert "seasonAscension().name" in js
@@ -197,9 +196,9 @@ def test_voidforged_control_toggles_itself_inside_item_tile():
     assert response.status_code == 200
     js = response.text
 
-    assert "voidforgeInput.addEventListener('change'" in js
-    assert "voidforgedItems[slot][item] = event.target.checked;" in js
-    assert "classList.toggle('is-active', event.target.checked)" in js
+    assert "state.voidforgedItems[slot][item] = vf;" in js
+    assert "state.selectedItems[slot].add(item);" in js
+    assert "delete state.voidforgedItems[slot]?.[item];" in js
 
 
 def test_voidforged_items_are_detected_from_season_ascension_data():
@@ -310,12 +309,13 @@ def test_voidforge_option_is_hidden_for_elevated_items():
     js = response.text
 
     assert (
-        "ascensionEligible = isVoidforgeEligibleSlot(slot) && !isElevatedLevel(currentLevel)"
+        "!ascended && isVoidforgeEligibleSlot(slot) && !isElevatedLevel(Number(parseItemParams(item).ilevel) || null)"
         in js
     )
-    # The checkbox markup is gated on that flag, not on the raw slot check.
-    assert "const voidforge = ascensionEligible" in js
-    assert "const voidforge = isVoidforgeEligibleSlot(slot)\n" not in js
+    # RED-3: ranksForItem gates the Ascendant row twin on that condition —
+    # no per-row checkbox markup exists anymore (row click encodes the flag).
+    assert "const voidforge = ascensionEligible" not in js
+    assert "voidforged: true, label:" in js
 
 
 def test_crafted_ascension_reveals_ascended_grade_selector():
@@ -326,12 +326,12 @@ def test_crafted_ascension_reveals_ascended_grade_selector():
     assert response.status_code == 200
     js = response.text
 
-    assert "crafted-grade-select" in js
-    assert "Object.keys(seasonAscension().crafted_results || {})" in js
-    assert "function syncCraftedAscensionEntry(slot, item, value)" in js
-    assert "gearUpgrades[slot][item] = { track: value, rank: 1, user_selected: true };" in js
-    # A crafted grade only exists while the Ascendant checkbox is checked.
-    assert "if (value && value !== 'none' && state.voidforgedItems[slot]?.[item])" in js
+    assert "ascension.crafted_results?.[upgrade.track]" in js
+    assert "function targetUpgradeLevel(slot, item)" in js
+    # RED-3: no per-row grade dropdown — a row click encodes (rank, vf);
+    # preview.js mirrors the backend crafted_results ilvl resolution.
+    assert "source: 'export', rank," in js
+    assert "user_selected: true," in js
 def test_crafted_upgrade_state_shows_crafted_not_no_grade():
     # C2 (t_0769a998): crafted items print "Crafted" in the popover state
     # line and review-popover Grade column instead of the "No grade" lie.
@@ -351,14 +351,17 @@ def test_crafted_badge_mapping_g4():
         start = js.index(f"function {name}")
         return js[start:js.index("\n}", start) + 2]
 
+    # R9 re-pin (t_d7293a57): 464e989 (D-2 row-title move) made
+    # craftedBadgeHtml emit raw tooltip text; values pinned to that
+    # reviewer-ruled intentional output.
     script = _fn("parseItemParams") + "\n" + _fn("craftedBadgeHtml") + """
 const cases = [
-  ["chest=,id=1,crafted_stats=36/32", "Crafted \u00b7 no grade"],
-  ["chest=,id=1,crafted_stats=36/32,crafting_quality=3", "Crafted \u00b7 Quality 3/5"],
-  ["chest=,id=1,crafted_stats=36/32,crafting_quality=x5", "Crafted \u00b7 no grade"],
-  ["chest=,id=1,crafted_stats=36/32,crafting_quality=7", "Crafted \u00b7 Grade 7"],
-  ["finger1=,id=251513,crafting_quality=5", "Crafted \u00b7 Quality 5/5"],
-  ["chest=,id=1,crafted_stats=1/1,crafting_quality=0", "Crafted \u00b7 Quality 0/5"],
+  ["chest=,id=1,crafted_stats=36/32", "Crafted \u00b7 no grade (the addon export did not include a crafting quality)"],
+  ["chest=,id=1,crafted_stats=36/32,crafting_quality=3", "Crafted \u00b7 Quality 3/5 (from the addon export)"],
+  ["chest=,id=1,crafted_stats=36/32,crafting_quality=x5", "Crafted \u00b7 no grade (the addon export did not include a crafting quality)"],
+  ["chest=,id=1,crafted_stats=36/32,crafting_quality=7", "Crafted \u00b7 Grade 7 (from the addon export)"],
+  ["finger1=,id=251513,crafting_quality=5", "Crafted \u00b7 Quality 5/5 (from the addon export)"],
+  ["chest=,id=1,crafted_stats=1/1,crafting_quality=0", "Crafted \u00b7 Quality 0/5 (from the addon export)"],
 ];
 let fail = 0;
 for (const [item, want] of cases) {
@@ -389,10 +392,11 @@ def test_user_chosen_upgrades_are_marked_user_selected():
     assert response.status_code == 200
     js = response.text
 
-    # Track/rank picks mark the entry; export rank 0 ("Current") clears it.
-    assert "{ track, rank: 1, user_selected: true }" in js
-    assert "entry.user_selected = true;" in js
-    assert "if (entry.rank === 0) delete entry.user_selected;" in js
+    # RED-3: a row click writes the user_selected entry; clicking the
+    # selected row again reverts to the equipped baseline (variantMatches).
+    assert "user_selected: true," in js
+    assert "if (variantMatches(slot, item, rank, vf)) {" in js
+    assert "delete state.gearUpgrades[slot]?.[item];" in js
     # Wowhead hydration must not clobber a pick the user already made.
     assert "if (state.gearUpgrades[slot]?.[item]?.user_selected) continue;" in js
     # The estimator counts a user-chosen upgrade as a real variation.
@@ -412,7 +416,7 @@ def test_item_icons_use_local_proxy_without_requiring_wowhead_javascript():
 def test_item_icons_and_names_use_default_wowhead_tooltips():
     page_response = client.get("/")
     assert page_response.status_code == 200
-    assert 'src="api/wowhead-tooltips.js?v=20261020-rb1-1"' in page_response.text
+    assert 'src="api/wowhead-tooltips.js?v=red3-2"' in page_response.text
     assert "power.js" not in page_response.text
 
     response = resp(read_js())
@@ -474,8 +478,8 @@ def test_report_separates_baseline_and_only_lists_combo_differences():
     assert response.status_code == 200
     js = response.text
 
-    assert "baseline-gear-panel" in js
-    assert "Baseline Gear" in js
+    assert "changesFromBaseline" in js
+    assert "pickBaseline" in js
     assert "selectedItems" in js
     assert "estimateCombinations" in js
     assert "results?task_id=" in js  # t_2ab8f3be: success card link, no auto-redirect
@@ -490,6 +494,34 @@ def test_results_page_is_a_dedicated_user_friendly_view():
     assert "results.js" in response.text
 
 
+def test_results_subtitle_alternative_count_is_singular_correct():
+    # RED-3F2 SEV-4 (t_bec1d725): exactly 1 ranked alternative must read
+    # "1 alternative ranked", not "1 alternatives ranked".
+    js = resp(read_js()).text
+    assert "${ranked.length} alternative${ranked.length === 1 ? '' : 's'} ranked against" in js
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    # Node harness (same pattern as test_crafted_badge_mapping_g4): evaluate
+    # the served subtitle template itself for n=1 and n=2.
+    start = js.index("`${ranked.length} alternative")
+    template = js[start:js.index("`", start + 1) + 1]
+    script = (
+        "const mk = (n, isEquipped) => { const ranked = { length: n }; return "
+        + template + "; };"
+        "const cases = [[1, '1 alternative ranked against the top candidate.'], "
+        "[2, '2 alternatives ranked against your equipped gear.']];"
+        "let fail = 0;"
+        "for (const [n, want] of cases) {"
+        "  const got = mk(n, n !== 1);"
+        "  if (got !== want) { console.error(n + ' -> ' + got + ' (want ' + want + ')'); fail = 1; }"
+        "}"
+        "process.exit(fail);"
+    )
+    result = subprocess.run([node, "-e", script], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
 def test_successful_simulation_exposes_uploaded_report_link():
     response = resp(read_js())
     assert response.status_code == 200
@@ -499,7 +531,8 @@ def test_successful_simulation_exposes_uploaded_report_link():
     # t_c968bf8d: durable reports live under /reports/<user_id>/<task_id>/, so
     # the frontend resolves the URL via /api/report-url instead of building it.
     assert "api/report-url?task_id=" in js
-    assert "report.textContent = 'Open full SimC report'" in js  # MGE-2 A2 hero link (t_94a15fe3)
+    assert "document.getElementById('btn-open-report')" in js  # MGE-2 A2 hero link (t_94a15fe3), RED-3 static anchor in results.html
+    assert "link.hidden = false;" in js
 
 
 # ---------------------------------------------------------------------------
@@ -608,27 +641,39 @@ def test_enhancement_state_chips_on_slot_headers():
     js = resp(read_js()).text
     assert js, "app.js must be served"
 
-    # Chip markup + label strings. TG2-F (t_61442157): chips count the UNION
-    # of the selected and equipped sets — worn items are pre-checked in the
-    # step-3 panel without entering the selected sets.
-    assert 'class="enh-chip"' in js
-    assert "Enchants: ${k} selected" in js
-    assert "· worn ${e}" in js
-    assert "new Set([...(state.selectedEnchants[slot] || []), ...(state.equippedEnchants[slot] || [])]).size" in js
-    assert "new Set([...state.selectedGems, ...state.equippedGems]).size" in js
-    assert "`Gems: ${k} selected`" in js
-    assert "'Gems: none'" in js
-
-    # Section-open target: stable title stamp on <details> + lookup, the two
-    # section-title families, and the off_hand -> main_hand fallback mirror
-    # of generate_input.py's enchant-list fallback.
+    # RED-3 (contract §6): per-slot enh-chips deleted; the enhancements
+    # <details> panel now owns enhancement state. Stable title stamps,
+    # checked-count summary labels, and search-driven open/close are pinned.
     assert "section.dataset.enhTitle = title" in js
-    assert "s.dataset.enhTitle === title" in js
     assert "'Flawless gems'" in js
-    assert "'main hand enchants'" in js
-
-    # Jump-and-open mechanics + step-3 hint (§3.1.2/.3).
-    assert "scrollIntoView({ block: 'start' })" in js
+    assert "${checked} selected" in js
+    assert "'.choice-chip'" in js
+    assert "searchOpened.add(section)" in js
     assert "section.open = true" in js
-    assert "querySelector('summary')?.focus()" in js
-    assert "You can also jump here from the chips in each gear slot above." in js
+    assert "section.open = false" in js
+
+
+def test_css_comments_are_balanced():
+    # RED-3 live-gate found a `--ic-*/` sequence in a header comment that closed
+    # the comment early and swallowed the whole :root light-palette block.
+    # Comments must pair up and the palette root must survive comment stripping.
+    import re
+    from pathlib import Path
+    css_dir = Path(__file__).resolve().parents[1] / "src" / "web" / "static" / "css"
+    for sheet in css_dir.glob("*.css"):
+        text = sheet.read_text(encoding="utf-8")
+        stripped = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+        assert "/*" not in stripped and "*/" not in stripped, f"unbalanced CSS comment in {sheet.name}"
+    tokens = (css_dir / "tokens.css").read_text(encoding="utf-8")
+    assert ":root{" in re.sub(r"/\*.*?\*/", "", tokens, flags=re.S)
+
+
+def test_chip_render_degrades_on_malformed_tooltip():
+    # RED-3 live-gate found one tooltip entry without a name crashing the whole
+    # results page (render threw, silent retry loop, page rendered half-empty).
+    # Malformed tooltip info must degrade to the pending chip instead.
+    from pathlib import Path
+    js = (Path(__file__).resolve().parents[1] / "src" / "web" / "static"
+          / "js" / "results" / "chips.js").read_text(encoding="utf-8")
+    assert js.count("if (!info || !info.name)") == 2
+    assert "base && base.name" in js

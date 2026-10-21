@@ -1,12 +1,12 @@
 // js module — mechanical port of app.js regions by t_94a15fe3 (gui-rewrite-contract §3.1: setup/preview)
-
+// RED-3 (decision D-9, light): the in-card upgrade-preview DOM is gone —
+// the same Wowhead tooltip delta now renders as the candidate row's native
+// title (hover + focus, zero new surfaces). Delta logic and caching verbatim.
 import { state } from '../core/state.js';
-
-import { escapeHtml } from '../core/dom.js';
 
 import { isCraftedItem, itemLevelFromLabel, parseItemParams } from '../core/items.js';
 
-import { season, seasonAscension, seasonTracks } from '../core/season.js';
+import { seasonAscension, seasonTracks } from '../core/season.js';
 import { apiFetch } from '../core/api.js';
 
 const upgradePreviewCache = new Map();
@@ -32,64 +32,26 @@ export function targetUpgradeLevel(slot, item) {
   return levels[upgrade.rank - 1] ?? null;
 }
 
-/* Crafted ascension (t_98470ac5): the backend resolves crafted_results from
-   the upgrade track, so an ascended grade must land on state.gearUpgrades — but
-   only while the Ascendant checkbox is checked, because crafted bases have
-   no ladder upgrade of their own.  rank is the backend contract's needed
-   placeholder; the ascended ilvl replaces it during generation. */
-export function scheduleUpgradePreview(slot, item, card) {
+export function scheduleUpgradePreview(slot, item, row) {
   const key = `${slot}|${item}`;
   clearTimeout(upgradePreviewTimers.get(key));
   upgradePreviewTimers.set(key, setTimeout(() => {
     upgradePreviewTimers.delete(key);
-    void fetchUpgradePreview(slot, item, card);
+    void fetchUpgradePreview(slot, item, row);
   }, UPGRADE_PREVIEW_DEBOUNCE_MS));
 }
-function renderUpgradePreview(host, data, target, current) {
-  const preview = data.preview || {};
-  const delta = data.delta || {};
-  const resulting = preview.ilvl ?? target;
-  const ilvlDelta = delta.ilvl ??
-    (resulting != null && current != null ? resulting - current : null);
-  const dot = preview.quality_color
-    ? `<span class="upgrade-preview-dot" style="background:${escapeHtml(preview.quality_color)}"></span>`
-    : '';
-  let html = `${dot}<span class="upgrade-preview-ilvl">ilvl ${current ?? '?'} → <b>${resulting ?? '?'}</b>`;
-  if (ilvlDelta) {
-    html += ` <b class="upgrade-preview-delta ${ilvlDelta > 0 ? 'positive' : 'negative'}">` +
-      `${ilvlDelta > 0 ? '+' : '−'}${Math.abs(ilvlDelta)}</b>`;
-  }
-  html += '</span>';
-  const stats = (delta.stats || []).slice(0, 4);
-  if (stats.length) {
-    html += '<span class="upgrade-preview-stats">' + stats.map(stat =>
-      `<span class="upgrade-preview-stat ${stat.delta > 0 ? 'positive' : 'negative'}">` +
-      `${escapeHtml(stat.label)} ${stat.delta > 0 ? '+' : '−'}${Math.abs(stat.delta).toLocaleString()}</span>`
-    ).join('') + '</span>';
-  }
-  host.className = 'upgrade-preview';
-  host.innerHTML = html;
-}
-async function fetchUpgradePreview(slot, item, card) {
-  const host = card.querySelector('.upgrade-preview');
-  if (!host) return;
+
+async function fetchUpgradePreview(slot, item, row) {
   const params = parseItemParams(item);
   const target = targetUpgradeLevel(slot, item);
   const current = Number(params.ilevel) ||
     itemLevelFromLabel(state.parsedData?.item_names?.[item]) || null;
-  if (!params.id || !target || !current || target === current) {
-    host.hidden = true;
-    host.textContent = '';
-    return;
-  }
+  if (!params.id || !target || !current || target === current) return;
   const query = new URLSearchParams({ item: params.id, ilvl: String(target) });
   const bonusIds = String(params.bonus_id || '').split('/')
     .filter(value => /^\d+$/.test(value)).join(':');
   if (bonusIds) query.set('bonus', bonusIds);
   const url = `api/wowhead/tooltip?${query}`;
-  host.hidden = false;
-  host.className = 'upgrade-preview is-loading';
-  host.textContent = 'Previewing upgrade…';
   try {
     let data = upgradePreviewCache.get(url);
     if (!data) {
@@ -98,14 +60,20 @@ async function fetchUpgradePreview(slot, item, card) {
       data = await response.json();
       upgradePreviewCache.set(url, data);
     }
-    if (!card.isConnected) return;
-    renderUpgradePreview(host, data, target, current);
-  } catch (error) {
-    if (!card.isConnected) return;
-    host.className = 'upgrade-preview is-unavailable';
-    host.textContent = 'preview unavailable';
-    host.title = `Wowhead preview unavailable (${error.message})`;
+    if (!row.isConnected) return;
+    const preview = data.preview || {};
+    const delta = data.delta || {};
+    const resulting = preview.ilvl ?? target;
+    const ilvlDelta = delta.ilvl ??
+      (resulting != null && current != null ? resulting - current : null);
+    let text = `ilvl ${current} → ${resulting ?? '?'}`;
+    if (ilvlDelta) text += ` (${ilvlDelta > 0 ? '+' : '−'}${Math.abs(ilvlDelta)})`;
+    for (const stat of (delta.stats || []).slice(0, 4)) {
+      text += ` · ${stat.label} ${stat.delta > 0 ? '+' : '−'}${Math.abs(stat.delta).toLocaleString()}`;
+    }
+    row.title = text;
+  } catch {
+    // silent: the static row title (name + ilvl) already tells the truth;
+    // shortcut: no visible failure state, upgrade to a toast if users ask.
   }
 }
-
-/* ---------- Per-slot sorting (ilvl / name / heuristic stat priority) ---------- */

@@ -11,10 +11,12 @@ import web.main
 from fastapi.testclient import TestClient
 from src.core.db import task_owner_upsert
 from web.main import app
+import pathlib
 from static_assets import read_css, read_js, resp  # t_94a15fe3 split pins
 
 STATIC = Path(__file__).resolve().parent.parent / "src" / "web" / "static"
 RESULTS_JS = read_js()
+RESULTS_HTML = (pathlib.Path(__file__).resolve().parents[1] / "src" / "web" / "static" / "results.html").read_text()
 CSS = read_css()
 
 client = TestClient(app)
@@ -34,10 +36,11 @@ def test_top3_card_block_removed():
 # ---- gap 3: one primary comparison number ------------------------------------
 
 def test_demoted_columns_stay_in_dom():
-    assert '<th scope="col" class="results-secondary">' in RESULTS_JS
-    assert 'class="results-num results-secondary"' in RESULTS_JS
-    # Demoted values remain in DOM via sr-only spans and the delta tooltip.
-    assert "results-table .results-secondary" in CSS
+    # RED-3 (v11): the ranked table demotes raw DPS/precision into title
+    # attributes and a secondary % column — full values stay in the DOM.
+    assert '<th scope="col" class="c-vb">% vs best</th>' in RESULTS_HTML
+    assert "± ${result.mean_error_pct}%" in RESULTS_JS
+    assert 'vsBest' in RESULTS_JS
     assert "vs best" in RESULTS_JS  # header + tooltip text still present
 
 
@@ -48,7 +51,7 @@ def test_candidate_label_humanized():
     assert "Combination #" in RESULTS_JS
     assert "${slot} swap" in RESULTS_JS
     # Machine name survives as the row tooltip.
-    assert 'class="candidate-label" title="${escapeHtml(result.name)}"' in RESULTS_JS
+    assert 'class="name" title="${escapeHtml(result.name)}"' in RESULTS_JS
 
 
 # ---- gap 5: chip replaces-context ---------------------------------------------
