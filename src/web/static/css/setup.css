@@ -69,28 +69,22 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
   .slotsec{break-inside:avoid}
 }
 
-/* ---- RED-2M10 · shared row/card grid (audit item 2) ----
-   Equipped card (.eqc) and candidate row (.vrow) are ONE content box: identical left
-   inset for the icon and name columns and a right-aligned fixed control cluster
-   (ilvl | grade | delta pill | checkbox), so numbers form true vertical columns down
-   each section. Explicit column indices let the HTML keep any child order. */
+/* Equipped cards and selectable candidate buttons share a compact five-column row. */
 .eqc,.vrow{display:grid;align-items:center;column-gap:var(--gap-sm);padding:var(--gap-sm) 12px;
   border-radius:var(--r-ctl);grid-template-rows:1fr;
-  grid-template-columns:var(--col-ic) minmax(0,1fr) var(--col-il) var(--col-grd) var(--col-d) var(--col-pick)}
-.eqc>*,.vrow>*{grid-row:1}  /* one row, ever: cluster parts must never wrap onto a second line */
+  grid-template-columns:var(--col-ic) minmax(0,1fr) var(--col-il) var(--col-grd) var(--col-d)}
+.eqc>*,.vrow>*{grid-row:1}
 .eqc .ic.big{justify-self:start}
 .eqc .eqx{grid-column:2}
 .eqc .mods{margin-top:var(--gap-2xs)}
 .eqc .il,.vrow .il{grid-column:3;justify-self:end;text-align:right;font-size:12.5px;font-weight:750;color:var(--ink2)}
 .eqc .grd,.vrow .grd{grid-column:4;justify-self:end;text-align:right}
 .eqc .d,.vrow .d{grid-column:5;justify-self:end}
-.vrow .pick{grid-column:6;justify-self:end}
 
 @media (max-width:430px){
-  /* phones: grade word and the equipped 'base' pill drop (quality stays on the icon frame),
-     ilvl/delta keep auto columns; checkbox track stays for right-edge alignment */
-  .eqc,.vrow{--col-ic:30px;--col-pick:18px;
-    grid-template-columns:var(--col-ic) minmax(0,1fr) auto auto var(--col-pick);
+  /* phones: grade word and equipped base pill drop; selection stays on the button. */
+  .eqc,.vrow{--col-ic:30px;
+    grid-template-columns:var(--col-ic) minmax(0,1fr) auto auto;
     column-gap:var(--gap-xs);padding:var(--gap-sm) 9px}
   .eqc .grd,.vrow .grd{display:none}
   .eqc .d{display:none}
