@@ -308,24 +308,6 @@ button.slot-remove-added:hover{color:var(--dn);border-color:var(--dn)}
 .back-link{color:var(--acc-text);text-decoration:none;font-size:12.5px;font-weight:600}
 .back-link:hover{text-decoration:underline}
 .eyebrow{font-size:10.5px;font-weight:750;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
-/* parse/run error + warning panels (text ≥4.5 on its soft ground, both palettes) */
-.error-panel{margin-top:var(--gap-sm);padding:var(--gap-sm) var(--gap-md);border:1px solid var(--dn);
-  border-radius:var(--r-ctl);background:var(--dn-soft);color:var(--dn);font-size:13px;font-weight:600}
-.warning-panel{margin-top:var(--gap-sm);padding:var(--gap-sm) var(--gap-md);border:1px solid var(--warn);
-  border-radius:var(--r-ctl);background:var(--warn-soft);color:var(--warn);font-size:13px;font-weight:600}
-/* small nav links (topline/back) + eyebrow label */
-.back-link{color:var(--acc-text);text-decoration:none;font-size:12.5px;font-weight:600}
-.back-link:hover{text-decoration:underline}
-.eyebrow{font-size:10.5px;font-weight:750;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
-/* parse/run error + warning panels (text ≥4.5 on its soft ground, both palettes) */
-.error-panel{margin-top:var(--gap-sm);padding:var(--gap-sm) var(--gap-md);border:1px solid var(--dn);
-  border-radius:var(--r-ctl);background:var(--dn-soft);color:var(--dn);font-size:13px;font-weight:600}
-.warning-panel{margin-top:var(--gap-sm);padding:var(--gap-sm) var(--gap-md);border:1px solid var(--warn);
-  border-radius:var(--r-ctl);background:var(--warn-soft);color:var(--warn);font-size:13px;font-weight:600}
-/* small nav links (topline/back) + eyebrow label */
-.back-link{color:var(--acc-text);text-decoration:none;font-size:12.5px;font-weight:600}
-.back-link:hover{text-decoration:underline}
-.eyebrow{font-size:10.5px;font-weight:750;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
 /* import + enhancements <details> panels (D-4/D-6) */
 details.importpanel{margin-top:var(--gap-sm)}
 details.importpanel>summary, details.enhpanel>summary{cursor:pointer;display:inline-flex;align-items:center;gap:var(--gap-sm);
