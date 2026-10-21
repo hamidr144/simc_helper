@@ -495,6 +495,9 @@ wowhead_upgrade_cache = {}
 # TG3-C: inventorySlot DBC id (17 = two-hand weapon) per item XML URL, cached
 # alongside the upgrade lookup (the same response feeds both parses).
 wowhead_invslot_cache: Dict[str, Optional[int]] = {}
+# t_1699829f: (inventorySlot id, display name) per bare Wowhead item id, for
+# the tooltip preview's Add-by-ID slot guard (no bonus list — id is invariant).
+wowhead_item_slot_cache: Dict[int, tuple[Optional[int], Optional[str]]] = {}
 wowhead_icon_cache: Dict[str, tuple[bytes, str]] = {}
 wowhead_tooltip_script_cache: Optional[bytes] = None
 
@@ -1219,6 +1222,23 @@ def parse_wowhead_inventory_slot(xml_text: str) -> Optional[int]:
     return int(raw) if raw and raw.isdigit() else None
 
 
+def parse_wowhead_inventory_slot_name(xml_text: str) -> Optional[str]:
+    """inventorySlot display text from a Wowhead item XML ('Head', 'Two-Hand').
+
+    Non-equip items ship ``<inventorySlot id="0"></inventorySlot>``; an empty
+    name returns None and the client falls back to name-less mismatch wording.
+    """
+    try:
+        root = ElementTree.fromstring(xml_text)
+    except ElementTree.ParseError:
+        return None
+    node = root.find("item/inventorySlot")
+    if node is None:
+        return None
+    name = (node.text or "").strip()
+    return name or None
+
+
 def parse_wowhead_icon_name(xml_text: str) -> Optional[str]:
     """Extract a safe icon name from a Wowhead item XML response."""
     try:
@@ -1544,6 +1564,10 @@ async def get_wowhead_tooltip_preview(
         preview = parse_wowhead_tooltip(preview_payload)
         if preview is None:
             raise HTTPException(status_code=502, detail="Unparseable Wowhead tooltip")
+        # t_1699829f: Add-by-ID slot guard — the tooltip JSON has no slot data,
+        # so the preview carries the inventorySlot from the item's plain XML.
+        # A failed lookup leaves both fields null (client fails open).
+        preview["invslot"], preview["invslot_name"] = await fetch_wowhead_item_slot(item)
         current = None
         if has_overrides:
             # Current state = the item with its own bonus ids only, no upgrade overrides.
@@ -1696,6 +1720,30 @@ async def fetch_wowhead_inventory_slot(item: str) -> Optional[int]:
     invslot = parse_wowhead_inventory_slot(response.text)
     wowhead_invslot_cache[url] = invslot
     return invslot
+
+
+async def fetch_wowhead_item_slot(item_id: int) -> tuple[Optional[int], Optional[str]]:
+    """(inventorySlot id, display name) for a bare Wowhead item id.
+
+    The tooltip JSON carries no slot data (t_1699829f), so the preview endpoint
+    reads the same ``?xml=`` document ``wowhead_xml_url`` builds for SimC item
+    strings. Fail-soft like ``fetch_wowhead_inventory_slot``: errors resolve to
+    ``(None, None)`` and are not cached, so a lookup miss fails open downstream.
+    """
+    if item_id in wowhead_item_slot_cache:
+        return wowhead_item_slot_cache[item_id]
+    url = f"https://www.wowhead.com/item={item_id}?xml="
+    try:
+        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True, headers={"User-Agent": "simc-helper/1.0"}) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.warning("Wowhead slot lookup failed for %s: %s", item_id, exc)
+        return None, None
+    slot = (parse_wowhead_inventory_slot(response.text),
+            parse_wowhead_inventory_slot_name(response.text))
+    wowhead_item_slot_cache[item_id] = slot
+    return slot
 
 
 async def find_two_hand_slot_conflict(items_by_slot: Dict[str, Any]) -> Optional[Dict[str, Any]]:

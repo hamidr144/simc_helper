@@ -37,6 +37,17 @@ def clear_tooltip_cache():
     wowhead_tooltip_json_cache.clear()
 
 
+@pytest.fixture(autouse=True)
+def no_slot_upstream(monkeypatch):
+    """t_1699829f: the preview endpoint now also reads the item XML for the
+    inventorySlot — tests must never reach Wowhead for it. Tests that pin the
+    slot fields patch over this with their own monkeypatch.setattr."""
+    async def none_slot(_item_id):
+        return (None, None)
+    monkeypatch.setattr(main, "fetch_wowhead_item_slot", none_slot)
+    yield
+
+
 class FakeUpstream:
     """Serve the real payloads by URL, recording every upstream request."""
 
@@ -129,6 +140,46 @@ def test_endpoint_without_override_skips_current(fake_upstream):
     assert body["current"] is None
     assert body["delta"] is None
     assert len(fake_upstream.urls) == 1
+
+
+# ---------- inventorySlot on the preview (t_1699829f) ----------
+
+def test_inventory_slot_parses_real_item_xml():
+    # LIVE-pinned fixtures fetched 2026-10-21 from wowhead.com/item=<id>?xml=.
+    # The card guessed invslot 1 for both ids; the live values rule: the gem
+    # 240967 reports inventorySlot id 0 with EMPTY text, and 271472 is a
+    # Baleful Grave-Knight's Gibbets — a Shoulder (id 3), not a head.
+    fixtures = os.path.join(os.path.dirname(__file__), "fixtures")
+    with open(os.path.join(fixtures, "wowhead_item_240967.xml"), encoding="utf-8") as fh:
+        gem = fh.read()
+    with open(os.path.join(fixtures, "wowhead_item_271472.xml"), encoding="utf-8") as fh:
+        shoulder = fh.read()
+    assert main.parse_wowhead_inventory_slot(gem) == 0
+    assert main.parse_wowhead_inventory_slot_name(gem) is None
+    assert main.parse_wowhead_inventory_slot(shoulder) == 3
+    assert main.parse_wowhead_inventory_slot_name(shoulder) == "Shoulder"
+
+
+def test_endpoint_carries_inventory_slot(fake_upstream, monkeypatch):
+    async def shoulder_slot(_item_id):
+        return (3, "Shoulder")
+    monkeypatch.setattr(main, "fetch_wowhead_item_slot", shoulder_slot)
+    response = client.get("/api/wowhead/tooltip", params={"item": 271472})
+    assert response.status_code == 200
+    preview = response.json()["preview"]
+    assert preview["invslot"] == 3
+    assert preview["invslot_name"] == "Shoulder"
+
+
+def test_endpoint_invslot_fail_open_on_lookup_miss(fake_upstream):
+    # The autouse stub answers (None, None): the fields must come back as
+    # null, never missing and never an error — the client renders Add as
+    # before when the slot is unknown.
+    response = client.get("/api/wowhead/tooltip", params={"item": 276000})
+    assert response.status_code == 200
+    preview = response.json()["preview"]
+    assert preview["invslot"] is None
+    assert preview["invslot_name"] is None
 
 
 def test_endpoint_one_fetch_per_distinct_state(fake_upstream):
@@ -290,4 +341,4 @@ def test_style_css_defines_preview_classes():
 def test_app_html_cache_busted():
     html = _static("app.html")
     assert "tokens.css?v=red3-2" in html  # MGE-2 split assets (t_94a15fe3)
-    assert "pages/setup.js?v=red3-2" in html  # MGE-2 split assets (t_94a15fe3)
+    assert "pages/setup.js?v=red3-3" in html  # MGE-2 split (t_94a15fe3); t_1699829f bump
