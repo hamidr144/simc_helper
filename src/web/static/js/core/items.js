@@ -97,6 +97,48 @@ export function exportRanksFor(slot, item) {
     })),
   ];
 }
+/* CRIT t_632eeef0: real addon exports and Armory loads never carry
+   `# upgrade_levels=`, so exportRanksFor is null for every real character
+   and the rank/ascension affordance was unreachable in production (t_6b3f65d6).
+   Fallback: read the item's already-inferred grade — Wowhead hydration or
+   ilvl inference lands in state.gearUpgrades as {track, rank} — and walk the
+   season ladder from there. Flood guard (leader ruling comment 1885): only
+   equipped / selected / added items expand; every other candidate keeps its
+   single base row.
+   shortcut: crafted items skip this — they are off-track (ascension resolves
+   via crafted_results elsewhere) and the grade popover was deleted in the
+   redesign. */
+function seasonFallbackRanks(slot, item) {
+  if (isCraftedItem(item)) return null;
+  if (!normalizedEquippedItems(slot).includes(item)
+    && !state.selectedItems[slot]?.has(item)
+    && !state.addedItems.has(item)) return null;
+  // onRowClick drops the gearUpgrades entry on deselect AND writes a bare
+  // {source:'export',rank,item_level} on select — fall back to the same
+  // ilvl→ladder inference state.js seeds with so rows never vanish.
+  let info = state.gearUpgrades[slot]?.[item];
+  if (!info?.track) info = inferMidnightUpgrade(slot, item, state.parsedData?.item_names?.[item]);
+  const ladder = info?.track ? seasonTracks()[info.track] : null;
+  const rank = Number(info?.rank) || 0;
+  if (!ladder || !rank || rank > ladder.length) return null;
+  const crest = `${season().cost_per_rank} ${season().crest_name}`;
+  const trackName = info.track[0].toUpperCase() + info.track.slice(1);
+  const rows = [];
+  for (let r = rank + 1; r <= ladder.length; r++) {
+    rows.push({ rank: r, track: info.track, ilvl: ladder[r - 1], voidforged: false,
+      label: `${trackName} ${r}/${ladder.length} ×${crest}` });
+  }
+  const ascension = seasonAscension();
+  const current = Number(parseItemParams(item).ilevel)
+    || itemLevelFromLabel(state.parsedData?.item_names?.[item]) || null;
+  if (rank === ladder.length && ascension.results?.[info.track] != null
+    && isVoidforgeEligibleSlot(slot) && !isElevatedLevel(current)
+    && !isAlreadyVoidforgedItem(slot, item, state.parsedData?.item_names?.[item])) {
+    rows.push({ rank, track: info.track, ilvl: ascension.results[info.track], voidforged: true,
+      label: `${ascension.name || 'Ascendant'} ×${ascension.cost}` });
+  }
+  return rows;
+}
 export function isAlreadyVoidforgedItem(slot, item, label = '') {
   const ascendedName = String(seasonAscension().name || '').toLowerCase().replace('ascendant ', '');
   return isVoidforgeEligibleSlot(slot) && (
@@ -149,16 +191,16 @@ export function qualityOf(quality) {
 }
 
 /* R-C3 rank/variant expansion (contract §3): base row per item, plus one row
-   per export-ladder upgrade rank (upgrade_levels comment, authoritative),
-   plus a Voidforged twin when the item sits at the top rank of an eligible
-   slot. Season-ladder items keep their single inferred row (the old grade
-   popover is deleted; expanding 6 ranks × every item would flood the list —
-   shortcut: ranks beyond the export ladder stay popover-free, add the rows
-   here when an engine field makes them real candidates). */
+   per export-ladder upgrade rank (upgrade_levels comment, authoritative and
+   still preferred), plus the season-ladder fallback rows for real (comment
+   -free) gear — see seasonFallbackRanks for that ladder, the flood guard and
+   the crafted shortcut. Items neither source can grade keep their single
+   inferred row (the old grade popover is deleted; expanding 6 ranks × every
+   item would flood the list). */
 export function ranksForItem(slot, item) {
   const rows = [{ rank: null, track: null, ilvl: null, voidforged: false }];
   const exportRanks = exportRanksFor(slot, item);
-  if (!exportRanks) return rows;
+  if (!exportRanks) return rows.concat(seasonFallbackRanks(slot, item) || []);
   for (const rank of exportRanks.slice(1)) {
     rows.push({ rank: rank.rank, track: null, ilvl: rank.level, voidforged: false, label: rank.label });
   }

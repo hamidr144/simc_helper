@@ -98,11 +98,16 @@ export function renderGear() {
       return `<div class="eqrow"><div class="eqtag"><span class="tag eq">equipped${section.equipKeys.length > 1 ? ` · slot ${index + 1}` : ''}</span></div>${card}</div>`;
     }).join('');
 
-    const rows = items.filter(item => !equippedSet.has(item)).flatMap(item => {
+    const rows = items.flatMap(item => {
       const params = parseItemParams(item);
       const cleanName = String(state.parsedData.item_names[item] || `item ${params.id || ''}`)
         .replace(/\s*\(\d+\)/, '');
-      return ranksForItem(slot, item).map(variant => {
+      const variants = ranksForItem(slot, item);
+      // CRIT t_632eeef0: real gear is equipped-only, and filtering equipped
+      // items out entirely made rank/VF rows unreachable. An equipped piece
+      // now renders its upgrade rows; the eqc card above stays its base row.
+      const visible = equippedSet.has(item) ? variants.filter(v => v.rank !== null) : variants;
+      return visible.map(variant => {
         const level = variant.ilvl
           ?? (Number(params.ilevel) || itemLevelFromLabel(state.parsedData.item_names[item]) || null);
         const suffix = variant.rank
