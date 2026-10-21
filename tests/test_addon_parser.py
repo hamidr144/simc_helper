@@ -200,8 +200,9 @@ class TestNameComments:
         assert "id=100" in item_names
         assert item_names["id=100"] == "This is a comment (100) for the next item"
 
-    def test_no_preceding_comment_yields_empty_name(self):
-        """No preceding comment means empty item name."""
+    def test_no_preceding_comment_yields_no_name(self):
+        """No preceding comment means no item_names entry (t_5fe563ac: empty
+        names are never stored — /api/parse-addon hydrates from Wowhead)."""
         lines = [
             "mage=Test",
             "### Gear from Bags",
@@ -209,7 +210,7 @@ class TestNameComments:
             "### Additional Character Info",
         ]
         _, _, _, item_names, _, _, _ = parse_addon_lines(lines)
-        assert item_names.get("id=100") == ""
+        assert "id=100" not in item_names
 
 
 class TestEdgeCases:
@@ -513,10 +514,11 @@ class TestNameCommentPoisoning:
             "### Additional Character Info",
         ]
         _, _, _, item_names, _, _, _ = parse_addon_lines(lines)
-        assert item_names == {"id=100": "", "id=200": ""}
+        assert item_names == {}  # t_5fe563ac: empty names are never stored
 
     def test_real_name_comment_consumed_by_one_item_only(self):
-        """A real "# Name (ilvl)" comment is assigned once; next item is ""."""
+        """A real "# Name (ilvl)" comment is assigned once; the next item is
+        left unnamed (t_5fe563ac: hydration fills it, never a leak)."""
         lines = [
             "paladin=Test",
             "### Gear from Bags",
@@ -527,18 +529,49 @@ class TestNameCommentPoisoning:
         ]
         _, _, _, item_names, _, _, _ = parse_addon_lines(lines)
         assert item_names["id=100"] == "Serrated Blade of Deliberation (291)"
-        assert item_names["id=200"] == ""
+        assert "id=200" not in item_names
 
-    def test_canonical_export_has_no_meta_poisoned_names(self):
+    def test_canonical_block_export_never_misattributes_names(self):
         """Real canonical export (sha256 65839e76...): 226 deduped items, no
-        'fighting style' leak, names are not one poisoned constant."""
+        per-item comments — just a stacked profile-block of 15 names ahead of
+        the gear lines. t_5fe563ac: the parser must refuse to guess identity
+        from a block, so it stores no names at all (hydration fills them);
+        the old code stamped the block's last name on the first gear line."""
         fixture = os.path.join(
             os.path.dirname(__file__), "fixtures", "addon_export_canonical.simc"
         )
         with open(fixture) as f:
             lines = f.readlines()
         _, _, _, item_names, _, _, _ = parse_addon_lines(lines)
-        assert len(item_names) == 226
+        assert item_names == {}
         assert not any("fighting style" in v for v in item_names.values())
-        assert len(set(item_names.values())) > 1
+
+    def test_stacked_name_block_never_names_the_following_items(self):
+        """t_5fe563ac acceptance: block-comment export shape (all names
+        grouped, no per-item comments) — no item may claim a block name."""
+        lines = [
+            "paladin=Test",
+            "# Alpha Blade (300)",
+            "# Beta Helm (301)",
+            "# Gamma Ring (302)",
+            "head=id=100",
+            "main_hand=id=200",
+            "finger1=id=300",
+        ]
+        _, _, _, item_names, _, _, _ = parse_addon_lines(lines)
+        assert item_names == {}
+
+    def test_adjacent_and_block_names_in_one_export(self):
+        """An adjacent hint after a dropped block still resolves for its own
+        item only; the block names attribute to nothing."""
+        lines = [
+            "paladin=Test",
+            "# Alpha Blade (300)",
+            "# Beta Helm (301)",
+            "head=id=100",
+            "# Real Adjacent Name (302)",
+            "finger1=id=300",
+        ]
+        _, _, _, item_names, _, _, _ = parse_addon_lines(lines)
+        assert item_names == {"id=300": "Real Adjacent Name (302)"}
 
