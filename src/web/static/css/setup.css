@@ -131,7 +131,7 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
 .choice-chip:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 .choice-chip .enhancement-name-link{white-space:nowrap}
 .equipped-badge{font-size:10.5px;color:var(--gold);font-weight:700;letter-spacing:.03em;text-transform:uppercase}
-.enhancement-name-link{color:inherit;text-decoration:none}
+.enhancement-name-link{color:inherit;text-decoration:underline;text-underline-offset:2px}
 .enhancement-name-link:hover{color:var(--acc-text)}
 
 /* ---- RED-3 surviving controls, restyled in the v11 idiom (feature parity;
@@ -168,7 +168,7 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
 .choice-chip:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 .choice-chip .enhancement-name-link{white-space:nowrap}
 .equipped-badge{font-size:10.5px;color:var(--gold);font-weight:700;letter-spacing:.03em;text-transform:uppercase}
-.enhancement-name-link{color:inherit;text-decoration:none}
+.enhancement-name-link{color:inherit;text-decoration:underline;text-underline-offset:2px}
 .enhancement-name-link:hover{color:var(--acc-text)}
 
 /* import card (surviving chrome in the design voice) */

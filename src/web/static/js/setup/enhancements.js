@@ -14,6 +14,11 @@ import { selectionChanged } from './runbar.js';
 // filtering when the backend exposes gem ids.
 const PVP_META_NAME_MATCH = /heliotrope/i;
 export const visibleEnchants = enchants => enchants.filter(entry => entry.quality !== 2);
+function appendWowheadLink(group, enhancement, name) {
+  const wrapper = document.createElement('span');
+  wrapper.innerHTML = createEnhancementWowheadLink(enhancement, name);
+  if (wrapper.firstElementChild?.tagName === 'A') group.appendChild(wrapper.firstElementChild);
+}
 export function renderEnhancements() {
   const container = document.getElementById('enhancement-options');
   container.innerHTML = '';
@@ -62,8 +67,14 @@ export function renderEnhancements() {
         button.type = 'button';
         button.className = `choice-chip${state.selectedEnchants[slot].has(id) || equipped ? ' selected' : ''}`;
         button.setAttribute('aria-pressed', String(state.selectedEnchants[slot].has(id) || equipped));
-        button.innerHTML = createEnhancementWowheadLink(enchant, name) +
-          (equipped ? '<span class="equipped-badge">equipped</span>' : '');
+        button.setAttribute('aria-label', `Select ${name}`);
+        button.textContent = name;
+        if (equipped) {
+          const badge = document.createElement('span');
+          badge.className = 'equipped-badge';
+          badge.textContent = 'equipped';
+          button.appendChild(badge);
+        }
         button.addEventListener('click', () => {
           const selected = !button.classList.contains('selected');
           button.classList.toggle('selected', selected);
@@ -73,6 +84,7 @@ export function renderEnhancements() {
           selectionChanged();
         });
         group.appendChild(button);
+        appendWowheadLink(group, enchant, name);
       }
     });
   }
@@ -91,8 +103,14 @@ export function renderEnhancements() {
         button.type = 'button';
         button.className = `choice-chip${state.selectedGems.has(id) || equipped ? ' selected' : ''}`;
         button.setAttribute('aria-pressed', String(state.selectedGems.has(id) || equipped));
-        button.innerHTML = createEnhancementWowheadLink(gem, name) +
-          (equipped ? '<span class="equipped-badge">equipped</span>' : '');
+        button.setAttribute('aria-label', `Select ${name}`);
+        button.textContent = name;
+        if (equipped) {
+          const badge = document.createElement('span');
+          badge.className = 'equipped-badge';
+          badge.textContent = 'equipped';
+          button.appendChild(badge);
+        }
         button.addEventListener('click', () => {
           const selected = !button.classList.contains('selected');
           button.classList.toggle('selected', selected);
@@ -102,6 +120,7 @@ export function renderEnhancements() {
           selectionChanged();
         });
         group.appendChild(button);
+        appendWowheadLink(group, gem, name);
       }
     });
   }
@@ -118,8 +137,14 @@ export function renderEnhancements() {
         button.type = 'button';
         button.className = `choice-chip${state.selectedMetaGems.has(id) || equipped ? ' selected' : ''}`;
         button.setAttribute('aria-pressed', String(state.selectedMetaGems.has(id) || equipped));
-        button.innerHTML = createEnhancementWowheadLink(gem, name) +
-          (equipped ? '<span class="equipped-badge">equipped</span>' : '');
+        button.setAttribute('aria-label', `Select ${name}`);
+        button.textContent = name;
+        if (equipped) {
+          const badge = document.createElement('span');
+          badge.className = 'equipped-badge';
+          badge.textContent = 'equipped';
+          button.appendChild(badge);
+        }
         button.addEventListener('click', () => {
           const selected = !button.classList.contains('selected');
           state.selectedMetaGems.clear();
@@ -133,6 +158,7 @@ export function renderEnhancements() {
         });
         button.dataset.id = id;
         group.appendChild(button);
+        appendWowheadLink(group, gem, name);
       }
     });
   }

@@ -642,8 +642,8 @@ def test_gems_and_enchantments_use_default_wowhead_tooltips():
     assert "function createEnhancementWowheadLink(enhancement, name)" in js
     assert "enhancement.wowhead_url" in js
     assert "enhancement-name-link wowhead-item-link" in js
-    assert "createEnhancementWowheadLink(enchant, name)" in js
-    assert "createEnhancementWowheadLink(gem, name)" in js
+    assert "appendWowheadLink(group, enchant, name)" in js
+    assert "appendWowheadLink(group, gem, name)" in js
     assert js.count("refreshWowheadLinks();") >= 2
 
 
@@ -680,6 +680,20 @@ def test_enhancements_use_gear_buttons_preserve_equipped_baseline_and_filter_gre
     assert "q-${q.cls}" in ui
     assert "padding-bottom:220px" in css
     assert "white-space:nowrap" in css
+
+
+def test_wowhead_link_click_cannot_toggle_enhancement_selection():
+    root = Path(__file__).resolve().parent.parent / "src" / "web" / "static" / "js"
+    enhancements = (root / "setup/enhancements.js").read_text()
+    wowhead = (root / "core/wowhead.js").read_text()
+
+    # The selection listener belongs only to the button; the anchor is appended
+    # directly to the group afterward, so its click cannot bubble through it.
+    assert "button.addEventListener('click', () => {" in enhancements
+    assert enhancements.count("group.appendChild(button);\n        appendWowheadLink(group,") == 3
+    assert "group.appendChild(wrapper.firstElementChild)" in enhancements
+    assert 'class="enhancement-name-link wowhead-item-link"' in wowhead
+    assert "button.innerHTML = createEnhancementWowheadLink" not in enhancements
 
 
 def test_report_gear_summary_shows_only_slot_and_item_link():
