@@ -31,15 +31,26 @@ delete state.parsedData.item_qualities[KNOWN];
 out.paramFallback = qualityOf(resolveRowQuality('id=1,quality=2')).word; // Uncommon
 out.commonFallback = qualityOf(resolveRowQuality('id=1')).word;        // Common (only true fallback)
 
-// --- draft restore orphan-drop ------------------------------------------------
-state.selectedItems = { neck: new Set() };
+// --- draft restore --------------------------------------------------------------
+// Stale SELECTED-only strings are still orphan-dropped (ruling 4), but
+// addedItems keys are authoritative and get re-inserted (t_65bd1b07 ruling).
+const ADDED = 'id=271472';
+state.parsedData.items_by_slot.shoulder = [',id=271463,ilevel=330'];
+state.selectedItems = { neck: new Set(), shoulder: new Set() };
 state.addedItems = new Map();
 applyDraftToState({
-  selectedItems: { neck: [KNOWN, ORPHAN] },
-  addedItems: [[KNOWN, 'neck'], [ORPHAN, 'neck']],
+  parsedData: {
+    item_names: { [ADDED]: 'Blessed Batplate Spaulders (337)' },
+    item_qualities: { [ADDED]: 4 },  // PR #47 committed shape
+  },
+  selectedItems: { neck: [KNOWN, ORPHAN], shoulder: [ADDED] },
+  addedItems: [[KNOWN, 'neck'], [ADDED, 'shoulder']],
 });
-out.draftSelected = [...state.selectedItems.neck];
+out.draftSelected = [...state.selectedItems.neck];        // ORPHAN (selected-only) dropped
 out.draftAdded = [...state.addedItems.keys()];
+out.addedReinserted = state.parsedData.items_by_slot.shoulder;
+out.addedName = state.parsedData.item_names[ADDED];
+out.addedQuality = qualityOf(resolveRowQuality(ADDED)).word;
 
 // --- results-apply orphan-drop (replaces, so orphans alone yield an empty set)
 applyPayloadToState({ selected_items: { neck: [ORPHAN] } });

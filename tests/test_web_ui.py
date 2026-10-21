@@ -421,7 +421,13 @@ def test_row_quality_resolver_and_draft_orphan_drop_node_probe():
     assert out["paramFallback"] == "Uncommon"
     assert out["commonFallback"] == "Common"
     assert out["draftSelected"] == ["id=268265,bonus_id=6652,ilevel=334"]
-    assert out["draftAdded"] == ["id=268265,bonus_id=6652,ilevel=334"]
+    # t_65bd1b07 (leader ruling): addedItems keys are AUTHORITATIVE at restore
+    # and get re-inserted into items_by_slot/item_names; the orphan-drop stays
+    # for plain stale selection strings (ORPHAN is selected-only here).
+    assert out["draftAdded"] == ["id=268265,bonus_id=6652,ilevel=334", "id=271472"]
+    assert out["addedReinserted"] == [",id=271463,ilevel=330", "id=271472"]
+    assert out["addedName"] == "Blessed Batplate Spaulders (337)"
+    assert out["addedQuality"] == "Epic"
     assert out["payloadSelected"] == []
     # t_910b4761: committed add-by-id — the tooltip preview quality persists
     # into parsedData.item_qualities (the draft-persisted resolver slot), and
@@ -461,6 +467,33 @@ process.exit(fail);
 """
     result = subprocess.run([node, "-e", script], capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_draft_added_items_survive_restore_node_probe():
+    # t_65bd1b07 (QA probe from t_43477503 reproduced red-then-green): an
+    # added-by-ID key never exists in a fresh export parse, so the old
+    # knownCandidate gate dropped every draft.addedItems entry at restore and
+    # persistDraft then overwrote the draft. Added keys are now re-inserted
+    # into the fresh parse and survive applyDraftToState AND the persistDraft
+    # round-trip onto a second fresh parse unchanged.
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    harness = os.path.join(os.path.dirname(__file__), "fixtures", "draft_added_restore_harness.mjs")
+    result = subprocess.run([node, harness], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, f"harness failed: {result.stderr[-2000:]}"
+    out = json.loads(result.stdout)
+    added = [["id=271472", "shoulder"], ["id=271444", "shoulder"]]
+    candidates = [",id=271463,ilevel=330", "id=271472", "id=271444"]
+    for hop in (out["restored"], out["roundTrip"]):
+        assert sorted(hop["added"]) == ["id=271444", "id=271472"]
+        assert sorted(hop["candidates"]) == sorted(candidates)
+        assert sorted(hop["selected"]) == ["id=271444", "id=271472"]
+    assert out["persistedAdded"] == added
+    assert sorted(out["persistedCandidates"]) == sorted(candidates)
+    assert out["roundTrip"]["qualities"] == [4, 3]
+    assert out["roundTrip"]["names"] == [
+        "Blessed Batplate Spaulders (337)", "Stonearrow Pauldrons (324)"]
 
 
 def test_add_by_id_slot_guard_node_probe():
