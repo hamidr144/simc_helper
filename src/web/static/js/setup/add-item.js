@@ -4,7 +4,7 @@ import { state } from '../core/state.js';
 
 import { escapeHtml } from '../core/dom.js';
 
-import { inferMidnightUpgrade } from '../core/items.js';
+import { inferMidnightUpgrade, resolveAddedGrade } from '../core/items.js';
 
 import { renderCharChip } from './char-chip.js';
 
@@ -62,7 +62,12 @@ function commitAddedItem(slot, itemId, preview) {
     if (Number.isInteger(preview.quality)) (state.parsedData.item_qualities ||= {})[key] = preview.quality;
     state.gearUpgrades[slot] = state.gearUpgrades[slot] || {};
     state.voidforgedItems[slot] = state.voidforgedItems[slot] || {};
-    const inferred = inferMidnightUpgrade(slot, key, state.parsedData.item_names[key]);
+    // t_4149ba6b (A4): resolve the added key's grade from data already in
+    // hand (same-id sibling in this slot, else the preview's Upgrade Level
+    // line) before falling back to the label-only ladder inference — the bare
+    // key alone never resolves (off-ladder preview ilvl).
+    const inferred = resolveAddedGrade(slot, itemId, preview)
+      || inferMidnightUpgrade(slot, key, state.parsedData.item_names[key]);
     if (inferred) state.gearUpgrades[slot][key] = inferred;
     state.voidforgedItems[slot][key] = false;
     state.addedItems.set(key, slot);
