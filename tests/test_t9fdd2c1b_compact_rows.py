@@ -15,6 +15,13 @@ ENHANCEMENTS_JS = (STATIC / "js/setup/enhancements.js").read_text()
 APP_HTML = (STATIC / "app.html").read_text()
 
 
+def test_setup_mobile_content_clears_fixed_runbar():
+    # The fixed runbar covers content unless the page reserves its mobile height.
+    setup_css = (STATIC / "css" / "setup.css").read_text()
+    mobile = setup_css.split("@media (max-width:430px){", 1)[1].split("}", 1)[0]
+    assert "padding:12px 10px calc(220px + 110px + env(safe-area-inset-bottom))" in mobile
+
+
 def test_gear_card_is_a_dense_grid_row():
     # RED-3 (v11 §M10): equipped card and candidate row are ONE shared grid —
     # icon | name(minmax 0) | ilvl | grade | delta; selection is conveyed by
