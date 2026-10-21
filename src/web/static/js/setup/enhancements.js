@@ -13,6 +13,7 @@ import { selectionChanged } from './runbar.js';
 // shortcut: PVP meta gems are excluded by name substring; upgrade to item-id
 // filtering when the backend exposes gem ids.
 const PVP_META_NAME_MATCH = /heliotrope/i;
+export const visibleEnchants = enchants => enchants.filter(entry => entry.quality !== 2);
 export function renderEnhancements() {
   const container = document.getElementById('enhancement-options');
   container.innerHTML = '';
@@ -53,7 +54,7 @@ export function renderEnhancements() {
   for (const [slot, enchants] of Object.entries(state.appConfig.enchantments || {})) {
     if (!enchants.length || !PAPER_DOLL_SLOTS.includes(slot)) continue;
     addSection(`${slot.replace('_', ' ')} enchants`, group => {
-      for (const enchant of enchants.filter(entry => entry.quality !== 2)) {
+      for (const enchant of visibleEnchants(enchants)) {
         const id = String(typeof enchant === 'object' ? enchant.id : enchant);
         const name = typeof enchant === 'object' ? enchant.name : `Enchant ${id}`;
         const equipped = state.equippedEnchants[slot].has(id);
