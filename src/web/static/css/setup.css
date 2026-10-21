@@ -184,6 +184,7 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
 .armory-controls{display:flex;gap:var(--gap-sm);margin:8px 0 10px;flex-wrap:wrap}
 .armory-field{min-width:160px;flex:1}
 .armory-divider{color:var(--ink3);font-size:12.5px;margin:10px 0 4px}
+.drafts-note{margin:10px 0 0;padding:8px 10px;border-radius:6px;background:var(--warn-soft);color:var(--ink);font-size:13px}
 .armory-hint{color:var(--ink3);font-size:12px;margin:0 0 10px}
 .rows>.fold{display:flex;justify-content:center;margin-top:4px;cursor:pointer}
 

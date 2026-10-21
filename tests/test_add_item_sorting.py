@@ -233,4 +233,4 @@ def test_app_html_cache_busted_step4():
     html = _static("app.html")
     # t_94a15fe3 (MGE2 split): cache-bust now rides the token sheet + boot entry.
     assert "css/tokens.css?v=red3-2" in html
-    assert "js/pages/setup.js?v=red3-2" in html
+    assert "js/pages/setup.js?v=red3-3" in html  # t_1699829f re-pin (was red3-2)

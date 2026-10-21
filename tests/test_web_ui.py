@@ -402,6 +402,66 @@ def test_gear_row_fold_budget_immune_to_selection():
     assert out["expandRevealsAll"] == [0, 1, 2, 3, 4, 5]
 
 
+def test_add_by_id_slot_guard_node_probe():
+    # t_1699829f: the client-side inventorySlot->slot guard, evaluated in node
+    # (same harness pattern as test_crafted_badge_mapping_g4): a mismatch
+    # suppresses the Add button and names the item's real slot; a matching
+    # slot still adds; unknown ids and failed/absent invslot fail OPEN; gems
+    # (id 0) and other known non-equip ids never offer an equip slot.
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    js = resp(read_js()).text
+    start = js.index("const INV_SLOT_TABLE")
+    table = js[start:js.index("};", start) + 2]
+    fn_start = js.index("function slotAddDecision")
+    fn = js[fn_start:js.index("\n}", fn_start) + 2]
+    # The reject must happen before the Add button is ever rendered.
+    assert js.index("if (!decision.offer)") < js.index("slot-add-confirm")
+    script = table + "\n" + fn + """
+const cases = [
+  ["head", { name: "Warhelm", invslot: 1, invslot_name: "Head" }, true, ""],
+  ["chest", { name: "Warhelm", invslot: 1, invslot_name: "Head" }, false, "Warhelm fits Head, not chest."],
+  ["finger", { name: "Ring", invslot: 11, invslot_name: "Finger" }, true, ""],
+  ["trinket", { name: "Trink", invslot: 12, invslot_name: "Trinket" }, true, ""],
+  ["back", { name: "Cloak", invslot: 16, invslot_name: "Back" }, true, ""],
+  ["shoulder", { name: "Gibbets", invslot: 3, invslot_name: "Shoulder" }, true, ""],
+  ["off_hand", { name: "2H", invslot: 17, invslot_name: "Two-Hand" }, true, ""],
+  ["chest", { name: "2H", invslot: 17, invslot_name: "Two-Hand" }, false, "2H fits Two-Hand, not chest."],
+  ["chest", { name: "Gem", invslot: 0 }, false, "Gem fits no equip slot, not chest."],
+  ["chest", { name: "Tabard", invslot: 19, invslot_name: "Tabard" }, false, "Tabard fits Tabard, not chest."],
+  ["main_hand", { name: "OneHand", invslot: 13, invslot_name: "One-Hand" }, true, ""],
+  ["off_hand", { name: "Shield", invslot: 14, invslot_name: "Off Hand" }, true, ""],
+  ["head", { name: "NoSlotInfo" }, true, ""],
+  ["head", { name: "Null", invslot: null, invslot_name: null }, true, ""],
+  ["head", { name: "Future", invslot: 9042, invslot_name: "Future Slot" }, true, ""],
+];
+let fail = 0;
+for (const [slot, preview, wantOffer, wantMsg] of cases) {
+  const got = slotAddDecision(slot, preview);
+  if (got.offer !== wantOffer) { console.error(slot + " " + preview.name + " offer=" + got.offer + " want " + wantOffer); fail = 1; }
+  if (wantMsg && !(got.message || "").includes(wantMsg)) { console.error(slot + " " + preview.name + " msg=" + got.message + " want " + wantMsg); fail = 1; }
+}
+if (!slotAddDecision("head", { name: "Future", invslot: 9042, invslot_name: "Future Slot" }).showSlotName) { console.error("unknown id must name the returned slot in the meta line"); fail = 1; }
+if (slotAddDecision("head", { name: "Warhelm", invslot: 1, invslot_name: "Head" }).showSlotName) { console.error("a matched slot must not append a slot name"); fail = 1; }
+process.exit(fail);
+"""
+    result = subprocess.run([node, "-e", script], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_setup_boot_surfaces_saved_drafts_in_import_band():
+    # t_1699829f: after a session-expiry re-login the empty import band must
+    # not contradict the 401 banner — boot renders a persistent note listing
+    # every saved-draft character (newest first) with the re-load instruction.
+    # Draft lifecycle itself stays unchanged.
+    js = resp(read_js()).text
+    assert "load that character again (addon export or Armory) and your selections are restored" in js
+    assert "drafts-note" in js
+    assert "pendingBoot.drafts" in js
+    assert ".drafts-note" in read_css()
+
+
 def test_gear_selection_hydrates_exact_grades_from_wowhead():
     response = resp(read_js())
     assert response.status_code == 200
