@@ -15,11 +15,14 @@ ENHANCEMENTS_JS = (STATIC / "js/setup/enhancements.js").read_text()
 APP_HTML = (STATIC / "app.html").read_text()
 
 
-def test_setup_mobile_content_clears_fixed_runbar():
-    # The fixed runbar covers content unless the page reserves its mobile height.
+def test_setup_mobile_content_reserves_measured_runbar_height():
     setup_css = (STATIC / "css" / "setup.css").read_text()
+    setup_js = (STATIC / "js" / "pages" / "setup.js").read_text()
     mobile = setup_css.split("@media (max-width:430px){", 1)[1].split("}", 1)[0]
-    assert "padding:12px 10px calc(220px + 110px + env(safe-area-inset-bottom))" in mobile
+    assert "var(--setup-runbar-height, 0px)" in mobile
+    assert "env(safe-area-inset-bottom)" in mobile
+    assert "ResizeObserver(reserve)" in setup_js
+    assert "getBoundingClientRect().height" in setup_js
 
 
 def test_gear_card_is_a_dense_grid_row():
