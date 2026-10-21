@@ -58,9 +58,31 @@ export function loadDrafts() {
    restores candidate state wholesale, so a prior session's item string can
    come back with no row in the current parse (no name, no ilvl, renders as
    'item <id>' and leaks into payloads).  Orphan-drop on restore; gear.js
-   keeps the 'item <id>' literal as the last-resort render fallback. */
+   keeps the 'item <id>' literal as the last-resort render fallback.
+   Exempt: draft.addedItems keys — authoritative, see restoreAddedItem. */
 function knownCandidate(slot, item) {
   return (state.parsedData?.items_by_slot?.[slot] || []).includes(item);
+}
+
+/* t_65bd1b07 (leader ruling, supersedes the guard above FOR ADDED KEYS ONLY):
+   commitAddedItem writes 'id=<n>' into parsedData.items_by_slot/item_names
+   (and item_qualities per PR #47), and the draft carries all three, but such
+   a key never appears in a fresh export parse — so knownCandidate dropped
+   every added item at restore and persistDraft then silently overwrote the
+   draft (t_26c5ddef work loss, QA probe t_43477503). Re-insert a missing
+   added row into the fresh parse with the name/quality the draft carries;
+   a key the fresh parse already has keeps its own fresher fields. Rank rows
+   need no re-insert: seasonFallbackRanks re-infers at render (t_632eeef0). */
+function restoreAddedItem(draft, key, slot) {
+  const parsed = state.parsedData;
+  if (!parsed) return;
+  const items = (parsed.items_by_slot ||= {})[slot] ||= [];
+  if (items.includes(key)) return;
+  items.push(key);
+  const name = draft.parsedData?.item_names?.[key];
+  if (name) (parsed.item_names ||= {})[key] = name;
+  const quality = draft.parsedData?.item_qualities?.[key];
+  if (quality !== undefined) (parsed.item_qualities ||= {})[key] = quality;
 }
 
 /* Restore explicit user state on top of a re-initialized selection layer:
@@ -71,7 +93,8 @@ export function applyDraftToState(draft) {
   state.slotLocks = { ...state.slotLocks, ...(draft.slotLocks || {}) };
   state.extraSockets = { ...state.extraSockets, ...(draft.extraSockets || {}) };
   for (const [key, slot] of draft.addedItems || []) {
-    if (knownCandidate(slot, key)) state.addedItems.set(key, slot);
+    restoreAddedItem(draft, key, slot);
+    state.addedItems.set(key, slot);
   }
   for (const [slot, ids] of Object.entries(draft.selectedEnchants || {})) {
     (state.selectedEnchants[slot] ||= new Set());
