@@ -19,6 +19,7 @@ import re
 
 CSS = read_css()
 APP_JS = read_js()
+ENHANCEMENTS_JS = (Path(__file__).resolve().parents[1] / "src/web/static/js/setup/enhancements.js").read_text()
 RESULTS_JS = read_js()
 
 
@@ -52,11 +53,11 @@ def test_bug_t2aede9cd_2a_enhancement_groups_closed_by_default():
     assert "section.open = Boolean" not in APP_JS, (
         "enhancement <details> groups must not auto-open on checked content"
     )
-    assert "${checked} selected" in APP_JS, (
+    assert "${checked} selected" in ENHANCEMENTS_JS, (
         "summary label must show the checked count (e.g. 'Gems · 2 selected')"
     )
-    assert "group.addEventListener('change', renderLabel)" in APP_JS, (
-        "summary label must update when a checkbox changes"
+    assert "group.addEventListener('click', renderLabel)" in ENHANCEMENTS_JS, (
+        "summary label must update when a selection changes"
     )
     # Chrome >=131 hides closed <details> via paint containment on
     # ::details-content, leaving descendant rects non-zero — rect-based

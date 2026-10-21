@@ -74,14 +74,14 @@ export function itemRow(variant, d) {
       title="${esc(d.title ?? d.name)}"
       data-item="${esc(d.item ?? '')}"${d.rank ? ` data-rank="${esc(String(d.rank))}"` : ''}${d.voidforged ? ' data-vf="1"' : ''}>
       ${icon}
-      <span class="name">${stateTag(d)}${esc(d.name)}${d.ench ? '<span class="modi" title="enchant / modifier">⚡</span>' : ''}</span>
+      <span class="name q-${q.cls}" title="${esc(d.name)}">${stateTag(d)}${esc(d.name)}${d.ench ? '<span class="modi" title="enchant / modifier">⚡</span>' : ''}</span>
       <span class="il num">${d.ilvl ?? '—'}</span>
       <span class="grd ${q.cls}">${q.word}</span>${delta}
       <span class="pick" aria-hidden="true"></span></button>`;
   }
   // results variants: the caller wraps (button/rowfoot state lives there)
   return `${icon}
-    <span class="name${d.sel ? '' : ''}" title="${esc(d.name)}">${stateTag(d)}${esc(d.name)}${d.ench ? '<span class="modi" title="enchant / modifier">⚡</span>' : ''}</span>
+    <span class="name q-${q.cls}" title="${esc(d.name)}">${stateTag(d)}${esc(d.name)}${d.ench ? '<span class="modi" title="enchant / modifier">⚡</span>' : ''}</span>
     <span class="il num">${d.ilvl ?? '—'}</span>
     <span class="grd ${q.cls}">${q.word}</span>${delta}`;
 }

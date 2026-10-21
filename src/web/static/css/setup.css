@@ -3,7 +3,7 @@
    tokens.css); everything below is verbatim RED-2M12. */
 
 /* ---- vertical page-length list ---- */
-main{max-width:880px}
+main{max-width:880px;padding-bottom:220px}
 .qj{position:sticky;top:0;z-index:40;background:var(--canvas);border-bottom:1px solid var(--line)}
 .qjin{max-width:880px;margin:0 auto;display:flex;align-items:center;flex-wrap:wrap;gap:var(--gap-sm);overflow-x:auto;padding:8px 20px;scrollbar-width:thin}
 .qj a{flex:none;border:1px solid var(--line2);background:var(--surface);color:var(--ink2);
@@ -48,7 +48,7 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
 .pal .seg button[aria-checked=true]{background:var(--acc);color:var(--acc-ink)}
 
 @media (max-width:430px){
-  main{padding:12px 10px 130px}
+  main{padding:12px 10px 220px}
   .qjin{padding:8px 10px}
   .slotsec{margin-top:var(--gap-md)}
   .eqc .nm{font-size:12px}
@@ -126,11 +126,12 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
 .enh-section[open]>summary{border-bottom:1px solid var(--line)}
 .enhancement-group{display:flex;flex-wrap:wrap;gap:var(--gap-sm);border:0;padding:12px 14px;margin:0}
 .choice-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line2);border-radius:99px;
-  background:var(--surface);padding:4px 11px;font-size:12.5px;color:var(--ink2);cursor:pointer}
-.choice-chip:has(input:checked){border-color:var(--acc);color:var(--acc-text);background:var(--acc-soft, var(--sunk))}
-.choice-chip input{accent-color:var(--acc);margin:0}
+  background:var(--surface);padding:4px 11px;font:inherit;font-size:12.5px;color:var(--ink2);cursor:pointer}
+.choice-chip.selected{border-color:var(--acc);color:var(--acc-text);background:var(--acc-soft, var(--sunk))}
+.choice-chip:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.choice-chip .enhancement-name-link{white-space:nowrap}
 .equipped-badge{font-size:10.5px;color:var(--gold);font-weight:700;letter-spacing:.03em;text-transform:uppercase}
-.enhancement-name-link{color:inherit;text-decoration:none}
+.enhancement-name-link{color:inherit;text-decoration:underline;text-underline-offset:2px}
 .enhancement-name-link:hover{color:var(--acc-text)}
 
 /* ---- RED-3 surviving controls, restyled in the v11 idiom (feature parity;
@@ -162,11 +163,12 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
 .enh-section[open]>summary{border-bottom:1px solid var(--line)}
 .enhancement-group{display:flex;flex-wrap:wrap;gap:var(--gap-sm);border:0;padding:12px 14px;margin:0}
 .choice-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line2);border-radius:99px;
-  background:var(--surface);padding:4px 11px;font-size:12.5px;color:var(--ink2);cursor:pointer}
-.choice-chip:has(input:checked){border-color:var(--acc);color:var(--acc-text);background:var(--acc-soft, var(--sunk))}
-.choice-chip input{accent-color:var(--acc);margin:0}
+  background:var(--surface);padding:4px 11px;font:inherit;font-size:12.5px;color:var(--ink2);cursor:pointer}
+.choice-chip.selected{border-color:var(--acc);color:var(--acc-text);background:var(--acc-soft, var(--sunk))}
+.choice-chip:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.choice-chip .enhancement-name-link{white-space:nowrap}
 .equipped-badge{font-size:10.5px;color:var(--gold);font-weight:700;letter-spacing:.03em;text-transform:uppercase}
-.enhancement-name-link{color:inherit;text-decoration:none}
+.enhancement-name-link{color:inherit;text-decoration:underline;text-underline-offset:2px}
 .enhancement-name-link:hover{color:var(--acc-text)}
 
 /* import card (surviving chrome in the design voice) */

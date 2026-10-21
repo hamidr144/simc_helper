@@ -81,7 +81,6 @@ export function initializeSelections() {
     }
   }
   for (const slot of Object.keys(state.appConfig.enchantments || {})) {
-    state.selectedEnchants[slot] = new Set();
     state.equippedEnchants[slot] = new Set();
     const configuredIds = new Set((state.appConfig.enchantments[slot] || []).map(enchant =>
       String(typeof enchant === 'object' ? enchant.id : enchant)
@@ -92,6 +91,7 @@ export function initializeSelections() {
         state.equippedEnchants[slot].add(String(enchantId));
       }
     }
+    state.selectedEnchants[slot] = new Set(state.equippedEnchants[slot]);
   }
 
   const configuredGemIds = new Set((state.appConfig.gems?.standard || []).map(gem =>
@@ -99,7 +99,10 @@ export function initializeSelections() {
   ));
   for (const item of Object.values(state.parsedData.equipped_gear || {})) {
     for (const gemId of String(parseItemParams(item).gem_id || '').split('/')) {
-      if (configuredGemIds.has(gemId)) state.equippedGems.add(gemId);
+      if (configuredGemIds.has(gemId)) {
+        state.equippedGems.add(gemId);
+        state.selectedGems.add(gemId);
+      }
     }
   }
 

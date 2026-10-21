@@ -13,6 +13,12 @@ import { selectionChanged } from './runbar.js';
 // shortcut: PVP meta gems are excluded by name substring; upgrade to item-id
 // filtering when the backend exposes gem ids.
 const PVP_META_NAME_MATCH = /heliotrope/i;
+export const visibleEnchants = enchants => enchants.filter(entry => entry.quality !== 2);
+function appendWowheadLink(group, enhancement, name) {
+  const wrapper = document.createElement('span');
+  wrapper.innerHTML = createEnhancementWowheadLink(enhancement, name);
+  if (wrapper.firstElementChild?.tagName === 'A') group.appendChild(wrapper.firstElementChild);
+}
 export function renderEnhancements() {
   const container = document.getElementById('enhancement-options');
   container.innerHTML = '';
@@ -37,15 +43,15 @@ export function renderEnhancements() {
     const group = document.createElement('fieldset');
     group.className = 'enhancement-group';
     build(group);
-    const total = group.querySelectorAll('input').length;
+    const total = group.querySelectorAll('.choice-chip').length;
     const renderLabel = () => {
-      const checked = group.querySelectorAll('input:checked').length;
+      const checked = group.querySelectorAll('.choice-chip[aria-pressed="true"]').length;
       summary.textContent = checked
         ? `${title} \u00b7 ${checked} selected`
         : `${title} (${total})`;
     };
     renderLabel();
-    group.addEventListener('change', renderLabel);
+    group.addEventListener('click', renderLabel);
     section.append(summary, group);
     container.appendChild(section);
   };
@@ -53,25 +59,32 @@ export function renderEnhancements() {
   for (const [slot, enchants] of Object.entries(state.appConfig.enchantments || {})) {
     if (!enchants.length || !PAPER_DOLL_SLOTS.includes(slot)) continue;
     addSection(`${slot.replace('_', ' ')} enchants`, group => {
-      for (const enchant of enchants) {
+      for (const enchant of visibleEnchants(enchants)) {
         const id = String(typeof enchant === 'object' ? enchant.id : enchant);
         const name = typeof enchant === 'object' ? enchant.name : `Enchant ${id}`;
         const equipped = state.equippedEnchants[slot].has(id);
-        const label = document.createElement('label');
-        label.className = 'choice-chip extra-socket';
-        label.innerHTML = `<input type="checkbox">${createEnhancementWowheadLink(enchant, name)}` +
-          (equipped ? '<span class="equipped-badge">equipped</span>' : '');
-        const input = label.querySelector('input');
-        input.checked = state.selectedEnchants[slot].has(id) || equipped;
-        input.addEventListener('change', event => {
-          if (event.target.checked) state.selectedEnchants[slot].add(id);
-          else {
-            state.selectedEnchants[slot].delete(id);
-            state.equippedEnchants[slot].delete(id);
-          }
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `choice-chip${state.selectedEnchants[slot].has(id) || equipped ? ' selected' : ''}`;
+        button.setAttribute('aria-pressed', String(state.selectedEnchants[slot].has(id) || equipped));
+        button.setAttribute('aria-label', `Select ${name}`);
+        button.textContent = name;
+        if (equipped) {
+          const badge = document.createElement('span');
+          badge.className = 'equipped-badge';
+          badge.textContent = 'equipped';
+          button.appendChild(badge);
+        }
+        button.addEventListener('click', () => {
+          const selected = !button.classList.contains('selected');
+          button.classList.toggle('selected', selected);
+          button.setAttribute('aria-pressed', String(selected));
+          if (selected) state.selectedEnchants[slot].add(id);
+          else state.selectedEnchants[slot].delete(id);
           selectionChanged();
         });
-        group.appendChild(label);
+        group.appendChild(button);
+        appendWowheadLink(group, enchant, name);
       }
     });
   }
@@ -86,51 +99,66 @@ export function renderEnhancements() {
         const id = String(typeof gem === 'object' ? gem.id : gem);
         const name = typeof gem === 'object' ? gem.name : `Gem ${id}`;
         const equipped = state.equippedGems.has(id);
-        const label = document.createElement('label');
-        label.className = 'choice-chip';
-        label.innerHTML = `<input type="checkbox">${createEnhancementWowheadLink(gem, name)}` +
-          (equipped ? '<span class="equipped-badge">equipped</span>' : '');
-        const input = label.querySelector('input');
-        input.checked = state.selectedGems.has(id) || equipped;
-        input.addEventListener('change', event => {
-          if (event.target.checked) state.selectedGems.add(id);
-          else {
-            state.selectedGems.delete(id);
-            state.equippedGems.delete(id);
-          }
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `choice-chip${state.selectedGems.has(id) || equipped ? ' selected' : ''}`;
+        button.setAttribute('aria-pressed', String(state.selectedGems.has(id) || equipped));
+        button.setAttribute('aria-label', `Select ${name}`);
+        button.textContent = name;
+        if (equipped) {
+          const badge = document.createElement('span');
+          badge.className = 'equipped-badge';
+          badge.textContent = 'equipped';
+          button.appendChild(badge);
+        }
+        button.addEventListener('click', () => {
+          const selected = !button.classList.contains('selected');
+          button.classList.toggle('selected', selected);
+          button.setAttribute('aria-pressed', String(selected));
+          if (selected) state.selectedGems.add(id);
+          else state.selectedGems.delete(id);
           selectionChanged();
         });
-        group.appendChild(label);
+        group.appendChild(button);
+        appendWowheadLink(group, gem, name);
       }
     });
   }
 
   const metaGems = state.appConfig.gems?.meta || [];
   if (metaGems.length) {
-    const metaInputs = [];
     addSection('Meta gems', group => {
       group.className = 'enhancement-group meta-gems-group';
       for (const gem of metaGems) {
         const id = String(typeof gem === 'object' ? gem.id : gem);
         const name = typeof gem === 'object' ? gem.name : `Meta gem ${id}`;
         const equipped = state.equippedGems.has(id);
-        const label = document.createElement('label');
-        label.className = 'choice-chip';
-        label.innerHTML = `<input type="checkbox">${createEnhancementWowheadLink(gem, name)}` +
-          (equipped ? '<span class="equipped-badge">equipped</span>' : '');
-        const input = label.querySelector('input');
-        input.dataset.id = id;
-        input.checked = state.selectedMetaGems.has(id) || equipped;
-        metaInputs.push(input);
-        input.addEventListener('change', event => {
-          for (const prev of state.selectedMetaGems) state.equippedGems.delete(prev);
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `choice-chip${state.selectedMetaGems.has(id) || equipped ? ' selected' : ''}`;
+        button.setAttribute('aria-pressed', String(state.selectedMetaGems.has(id) || equipped));
+        button.setAttribute('aria-label', `Select ${name}`);
+        button.textContent = name;
+        if (equipped) {
+          const badge = document.createElement('span');
+          badge.className = 'equipped-badge';
+          badge.textContent = 'equipped';
+          button.appendChild(badge);
+        }
+        button.addEventListener('click', () => {
+          const selected = !button.classList.contains('selected');
           state.selectedMetaGems.clear();
-          state.equippedGems.delete(id);
-          if (event.target.checked) state.selectedMetaGems.add(id);
-          for (const el of metaInputs) el.checked = state.selectedMetaGems.has(el.dataset.id);
+          if (selected) state.selectedMetaGems.add(id);
+          for (const option of group.querySelectorAll('button.choice-chip')) {
+            const pressed = state.selectedMetaGems.has(option.dataset.id);
+            option.classList.toggle('selected', pressed);
+            option.setAttribute('aria-pressed', String(pressed));
+          }
           selectionChanged();
         });
-        group.appendChild(label);
+        button.dataset.id = id;
+        group.appendChild(button);
+        appendWowheadLink(group, gem, name);
       }
     });
   }
