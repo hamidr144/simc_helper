@@ -10,6 +10,55 @@ new version is prepared and reviewer-approved as a mandatory step (see WORKFLOW.
 "Milestone: dev → prod"); the `CHANGELOG.md` update ships in the same merge commit
 that bumps the version and tag.
 
+## [1.2.0] — 2026-10-21
+
+MINOR milestone carrying the full UI redesign epic from the `1.1.1-dev.N`
+line (MINOR per WORKFLOW.md milestone rule; the version number is the
+leader-ruled one-ship prod boundary). Merged from dev at tag `v1.1.1-dev.2`
+(`3d44e68`). Entries regenerated from `git log prod..dev`.
+
+### Features
+
+- Complete web UI redesign (headline): a design-token layer with light and
+dark palettes and a three-state System/Light/Dark theme stored across visits
+and applied before first paint; all five pages rebuilt — setup/gear, results,
+run, login (t_0fb5fde9).
+- Gear page rebuilt as per-slot sections with enriched equipped cards and
+always-visible compact candidate rows: one click to select, second click to
+revert, per-slot locks, sort and Add-by-ID, per-slot enchant/gem sections,
+and a run bar with stage-1 time estimate (t_0fb5fde9).
+- Results page: verdict band up top; a "Best combination — full set" panel
+covering all 14 slots with swapped and kept slots instantly distinguished,
+gems and source-labelled recommended enchants/gems shown, and one-click
+apply-set; per-slot Recommended upgrades rows with a Use-this flow back to
+gear; a combinations register for combination runs (per-slot quality chips,
+one bundle-level delta); the ranked table in raw engine order with a
+±error sidegrade band; a runs panel with report links; and a quarantine
+panel that states honestly why failed or meaningless runs were excluded
+(t_0fb5fde9, t_417d5646, t_437af933, t_caa8448f).
+- Draft persistence: the pasted export and all selections survive reloads and
+navigation; applying from results queues the choice and lands back on gear
+with it selected (t_0fb5fde9).
+
+### Improvements
+
+- Every rendered text pair meets WCAG AA contrast (≥4.5:1) in both palettes
+(C-2 ruling; guarded by a programmatic sweep) (t_0fb5fde9).
+- Layouts hold down to 390px: the two-column gear grid collapses to one
+column and pages no longer scroll sideways on phones (t_0fb5fde9).
+- Honest-absence surfaces: pre-run deltas are ilvl-only (never fake
+percentages), recommendation chips are always dashed and source-labelled,
+and data the engine does not output renders as nothing instead of zeros
+(t_0fb5fde9).
+
+### Bug fixes
+
+- One malformed Wowhead tooltip entry no longer crashes the whole results
+render; it degrades to a pending chip (t_0fb5fde9).
+- A stray comment terminator in the token stylesheet could swallow the
+entire colour palette and leave the app unstyled; fixed and pinned by a
+comment-balance guard test (t_0fb5fde9).
+
 ## [1.1.1] — 2026-10-20
 
 PATCH milestone merged from the `1.1.1-dev.N` line for the ship-blocking
