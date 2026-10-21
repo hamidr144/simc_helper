@@ -66,6 +66,10 @@ export function renderWorkflow() {
   renderGear();
   renderEnhancements();
   renderCharChip();
+  // R7 (ruling D-4): the import band collapses once a character has loaded;
+  // btn-new-export re-opens it (paste.js).
+  const importBand = document.getElementById('import-details');
+  if (importBand) importBand.open = false;
   // t_16e4f177 (leader ruling): skip link must reach the run controls in one
   // activation now that the gear list renders above them.
   const skipLink = document.querySelector('.skip-link');

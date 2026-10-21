@@ -5,7 +5,7 @@ import {
   pickBaseline, changesFromBaseline, bestGearChanges,
 } from '../results/model.js';
 import { resolveChips } from '../results/chips.js';
-import { renderResults } from '../results/table.js';
+import { renderResults, renderRuns } from '../results/table.js';
 import { renderHeroExtras } from '../results/hero.js';
 import { wireTheme } from '../core/theme.js';
 import { fetchVersion } from '../core/version.js';
@@ -27,6 +27,12 @@ async function fetchResults(attempt = 0) {
     return;
   }
   renderHeroExtras(taskId);
+  // §4 Runs panel (ruling O-4): independent fetch — a failure leaves the
+  // panel hidden, never blocks results.
+  apiFetch(`api/history?limit=3`).then(async (response) => {
+    const data = await response.json().catch(() => null);
+    if (response.ok && data?.status === 'success') renderRuns(data.runs || [], taskId);
+  }).catch(() => {});
   try {
     const response = await apiFetch(`api/get-results?task_id=${encodeURIComponent(taskId)}`);
     const data = await response.json();
@@ -42,6 +48,12 @@ async function fetchResults(attempt = 0) {
         : rankedAll;
       const topRow = ranked[0] || baseline;
       await resolveChips(ranked, topRow, topRow ? bestGearChanges(topRow, baseline) : []);
+      // R2: /api/config feeds the dashed rec chips and the set gem line;
+      // on failure both render as honest absence.
+      try {
+        const configResponse = await apiFetch('api/config');
+        els.appConfig = configResponse.ok ? await configResponse.json() : null;
+      } catch { els.appConfig = null; }
       return renderResults(data.results, data.mode, els);
     }
     if (attempt < 5) return setTimeout(() => fetchResults(attempt + 1), 1200);

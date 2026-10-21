@@ -11,12 +11,12 @@
   document.documentElement.dataset.pal=!s||s==='system'
     ?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):s;})();
   </script>
-  <link rel="stylesheet" href="static/css/tokens.css?v=red3-1">
-  <link rel="stylesheet" href="static/css/results.css?v=red3-1">
+  <link rel="stylesheet" href="static/css/tokens.css?v=red3-2">
+  <link rel="stylesheet" href="static/css/results.css?v=red3-2">
 </head>
 <body>
 <a class="skip skip-link" href="#verdict-slot">Skip to results</a>
-<script src="api/wowhead-tooltips.js?v=red3-1"></script>
+<script src="api/wowhead-tooltips.js?v=red3-2"></script>
 
 <header class="top"><div class="topin">
   <b style="font-size:17px">SimC Helper</b>
@@ -36,12 +36,12 @@
     <span class="sub" id="results-subtitle">Loading your ranked results…</span>
   </div>
 
-  <div id="verdict-slot"></div>
+  <div id="verdict-slot" tabindex="-1"></div>
 
   <div class="resgrid">
     <div>
       <section class="panel" id="recos-slot" hidden>
-        <div class="panelh"><h2>Recommended upgrades</h2><span class="sub"></span></div>
+        <div class="panelh"><h2>Recommended upgrades</h2><span class="sub"></span><span class="num" id="recos-count" hidden></span><button type="button" class="link" id="btn-apply-all" hidden>Apply all</button></div>
         <div class="upgrid"></div>
       </section>
 
@@ -67,6 +67,14 @@
           <tbody></tbody>
         </table>
       </section>
+
+      <!-- §4 Runs panel (ruling O-4): newest-first from GET /api/history,
+           linked by report_url's task_id segment, current run tagged `this`. -->
+      <section class="panel" id="runs-slot" hidden style="margin-top:var(--gap-md)">
+        <div class="panelh"><h2>Runs</h2><span class="sub">newest first</span>
+          <a class="link" href="history">All history</a></div>
+        <div id="runs-list"></div>
+      </section>
     </div>
 
     <aside class="resaside">
@@ -80,6 +88,18 @@
       <div class="side">
         <h3>Excluded runs</h3>
         <div id="side-quarantine" role="status" class="honest"></div>
+      </div>
+      <div class="side">
+        <h3>Honest absences</h3>
+        <p class="honest"><b>No probability badges:</b> this engine simulates each candidate as
+          its own actor and reports DPS, ±error and statistical ties — it emits no per-item
+          probability badges or talent recommendations, so this page shows none.<br>
+          <b>Combinations:</b> the engine simulates each bundle as one actor — the delta belongs
+          to the whole combination and no per-item value exists inside it, so combination
+          details and the full-set view list items, ilvl and what they replace only.<br>
+          <b>Gems &amp; enchants:</b> dashed <i class="recm">rec</i> chips and the full-set
+          recommended-gems line come from
+          <span>enhancement recommendations (app config), not per-combo output</span> — slots whose config entry is empty show nothing.</p>
       </div>
       <div class="side">
         <h3>How to read this</h3>
@@ -97,7 +117,16 @@
   </div>
 </main>
 
-<script type="module" src="static/js/pages/results.js?v=red3-1"></script>
+<!-- §4 run bar (ruling R-1): budget chip absent — the combination budget is
+     server-side only and never reaches this page (see table.js run-bar wiring). -->
+<div class="runbar" id="results-runbar" hidden><div class="in">
+  <a class="runbtn" id="btn-review-gear" href="./">Review on Gear →</a>
+  <button type="button" class="allbtn" id="btn-apply-all-bar">Apply all</button>
+  <span class="prog"><b class="num" id="apply-count">0 / 0</b> upgrades applied to your draft</span>
+  <span class="chip" id="chip-quarantined" hidden></span>
+</div></div>
+
+<script type="module" src="static/js/pages/results.js?v=red3-2"></script>
 <noscript>
   <p class="noscript-warning">This application requires JavaScript to function.</p>
 </noscript>
