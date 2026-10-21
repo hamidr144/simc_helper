@@ -65,7 +65,7 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
 @media (min-width:900px){
   main{max-width:1240px}
   .qjin{max-width:1240px}
-  #list{columns:2;column-gap:32px}
+  #gear-grid{columns:2;column-gap:32px}
   .slotsec{break-inside:avoid}
 }
 
@@ -134,3 +134,20 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
 .equipped-badge{font-size:10.5px;color:var(--gold);font-weight:700;letter-spacing:.03em;text-transform:uppercase}
 .enhancement-name-link{color:inherit;text-decoration:none}
 .enhancement-name-link:hover{color:var(--acc-text)}
+
+/* import card (surviving chrome in the design voice) */
+.import{margin-top:var(--gap-lg)}
+.import>summary{cursor:pointer;padding:12px 16px;font-weight:650;font-size:14px;list-style:none}
+.import>summary::-webkit-details-marker{display:none}
+.import>summary::before{content:"▸ ";color:var(--ink3)}
+.import[open]>summary::before{content:"▾ "}
+.import .cardbody{border-top:1px solid var(--line);padding:16px}
+.paste-guide{display:flex;gap:var(--gap-md);flex-wrap:wrap;align-items:flex-start;margin-bottom:12px}
+.paste-step{display:flex;gap:9px;align-items:flex-start;flex:1;min-width:220px}
+.num-badge{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;
+  background:var(--sunk);border:1px solid var(--line2);color:var(--ink3);font-size:11px;font-weight:700;flex:none}
+.num-badge-sm{width:16px;height:16px;font-size:9.5px}
+.armory-controls{display:flex;gap:var(--gap-sm);margin:8px 0 10px;flex-wrap:wrap}
+.armory-field{min-width:160px;flex:1}
+.armory-divider{color:var(--ink3);font-size:12.5px;margin:10px 0 4px}
+.armory-hint{color:var(--ink3);font-size:12px;margin:0 0 10px}
