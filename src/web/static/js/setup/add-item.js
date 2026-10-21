@@ -55,6 +55,11 @@ function commitAddedItem(slot, itemId, preview) {
   if (!items.includes(key)) {
     items.push(key);
     state.parsedData.item_names[key] = `${preview.name || `Item ${itemId}`} (${preview.ilvl || 0})`;
+    // t_910b4761: carry the tooltip's Wowhead quality into resolveRowQuality's
+    // parsedData.item_qualities slot (qualityOf takes numbers) — without it the
+    // committed row rendered Common while its preview showed Epic. Drafts round
+    // the whole parsedData through localStorage, so the grade survives restore.
+    if (Number.isInteger(preview.quality)) (state.parsedData.item_qualities ||= {})[key] = preview.quality;
     state.gearUpgrades[slot] = state.gearUpgrades[slot] || {};
     state.voidforgedItems[slot] = state.voidforgedItems[slot] || {};
     const inferred = inferMidnightUpgrade(slot, key, state.parsedData.item_names[key]);
@@ -76,6 +81,7 @@ export function removeAddedItem(slot, item) {
     if (index >= 0) items.splice(index, 1);
   }
   delete state.parsedData.item_names[item];
+  delete state.parsedData.item_qualities?.[item];
   state.selectedItems[slot]?.delete(item);
   delete state.gearUpgrades[slot]?.[item];
   delete state.voidforgedItems[slot]?.[item];

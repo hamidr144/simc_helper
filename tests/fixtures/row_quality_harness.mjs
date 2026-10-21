@@ -6,7 +6,7 @@
 // localStorage entries absent from items_by_slot must not come back).
 // Usage: node row_quality_harness.mjs — prints one JSON object.
 import { state } from '../../src/web/static/js/core/state.js';
-import { qualityOf, resolveRowQuality } from '../../src/web/static/js/core/items.js';
+import { qualityOf, ranksForItem, resolveRowQuality } from '../../src/web/static/js/core/items.js';
 import { applyDraftToState, applyPayloadToState } from '../../src/web/static/js/setup/draft.js';
 
 const KNOWN = 'id=268265,bonus_id=6652,ilevel=334';   // real Hamidriel neck (truncated bonuses)
@@ -44,5 +44,20 @@ out.draftAdded = [...state.addedItems.keys()];
 // --- results-apply orphan-drop (replaces, so orphans alone yield an empty set)
 applyPayloadToState({ selected_items: { neck: [ORPHAN] } });
 out.payloadSelected = [...state.selectedItems.neck];
+
+// --- committed add-by-id (t_910b4761): the preview quality carries through
+// commitAddedItem's persist (item_names + numeric item_qualities entry) so the
+// committed row renders Epic, and the un-gradeable raw-id item (ilvl 344 sits
+// above every offline fallback ladder) still renders its Current rank row.
+const ADDED = 'id=268265';
+state.parsedData.items_by_slot.neck.push(ADDED);
+state.parsedData.item_names[ADDED] = 'Aqirbane Reliquary (344)';
+state.parsedData.item_qualities[ADDED] = 4;
+state.wowheadQualities = {};
+out.addedCommittedEpic = qualityOf(resolveRowQuality(ADDED)).word;
+state.addedItems = new Map([[ADDED, 'neck']]);
+state.selectedItems = { neck: new Set([ADDED]) };
+out.addedRows = ranksForItem('neck', ADDED)
+  .map(v => `${v.rank}:${v.ilvl ?? 'base'}:${v.voidforged}`);
 
 console.log(JSON.stringify(out));
