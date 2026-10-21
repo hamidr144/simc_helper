@@ -2081,13 +2081,18 @@ async def attach_catalog_quality(config: Dict[str, Any]) -> Dict[str, Any]:
                 items.setdefault(url, catalog_quality_item(record))
                 records.setdefault(url, []).append(record)
 
+    semaphore = asyncio.Semaphore(4)
+
     async def warm(url: str, item: str) -> None:
         if url in wowhead_quality_cache:
             return
-        try:
-            await fetch_wowhead_upgrade(item)
-        except httpx.HTTPError as exc:
-            logger.warning("Wowhead quality lookup failed for %s: %s", url, exc)
+        async with semaphore:
+            if url in wowhead_quality_cache:
+                return
+            try:
+                await fetch_wowhead_upgrade(item)
+            except httpx.HTTPError as exc:
+                logger.warning("Wowhead quality lookup failed for %s: %s", url, exc)
 
     await asyncio.gather(*(warm(url, item) for url, item in items.items()))
     for url, section_records in records.items():

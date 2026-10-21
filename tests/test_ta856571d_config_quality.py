@@ -10,6 +10,7 @@ never re-issued once warm) and fail-soft (upstream error -> quality None,
 fetch_wowhead_name_and_level in tests/conftest.py.
 """
 
+import asyncio
 import json
 import os
 import sys
@@ -24,8 +25,10 @@ from web.main import app
 
 client = TestClient(app)
 
-# Live config shape: the enchant record id is a SPELL id; its wowhead_url
-# carries the real item id (7989 -> item=243979). Gems: id == item id.
+# Live config shape: enchant record id is a SPELL id; wowhead_url carries
+# its item id (7989 -> item=243979). The item's verified quality is q3/blue,
+# not the q2 suggested by mistakenly resolving spell id 7989 as an item.
+# Gems: id == item id.
 ENCHANT = {"id": 7989, "name": "Enchant Helm - Blessing of Speed",
            "wowhead_url": "https://www.wowhead.com/item=243979"}
 GEM = {"id": 240983, "name": "Indecipherable Eversong Diamond",
@@ -42,7 +45,7 @@ def test_quality_attached_from_warm_cache_without_fetch(monkeypatch, tmp_path):
     _serve_config(monkeypatch, tmp_path,
                   {"enchantments": {"head": [ENCHANT]}, "gems": {"standard": [GEM]}})
     monkeypatch.setattr(master, "wowhead_quality_cache", {
-        master.wowhead_xml_url("id=243979"): 2,
+        master.wowhead_xml_url("id=243979"): 3,  # blue item, not green spell-ID lookup
         master.wowhead_xml_url("id=240983"): 4,
     })
     fetch = AsyncMock()
@@ -52,7 +55,7 @@ def test_quality_attached_from_warm_cache_without_fetch(monkeypatch, tmp_path):
     body = response.json()
     enchant = body["enchantments"]["head"][0]
     gem = body["gems"]["standard"][0]
-    assert enchant["quality"] == 2  # int from the wowhead_url item, not the spell id
+    assert enchant["quality"] == 3  # item=243979 q3; spell id 7989 is not queried
     assert gem["quality"] == 4
     assert gem["stats"] == {"mastery": 81}  # rest of the shape unchanged
     assert fetch.await_count == 0  # warm cache -> zero fetches
@@ -113,3 +116,25 @@ def test_quality_none_when_xml_has_no_quality_node(monkeypatch, tmp_path):
         body = client.get("/api/config").json()
     assert body["enchantments"]["head"][0]["quality"] is None
     assert calls == ["id=243979"]
+
+
+def test_catalog_quality_warmups_are_concurrency_bounded(monkeypatch, tmp_path):
+    entries = [{"id": 9000 + i, "wowhead_url": f"https://www.wowhead.com/item={9000 + i}"}
+               for i in range(12)]
+    _serve_config(monkeypatch, tmp_path,
+                  {"enchantments": {"head": entries}, "gems": {}})
+    monkeypatch.setattr(master, "wowhead_quality_cache", {})
+    active = peak = 0
+
+    async def fake_fetch(item):
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.005)
+        master.wowhead_quality_cache[master.wowhead_xml_url(item)] = 2
+        active -= 1
+
+    with patch("web.main.fetch_wowhead_upgrade", new=fake_fetch):
+        body = client.get("/api/config").json()
+    assert peak == 4
+    assert all(record["quality"] == 2 for record in body["enchantments"]["head"])
