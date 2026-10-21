@@ -6,7 +6,8 @@
    light --ink3 #59616f (was #666e7d), light --gold #846500 (was #a67c00),
    light --r-uncom #2b7a3d (was #3f8f4f), dark --r-epic #bb8aeb (was #a86fe0).
    Gate 10: the palette blocks below are the only place hex values exist; zip
-   contextual hexes are hoisted verbatim into --ic-*/--q-*/--mod-*/etc tokens. */
+   contextual hexes are hoisted verbatim into the ic-, q- and mod- token
+   families. */
 
 /* RED-2M3 shared token family — light, calm, plain-utilitarian (Raidbots register).
    One accent, no gradients, rarity as quiet icon tint only. */

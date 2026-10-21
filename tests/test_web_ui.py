@@ -620,3 +620,18 @@ def test_enhancement_state_chips_on_slot_headers():
     assert "searchOpened.add(section)" in js
     assert "section.open = true" in js
     assert "section.open = false" in js
+
+
+def test_css_comments_are_balanced():
+    # RED-3 live-gate found a `--ic-*/` sequence in a header comment that closed
+    # the comment early and swallowed the whole :root light-palette block.
+    # Comments must pair up and the palette root must survive comment stripping.
+    import re
+    from pathlib import Path
+    css_dir = Path(__file__).resolve().parents[1] / "src" / "web" / "static" / "css"
+    for sheet in css_dir.glob("*.css"):
+        text = sheet.read_text(encoding="utf-8")
+        stripped = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+        assert "/*" not in stripped and "*/" not in stripped, f"unbalanced CSS comment in {sheet.name}"
+    tokens = (css_dir / "tokens.css").read_text(encoding="utf-8")
+    assert ":root{" in re.sub(r"/\*.*?\*/", "", tokens, flags=re.S)

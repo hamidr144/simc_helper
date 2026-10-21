@@ -113,7 +113,7 @@ btnParseAddon.addEventListener('click', async () => {
     showParseError(`Could not parse the export: ${error.message}`);
   } finally {
     btnParseAddon.disabled = false;
-    btnParseAddon.textContent = 'Parse character';
+    btnParseAddon.textContent = 'Load export';
   }
 });
 
