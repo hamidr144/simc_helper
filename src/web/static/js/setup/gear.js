@@ -26,6 +26,7 @@ import { selectionChanged } from './runbar.js';
 import { ensureStatScores, sortItemsForSlot } from './sort.js';
 
 import { foldChips, ilvlDeltaHtml, itemRow } from '../core/ui.js';
+import { refreshWowheadLinks } from '../core/wowhead.js';  // RED-3: tooltips rebind after innerHTML rebuilds
 
 /* Which row of an item is the picked variant. UI truth mirrors the
    payload-side fields: a user-selected grade entry carries the rank,
@@ -159,6 +160,7 @@ export function renderGear() {
       <div class="rows">${rows}</div></section>`;
   }).join('');
   if (window.scrollTo) window.scrollTo(0, y);
+  refreshWowheadLinks();
   wireSections(list);
   renderSlotConflict();
 }
