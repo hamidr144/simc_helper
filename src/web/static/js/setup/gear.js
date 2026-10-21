@@ -166,8 +166,10 @@ export function renderGear() {
 }
 
 function wireSections(list) {
-  // doc 4.2 collapse parity on v11 rows: top 3 unselected visible, rest fold
-  // behind a +N chip (foldChips keeps selected/excluded always visible).
+  // doc 4.2 collapse parity on v11 rows: first 3 rows visible whatever their
+  // selection state, the rest fold behind a +N chip (foldChips keeps
+  // selected/excluded rows past the fold visible; RED-S5F budget fix means
+  // selecting a visible row no longer reveals another one).
   for (const rows of list.querySelectorAll('.rows')) foldChips(rows, 3);
   for (const section of list.querySelectorAll('.slotsec')) {
     const slot = section.dataset.slot;
