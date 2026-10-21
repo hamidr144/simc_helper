@@ -34,7 +34,7 @@ def test_bug_t2aede9cd_1_slot_group_header_wraps_at_narrow_width():
     export its min-content width (~396px) overflows the 390px viewport —
     document.documentElement.scrollWidth 437 vs clientWidth 390, failing the
     design doc §7 zero-overflow acceptance gate on the dashboard."""
-    body = _rule(CSS, ".slot-group-header")
+    body = _rule(CSS, ".headtools")
     assert re.search(r"flex-wrap\s*:\s*wrap|flex-flow[^;]*wrap|flex-wrap\s*:\s*wrap-reverse", body), (
         ".slot-group-header must allow wrapping (flex-wrap: wrap) so its "
         "controls fit 390px viewports"
@@ -61,7 +61,7 @@ def test_bug_t2aede9cd_2a_enhancement_groups_closed_by_default():
     # Chrome >=131 hides closed <details> via paint containment on
     # ::details-content, leaving descendant rects non-zero — rect-based
     # tab-stop audits then count the closed groups. Pin the explicit hide.
-    assert ".enh-section:not([open]) .enhancement-group" in CSS and "display: none" in (
+    assert ".enh-section:not([open]) .enhancement-group" in CSS and "display:none" in (
         _rule(CSS, ".enh-section:not([open]) .enhancement-group")
     ), "closed enhancement groups must be display:none so rect-based tools agree"
 

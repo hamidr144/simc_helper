@@ -1,18 +1,19 @@
-// js module — mechanical port of app.js regions by t_94a15fe3 (gui-rewrite-contract §3.1: setup/runbar)
-
+// js/setup/runbar.js — RED-3 status/run-line glue (contract §3 F-1). The rail
+// stepper and the gear-card upgrade popover are deleted layers; the review
+// popover keeps its Grade column via the inlined upgradeStateText below.
+// Payload generation itself stays in payload.js (FROZEN); this module only
+// owns the workflow-status band, the summary line and the review popover.
 import { state } from '../core/state.js';
 
 import { escapeHtml } from '../core/dom.js';
 
-import { normalizedEquippedItems } from '../core/items.js';
+import { normalizedEquippedItems, isCraftedItem } from '../core/items.js';
 
-import { updateRailState } from '../core/rail.js';
+import { season } from '../core/season.js';
 
-import { renderSlotConflict } from './conflict.js';
+import { targetUpgradeLevel } from './preview.js';
 
-import { syncEnhancementChips } from './enhancements.js';
-
-import { upgradeStateText } from './gear-card.js';
+import { persistDraft } from './draft.js';
 
 import { generateInput } from './payload.js';
 
@@ -24,9 +25,30 @@ export function setWorkflowStatus(text) {
   s.textContent = text;
   s.title = text;
 }
+
+/* RED-3: was gear-card.js's popover helper (module deleted with the tile era;
+   decision D-2). Row-world grade string for the review popover. */
+function upgradeStateText(slot, item) {
+  const entry = state.gearUpgrades[slot]?.[item];
+  const bits = [];
+  if (entry?.user_selected) {
+    const track = entry.track ? String(entry.track).replace(/_/g, ' ') : null;
+    bits.push(track ? `${track} rank ${entry.rank || 1}` : `rank ${entry.rank || 1}`);
+    const target = targetUpgradeLevel(slot, item);
+    if (target) bits.push(`ilvl ${target}`);
+  } else {
+    const inferred = targetUpgradeLevel(slot, item);
+    bits.push(inferred ? `upgrade \u21e5 ${inferred} (inferred)` : 'no upgrade');
+  }
+  if (state.voidforgedItems[slot]?.[item]) bits.push(season().ascension?.name || 'Ascendant');
+  else if (isCraftedItem(item)) bits.push('Crafted');  // GSE-2: crafted has no track ladder
+  return bits.join(' \u00b7 ');
+}
+
 function selectedItemCount() {
   return Object.values(state.selectedItems).reduce((total, items) => total + items.size, 0);
 }
+
 function estimateCombinations() {
   let total = 1;
   for (const [slot, items] of Object.entries(state.selectedItems)) {
@@ -42,6 +64,7 @@ function estimateCombinations() {
   }
   return total;
 }
+
 export function updateSummary() {
   // t_8bf63ec6: in combinations mode the server count is authoritative —
   // show '…' until the first generate-simc response replaces the estimate.
@@ -64,19 +87,20 @@ export function updateSummary() {
   // t_4485565b: once a character is loaded, Run is always meaningful — a
   // 0-candidate selection runs the baseline current-gear report.
   if (runButton) runButton.disabled = !(state.generatedInput || state.parsedData);
-  updateRailState();
 }
+
 export function selectionChanged() {
   state.generatedInput = null;
   updateSummary();
-  syncEnhancementChips();
   clearTimeout(state.generationTimer);
   // t_4485565b: regenerate even at an estimated 0 combinations so the status
   // line reflects the honest baseline-only state instead of a stale count.
   setWorkflowStatus('Updating comparison…');
-  renderSlotConflict();
+  // RED-3 §10: every selection mutation persists the per-character draft.
+  persistDraft();
   state.generationTimer = setTimeout(() => generateInput(true), 250);
 }
+
 // Pre-run diff (doc 5): client-side summary only; the server combo count in
 // the run bar stays authoritative.
 export function renderReviewPopover() {

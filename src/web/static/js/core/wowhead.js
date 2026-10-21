@@ -9,7 +9,7 @@ export function createWowheadIconLink(itemId, bonusIds = '', nameHtml = '') {
   const safeBonus = String(bonusIds || '').split('/').filter(value => /^\d+$/.test(value)).join(':');
   const bonusQuery = safeBonus ? `?bonus=${encodeURIComponent(safeBonus)}` : '';
   const tooltipData = safeBonus ? `bonus=${safeBonus}&iconsize=large` : 'iconsize=large';
-  return `<a href="https://www.wowhead.com/item=${safeId}${bonusQuery}" class="item-icon-link wowhead-item-link" data-wowhead="${tooltipData}" data-wh-rename="false" target="_blank"><img src="api/item-icon/${safeId}" alt="" loading="lazy" onerror="this.closest('.item-icon-link').classList.add('icon-missing')">${nameHtml}</a>`;
+  return `<a href="https://www.wowhead.com/item=${safeId}${bonusQuery}" class="item-icon-link wowhead-item-link" data-wowhead="${tooltipData}" data-wh-rename="false" target="_blank" rel="noopener"><img src="api/item-icon/${safeId}" alt="" loading="lazy" onerror="this.closest('.item-icon-link').classList.add('icon-missing')">${nameHtml}</a>`;
 }
 export function createEnhancementWowheadLink(enhancement, name) {
   const configuredUrl = typeof enhancement === 'object' ? enhancement.wowhead_url : '';
