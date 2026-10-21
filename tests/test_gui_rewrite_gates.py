@@ -75,6 +75,18 @@ def test_rg_p3_no_dead_exports():
     assert not dead, f"dead exports (RG-P3): {dead}"
 
 
+def test_no_dead_slot_remove_added_css():
+    # t_68fcecd1 (folded into RED-3F2 t_d7293a57): dead-artifact family pin
+    # for the v1.0.1-era button.slot-remove-added rules — nothing under
+    # css/ may reference the class again (removal rides the .addeditem
+    # .row-x handler). Targeted pin on purpose: a full CSS-class-vs-JS sweep
+    # false-positives on dynamically built class strings.
+    offenders = [str(p.relative_to(STATIC))
+                 for p in sorted((STATIC / "css").glob("*.css"))
+                 if "slot-remove-added" in p.read_text(encoding="utf-8")]
+    assert not offenders, f"dead selector slot-remove-added in: {offenders}"
+
+
 def _scan_body(text):
     # strip import clauses (bindings, not uses), comments and quoted strings so
     # the unbound-name scan only sees code identifiers. Template literals stay

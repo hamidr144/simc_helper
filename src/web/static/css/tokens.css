@@ -288,9 +288,6 @@ button.slot-add-confirm:not(:disabled):hover{border-color:var(--acc);color:var(-
 button.slot-add-confirm{border-color:var(--acc);color:var(--acc-text)}
 .addid{display:inline-flex;gap:var(--gap-xs);align-items:center}
 .addid input{width:110px}
-button.slot-remove-added{position:absolute;top:6px;right:6px;background:transparent;border:1px solid transparent;
-  color:var(--ink3);font-size:15px;line-height:1;width:26px;height:26px;border-radius:50%;padding:0;margin:0}
-button.slot-remove-added:hover{color:var(--dn);border-color:var(--dn)}
 /* 2H conflict notice (rendered inside the affected section header) */
 .conflict-note{font-size:11.5px;font-weight:650;color:var(--warn)}
 /* parse/run error + warning panels (text ≥4.5 on its soft ground, both palettes) */
