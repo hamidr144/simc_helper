@@ -1,187 +1,382 @@
-/*
-tokens.css — RED-3 (t_0fb5fde9) merged design layer, verbatim from RED-2M12-gems
-v11 tokens.css + the contract merge (§1): the former base.css resets, shared atoms
-and the app-chrome atoms the old base.css/shell.css carried. This file is the ONLY
-place hex colors may live (palette blocks included); C-2 contrast fixes applied:
-dark --acc-ink (white 3.23 -> ink 5.68 on --acc), dark --ink3 3.22/3.80 -> 4.87+,
-light --ink3 4.50 -> 5.47, light --gold 3.82 -> 5.47, light --r-uncom 4.00 -> 5.31,
-dark --r-epic 3.68 -> 4.86. The zip's kept-row scoped --ink3 hack is superseded by
-the global dark --ink3 lift (same fix, applied once).
-*/
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-[hidden]{display:none!important}
-html{scroll-padding-top:80px}
-:root{color-scheme:light}
-html[data-pal='dark']{color-scheme:dark}
-:lang{font-synthesis-weight:none;text-rendering:optimizeLegibility}
-html[data-pal='light']{
-  /* cool paper + ink navy */
-  --canvas:#f2f3f7;--surface:#fbfcfe;--panel:#f8f9fc;--sunk:#eceff5;--line:#dfe2ea;--line2:#c4c9d6;
-  --ink:#171f38;--ink2:#3d465e;--ink3:#59616f;
-  --acc:#3667cf;--acc-soft:#e7edfb;--acc-ink:#ffffff;
-  --up:#1e7e3d;--dn:#bf3a35;--gold:#846500;--warn-ink:#8a6100;--numi:#8a6100;
-  --r-uncom:#2b7a3d;--r-rare:#3562c9;--r-epic:#7b4fbd;--r-leg:#a15c1c;
-  --on-acc:#ffffff;   /* text on filled --acc buttons — tokenized, audit I-2 */
-  --chip-ok-bg:#e2f1e6;--chip-ok-bd:#a9d7b5;--chip-ok-fg:#16643a;  /* audit I-1: was #349b5c at 3.4:1 */
-  --sel:#3b5fa8;      /* selected-swap state: was --acc #3667cf at 2.28:1 vs #eef0f5 */
-  --focus:var(--acc);
-  --shadow:0 1px 2px rgba(23,31,56,.05),0 6px 18px rgba(23,31,56,.05);
-  --r1:6px;--r2:10px;--gap-lg:16px;--gap-md:14px;--rowh:58px;
-  --num:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  --sans:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  font-family:var(--sans);
-}
-html[data-pal='dark']{
-  --canvas:#27292e;--surface:#2f3238;--panel:#292c30;--sunk:#3a3d44;--line:#3f434b;--line2:#565b66;
-  --ink:#e7ebf3;--ink2:#c4c8d0;--ink3:#a8aeb6;   /* C-2: was #878c94 (3.22/3.80) */
-  --acc:#5b8def;--acc-soft:#263450;--acc-ink:#0e151e;  /* C-2: was #f4f7ff/3.23 on --acc; dark ink on bright fill = 5.68 (Raidbots dark-button register) */
-  --up:#52cf7c;--dn:#ef7068;--gold:#cf9a2e;--warn-ink:#d9a441;--numi:#d9a441;
-  --r-uncom:#5fd97e;--r-rare:#6f9ffd;--r-epic:#bb8aeb;--r-leg:#ff9d45;  /* C-2 epic: was #a86fe0 (3.68) */
-  --on-acc:#f4f7ff;
-  --chip-ok-bg:#26452f;--chip-ok-bd:#43794f;--chip-ok-fg:#93dcab;
-  --sel:#7f9cf0;      /* was --acc #5b8def at 3.42:1 vs #3a3d44; audit I-4 */
-  --focus:#89a9ff;    /* AA 4.73:1 on both surface and panel */
-  --shadow:0 1px 2px rgba(0,0,0,.25),0 8px 24px rgba(0,0,0,.28);
-  --r1:6px;--r2:10px;--gap-lg:16px;--gap-md:14px;--rowh:58px;
-  --num:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  --sans:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  font-family:var(--sans);
-}
-html[data-pal='light'] body{background:var(--canvas);color:var(--ink)}
-html[data-pal='dark'] body{
-  background:radial-gradient(60% 40% at 50% 0%,#343841 0%,transparent 70%),var(--canvas);
-}
-body{min-height:100vh;font-size:15px;line-height:1.45;
-  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
-:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:2px}
-::selection{background:var(--acc-soft);color:var(--ink)}
-input,select,textarea,button{font-family:inherit;font-size:inherit}
-input[type="checkbox"],input[type="radio"]{accent-color:var(--acc);width:16px;height:16px}
-textarea{resize:vertical}
-img{display:block;max-width:100%}
-button:focus{outline:none}   /* keyboard focus is :focus-visible everywhere */
-/* RED-2M12-a11y: visible label for text on the filled accent — the tokenized
-   audit-I-2 pattern. */
-button.runbtn,.runbtn{color:var(--on-acc)}
-@media (prefers-reduced-motion: reduce){*,*::before,*::after{
-  animation-duration:.01ms!important;animation-iteration-count:1!important;
-  transition-duration:.01ms!important}}
-.sr-only{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;
-  clip:rect(0,0,0,0);white-space:nowrap;border:0}
-.skip-link{position:absolute;left:-9999px;top:8px;z-index:90;
-  background:var(--surface);color:var(--acc);border:1px solid var(--acc);
-  padding:10px 16px;border-radius:var(--r1);text-decoration:none;font-weight:600}
-.skip-link:focus{left:8px}
+/* RED-3 (t_0fb5fde9) merged design layer — RED-2-design-contract §1/§8.
+   = mockup v11 tokens.css (verbatim) + style.css palette/context blocks (L7–42)
+   + results.css shared overrides (.gain/.toast/kept-row fix) + base.css atoms.
+   C-2 contrast fixes (RED-2S ruling 1844) marked  // C-2  — values:
+   dark --acc-ink #0e151e (was #fff 3.23), dark --ink3 #a8aeb6 (was #878c94),
+   light --ink3 #59616f (was #666e7d), light --gold #846500 (was #a67c00),
+   light --r-uncom #2b7a3d (was #3f8f4f), dark --r-epic #bb8aeb (was #a86fe0).
+   Gate 10: the palette blocks below are the only place hex values exist; zip
+   contextual hexes are hoisted verbatim into --ic-*/--q-*/--mod-*/etc tokens. */
 
-/* --- shared atoms (RED-2M5; verbatim tokens) --- */
-ol,ul{list-style:none;margin:0;padding:0}
-b{font-weight:700}
-.num{font-family:var(--num);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
-.mono{font-family:var(--num)}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r2);box-shadow:var(--shadow)}
-.panelh{display:flex;align-items:baseline;gap:12px;padding:13px 16px;border-bottom:1px solid var(--line)}
-.panelh h2{font-size:15px;font-weight:700;letter-spacing:-.01em}
-.panelh .sub{color:var(--ink3);font-size:12px}
-.sub,.subt{margin-left:auto}
-.btn{background:var(--surface);border:1px solid var(--line2);border-radius:var(--r1);
-  padding:7px 12px;font-weight:600;font-size:13px;color:var(--ink)}
-button.btn:hover{border-color:var(--acc);color:var(--acc)}
-.runbtn{background:var(--acc);border:1px solid var(--acc);color:var(--on-acc);
-  font-weight:700;padding:7px 14px;border-radius:var(--r1);font-size:13px}
-button.runbtn:hover{background:var(--acc-soft);border-color:var(--acc-soft);color:var(--acc)}
-.runbtn[disabled]{opacity:.45}
-.link{background:none;border:none;padding:2px 4px;color:var(--acc);font-weight:600;font-size:12.5px;text-decoration:underline;text-underline-offset:2px}
-button.link:hover{color:var(--ink)}
-.runbtn,.allbtn,.link,.btn,.chip{cursor:pointer}
-a.btn,a.runbtn,a.link{text-decoration:none}
-a.runbtn{text-align:center}
-.dnote{margin:8px 16px 0;color:var(--ink3);font-size:12px}
-.sechead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px}
-.sechead h2{font-size:14px;font-weight:700;text-transform:capitalize}
-.cnt{margin-left:auto;color:var(--ink3);font-size:11px}
-/* --- RED-2M11: generic state tags (audit I-6) + delta chip scale (.d = 1000,
-   gain = 700 weight, 2 tiers) --- */
-.tag{display:inline-flex;align-items:center;border:1px solid var(--line2);
-  border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700;color:var(--ink2);
-  background:var(--surface)}
-.tag.sel{background:var(--acc);border-color:var(--acc);color:var(--on-acc)}
-.tag.eq{background:var(--chip-ok-bg);border-color:var(--chip-ok-bd);color:var(--chip-ok-fg)}
-.d{font-weight:700;font-size:12.5px;white-space:nowrap}
-.d.up{color:var(--up)}.d.dn{color:var(--dn)}.d.eq{color:var(--ink3)}
-.gainbox{display:inline-flex;align-items:baseline;gap:10px}
-.gain{display:inline-block;font-size:20px;font-weight:1000;color:var(--up);
-  background:var(--chip-ok-bg);border:1px solid var(--chip-ok-bd);border-radius:var(--r1);
-  padding:3px 10px;line-height:1.15}
-/* --- RED-2M12: recommended (config-sourced) enchant chip — dashed to mark it
-   as NOT output-derived --- */
-.mod .recm{font-style:normal;font-size:9px;font-weight:800;text-transform:uppercase;
-  letter-spacing:.04em;color:var(--acc);border:1px dashed var(--acc);border-radius:3px;
-  padding:0 3px;margin-left:5px}
-/* --- RED-2M12-a11y: icons — one component, real product surface (audit I-1).
-   36/30/22px, initials, quality-tinted ring + fill. --- */
-.ic{display:grid;place-items:center;flex:0 0 36px;width:36px;height:36px;
-  border-radius:var(--r1);border:1px solid var(--line2);background:var(--sunk);
-  font-size:12px;font-weight:800;color:var(--ink3);box-shadow:inset 0 0 0 1px rgba(255,255,255,.55)}
-.ic.epic{border-color:var(--r-epic);color:var(--r-epic);background:color-mix(in srgb,var(--r-epic) 16%,var(--panel))}
-.ic.rare{border-color:var(--r-rare);color:var(--r-rare);background:color-mix(in srgb,var(--r-rare) 14%,var(--panel))}
-.ic.small{flex:0 0 30px;width:30px;height:30px;font-size:10px}
-.ic.big{flex:0 0 44px;width:44px;height:44px;font-size:15px}
-html[data-pal='dark'] .ic{box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
-/* real item icons replace the initials monogram (fixture-only stand-in) */
-.ic:has(> img),.dslot .ic:has(> img){color:transparent}
-.ic>img{width:100%;height:100%;object-fit:cover;border-radius:inherit}
-.icon-missing{color:var(--ink3)}
-.icon-missing img{display:none}
-/* --- RED-2M12-a11y: shared state styles (audit I-5) --- */
-.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line2);
-  border-radius:999px;padding:4px 11px;background:var(--surface);color:var(--ink3);
-  font-size:12px;font-weight:600}
-.chip.ok{background:var(--chip-ok-bg);border-color:var(--chip-ok-bd);color:var(--chip-ok-fg)}
-.chip.warn{border-style:dashed}
-/* --- RED-2M5 theme control (user request 1a; tokens.css so every page's
-   header can carry it). M5 tokens verbatim except the footer rules, which
-   live in this file's footer section. --- */
-.pal{display:inline-flex;align-items:center;gap:12px;margin-left:auto}
-.seg{display:inline-flex;border:1px solid var(--line2);border-radius:var(--r1);
-  overflow:hidden;background:var(--surface)}
-.seg button{background:none;border:none;border-radius:0;padding:5px 11px;font-size:12px;
-  font-weight:600;color:var(--ink3);box-shadow:none}
-.seg button.on{background:var(--acc-soft);color:var(--acc)}
-.osbtn{border:1px dashed var(--line2);background:none;color:var(--ink3);
-  padding:5px 10px;border-radius:var(--r1);font-size:11.5px;font-weight:600}
-.osbtn:hover{border-color:var(--acc);color:var(--acc)}
-html[data-pal='dark'] .pal .seg button{color:var(--ink2);background:var(--panel)}
-html[data-pal='dark'] .pal .seg button.on{background:var(--acc);color:var(--acc-ink)}
-html[data-pal='dark'] .osbtn{border-style:solid;border-color:var(--line2);color:var(--ink2)}
-html[data-pal='dark'] .pal{border-color:var(--line)}
-/* --- RED-2M12-a11y: shared page footer (audit I-9). --- */
-.footmeta{display:flex;gap:16px;flex-wrap:wrap;color:var(--ink3);font-size:11.5px;margin-top:12px}
-.footmeta .num{font-size:11px}
-html[data-pal='light'] .footmeta{color:var(--ink2)}
-/* --- RED-2M9/M11: ONE apply-feedback toast (user: "only one apply button";
-   5 s auto-dismiss per the ruled spec, explicit close). --- */
-.toast{position:fixed;left:50%;bottom:calc(72px + env(safe-area-inset-bottom));z-index:25;
-  transform:translateX(-50%);display:flex;align-items:center;gap:14px;
-  background:var(--surface);border:1px solid var(--line2);border-radius:var(--r2);
-  box-shadow:0 8px 30px rgba(0,0,0,.14);padding:12px 14px;font-size:13px;max-width:92vw}
-.toast a,.toast button{font-size:12px}
-html[data-pal='dark'] .toast{border-color:#4a5060}
-html[data-pal='dark'] .toast a,.html[data-pal='dark'] .toast button{color:var(--ink2)}
-/* --- decision: ranked-table columns and their alignment shared between the
-   ranked table and the full-set panel (.dt). .cand/.slotsec carry their own. --- */
-.dt{width:100%;border-collapse:collapse;font-size:13px}
-.dt th,.dt td{border-bottom:1px solid var(--line);vertical-align:middle}
-.dt th{font-size:11px;color:var(--ink3);text-align:left;font-weight:700;padding:8px 10px}
-.dt td{padding:9px 10px}
-.dt thead{display:none}
-/* RED-2M5: row labels go INSIDE the row (user request 2) — real td cells shown
-   per breakpoint. Shared here so every table page's body shares the tokens. */
-.dt .c-zone,.dt .c-gain,.dt .c-act,.dt .c-zone3{display:none}
-.dt .c-swap::before,.dt .c-ch::before,.dt .c-zone1::before,.dt .c-gain::before,
-.dt .c-il::before,.dt .c-dps::before,.dt .c-d::before,.dt .c-zone3::before,
-.dt .c-act::before{content:attr(data-label);display:block;font-size:9.5px;
-  color:var(--ink3);font-weight:700;letter-spacing:.03em;margin-bottom:2px}
-.dt .c-dps,.dt .c-d{text-align:right}
-.dt .c-dps::before,.dt .c-d::before{text-align:right}
-.dt .c-zone,.dt .c-zone1{min-width:0}
-.dt .c-gain{text-align:right}
+/* RED-2M3 shared token family — light, calm, plain-utilitarian (Raidbots register).
+   One accent, no gradients, rarity as quiet icon tint only. */
+:root{
+  --canvas:#f5f6f8; --surface:#ffffff; --sunk:#eef0f4;
+  --ink:#1b1f26; --ink2:#4a5160; --ink3:#59616f;                    /* C-2 (light 4.50→5.47) */
+  --line:#dde1e8; --line2:#c8cdd7;
+  --acc:#2f5fd0; --acc-ink:#ffffff; --acc-soft:#e8eefb;
+  --up:#1c7c43; --up-soft:#e6f2ea; --dn:#b3382c; --dn-soft:#f8ebe9;
+  --warn:#7a5c12; --warn-soft:#f7efdb;
+  --r-epic:#7b4fbd; --r-rare:#2f6fb5; --r-uncom:#2b7a3d;             /* C-2 (4.00→5.31) */
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --r-card:10px; --r-ctl:7px;
+  --shadow:0 1px 2px rgba(23,28,38,.05),0 4px 14px rgba(23,28,38,.07);
+  /* RED-2M10 · one 4px-based spacing scale + baseline line-height — the single rhythm
+     both pages' margins/gaps draw from (multiple-of-4 inner paddings are on-scale). */
+  --gap-2xs:2px; --gap-xs:4px; --gap-sm:8px; --gap-md:16px; --gap-lg:24px;
+  --lh:1.45;
+  /* RED-2M10 · shared row/card grid (gear eqc + vrow; results candup mirrors it):
+     icon | name | ilvl | grade | delta pill | checkbox — fixed right-aligned cluster. */
+  --col-ic:42px; --col-il:40px; --col-grd:52px; --col-d:68px; --col-pick:20px;
+  /* RED-3 · contextual tokens — hoists the zip's component-level hexes so every
+     color lives in a palette block (gate 10). Values identical to RED-2M12 v11. */
+  --gold:#846500; --eq-bg:#ffffff;                                   /* C-2 (was #a67c00, style.css L42) */
+  --acc-hover:#2a55bc;      /* .runbtn hover fill */
+  --acc-text:#2f5fd0;       /* accent-colored TEXT on surface/canvas/sunk */
+  --eqtag-bg:#1b1f26; --eqtag-fg:#ffffff;   /* .ilvl / .tag.eq pair */
+  --ic-bg:#eef0f4;          /* icon frame ground (style.css L18 dark: canvas) */
+  --ic-epic-fg:#5c3a92; --ic-rare-fg:#245a94;        /* .ic.epic/.rare monogram ink */
+  --ic-bg-epic:#f4eefa; --ic-bg-rare:#eef4fb;        /* .ic.big.epic/.rare ground */
+  --q-epic:#6b41b8; --q-rare:#2a65a8;                /* quality-colored names/grade words */
+  --grd-uncom:#2b7a3d;                               /* .grd.uncommon (light = r-uncom) */
+  --mod-ench-fg:#6b41b8; --mod-ench-bd:#ddcfee; --mod-ench-bg:#f4eefa;
+  --mod-gem-fg:#2a65a8; --mod-gem-bd:#c9dbef; --mod-gem-bg:#eef4fb;
+  --ok-bd:#bfe0cb;          /* .chip.ok border */
+  --gain-bd:#bfe0cb;        /* results .gain border (dark override style/results L31) */
+  --ex-bd:#ecc8c3;          /* .tag.ex border */
+  --lock-on-bg:#f7efdb; --lock-on-bd:#7a5c12; --lock-on-fg:#7a5c12;
+  --toast-bg:#1b1f26; --toast-fg:#ffffff; --toast-btn-bg:rgba(127,127,127,.18);
+}
+*{box-sizing:border-box;margin:0}
+html{background:var(--canvas)}
+body{font:14px/var(--lh) var(--sans);color:var(--ink);background:var(--canvas);-webkit-font-smoothing:antialiased}
+.num{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--mono)}
+a{color:var(--acc-text)}
+button{font:inherit;cursor:pointer}
+.skip{position:absolute;left:-9999px;background:var(--surface);padding:8px 14px;z-index:99}
+.skip:focus{left:8px;top:8px}
+h1,h2,h3{font-weight:650;letter-spacing:-.01em}
+
+/* header — Armory-style name/ilvl band */
+.top{background:var(--surface);border-bottom:1px solid var(--line)}
+.topin{max-width:1240px;margin:0 auto;display:flex;align-items:center;gap:var(--gap-md);padding:10px 20px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:var(--gap-xs);border:1px solid var(--line);border-radius:99px;padding:2px 10px;font-size:12px;color:var(--ink2);background:var(--surface)}
+.chip.ok{border-color:var(--ok-bd);background:var(--up-soft);color:var(--up)}
+.ilvl{font-weight:750;background:var(--eqtag-bg);color:var(--eqtag-fg);border-radius:6px;padding:1px 8px;font-size:12.5px}
+.ver{font-size:11.5px;color:var(--ink3)}
+.btn{border:1px solid var(--line2);border-radius:var(--r-ctl);background:var(--surface);padding:6px 14px;font-weight:600;color:var(--ink)}
+.runbtn{background:var(--acc);border:1px solid var(--acc);color:var(--acc-ink);border-radius:var(--r-ctl);padding:9px 26px;font-weight:700;font-size:15px}
+.runbtn:hover{background:var(--acc-hover)}
+.btn:hover,.runbtn:hover{text-decoration:none}
+
+/* item icon: quiet rarity tint only */
+.ic{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:5px;
+  font-size:10.5px;font-weight:700;letter-spacing:0;background:var(--ic-bg);border:1px solid var(--line2);flex:none}
+.ic img{width:100%;height:100%;object-fit:contain;border-radius:inherit;display:block}
+.ic.epic{border-color:var(--r-epic);color:var(--ic-epic-fg)}
+.ic.rare{border-color:var(--r-rare);color:var(--ic-rare-fg)}
+.ic.small{width:20px;height:20px;font-size:9px}
+
+/* deltas & states */
+.d{display:inline-block;min-width:52px;text-align:right;font-size:12px;font-weight:700;border-radius:4px;padding:1px 6px;white-space:nowrap}
+.d.up{color:var(--up);background:var(--up-soft)} .d.dn{color:var(--dn);background:var(--dn-soft)}
+.d.eq{color:var(--ink3);background:var(--sunk);font-weight:600} .d.zero{color:var(--ink3)}
+.tag{display:inline-block;font-size:10px;font-weight:750;text-transform:uppercase;letter-spacing:.04em;border-radius:4px;padding:1px 6px;vertical-align:1px}
+.tag.eq{background:var(--eqtag-bg);color:var(--eqtag-fg)} .tag.sel{background:var(--acc);color:var(--acc-ink)}
+.tag.ex{background:var(--dn-soft);color:var(--dn);border:1px solid var(--ex-bd)}
+.cand.ex{opacity:.75} .cand.ex .name{color:var(--ink3);font-weight:500}
+.cand.ex .ic{filter:grayscale(1);opacity:.6}
+
+/* generic cards */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card)}
+button.cand{appearance:none;border:0;background:none;font:inherit;color:inherit;text-align:left}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:7px;overflow:hidden}
+.seg span{padding:5px 12px;font-size:12.5px;color:var(--ink2)}
+.seg .on{background:var(--acc);color:var(--acc-ink);font-weight:650}
+.ol{font-size:10.5px;font-weight:750;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin-bottom:3px}
+.link{border:0;background:none;color:var(--acc-text);font-weight:600;padding:5px 9px;border-radius:6px;font-size:12.5px}
+.link:hover{background:var(--acc-soft)}
+main{max-width:1240px;margin:0 auto;padding:16px 20px 96px}
+
+/* run bar — F-8: wraps, CTA never clips */
+.runbar{position:fixed;inset:auto 0 0 0;background:var(--surface);border-top:1px solid var(--line);z-index:50}
+.runbar .in{max-width:1240px;margin:0 auto;display:flex;align-items:center;gap:var(--gap-md);padding:10px 20px;flex-wrap:wrap}
+.runbar .est{color:var(--ink2);font-size:13px}
+.runbar .bud{margin-left:auto;text-align:right;font-size:12px;color:var(--ink3)}
+.footmeta{display:flex;gap:var(--gap-md);color:var(--ink3);font-size:11.5px;padding:var(--gap-md) 2px 0;flex-wrap:wrap}
+
+/* doll + flanking slot columns (shared backbone) */
+.panel{margin-top:var(--gap-md)}
+.phead{display:flex;align-items:baseline;gap:var(--gap-sm);padding:var(--gap-md) 18px 0}
+.phead h2{font-size:17px} .phead .sub{color:var(--ink3);font-size:12.5px}
+.dollzone{display:grid;grid-template-columns:minmax(0,1fr) minmax(190px,250px) minmax(0,1fr);gap:10px;padding:10px 18px 18px;align-items:start}
+.slotcol{display:flex;flex-direction:column;gap:var(--gap-sm)}
+.slotcol.right .eqx{text-align:right}
+.slotcol.right .lvg,.slotcol.right .mods{justify-content:flex-end}
+.st{display:flex;align-items:center;gap:var(--gap-sm);border:1px solid var(--line);border-radius:8px;background:var(--surface);
+  padding:4px 8px;min-height:40px;text-align:left;width:100%;color:inherit}
+.st:hover{border-color:var(--acc);background:var(--acc-soft)}
+.st.on{border-color:var(--acc);box-shadow:inset 0 0 0 1px var(--acc)}
+.st .lab{font-size:9.5px;font-weight:750;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);display:block;line-height:1.2}
+.st .nm{font-size:12px;font-weight:600;color:var(--ink);display:block;line-height:1.25;
+  max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st .cnt{margin-left:auto;font-size:11px;color:var(--acc-text);font-weight:700;white-space:nowrap}
+.st .warn{color:var(--dn);font-size:10px;font-weight:700}
+
+/* RED-2M4 structure (a): enriched equipped card on the doll columns */
+.ic.big{width:42px;height:42px;border-radius:7px;font-size:15px;border-width:2px}
+.ic.big.epic{background:var(--ic-bg-epic);border-color:var(--r-epic)}
+.ic.big.rare{background:var(--ic-bg-rare);border-color:var(--r-rare)}
+.eqc{min-height:64px}  /* RED-2M10: display/grid/padding handled by shared grid in setup.css */
+.eqc .eqx{min-width:0;display:flex;flex-direction:column;gap:var(--gap-2xs)}
+.eqc .nm{max-width:none;font-size:12.5px;font-weight:650}
+.lvg{display:flex;align-items:center;gap:var(--gap-sm);flex-wrap:wrap}
+.lvg .ilvl{font-size:11px;padding:0 7px}
+.mods{display:flex;gap:4px;flex-wrap:wrap}
+.mod{font-size:10px;color:var(--ink2);background:var(--sunk);border:1px solid var(--line);border-radius:4px;
+  padding:0 5px;line-height:1.7;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (min-width:431px){.mod{max-width:360px}}  /* roomy cards rarely truncate; phones keep ellipsis (title=full text) */
+.mod.gem{color:var(--mod-gem-fg);border-color:var(--mod-gem-bd);background:var(--mod-gem-bg)}
+.mod.ench{color:var(--mod-ench-fg);border-color:var(--mod-ench-bd);background:var(--mod-ench-bg)}
+/* quality grade word (WOW-tooltip style), quality-colored */
+.grd{font-size:10px;font-weight:750;letter-spacing:.03em;text-transform:uppercase}
+.grd.epic{color:var(--q-epic)} .grd.rare{color:var(--q-rare)} .grd.uncommon{color:var(--grd-uncom)}
+/* quality-colored names (zip scoped .q-epic/.q-rare on eqc/cchip/cdet/setcard → one pair) */
+.q-epic{color:var(--q-epic)} .q-rare{color:var(--q-rare)}
+.modi{color:var(--acc-text);font-size:11px;padding-left:2px}
+.doll{position:relative;display:grid;place-items:center;padding:12px 0}
+.doll svg{width:100%;max-width:215px;height:auto;display:block}
+.dollname{margin-top:-6px;text-align:center;font-size:11.5px;color:var(--ink3)}
+
+/* candidate row (shared atom) — RED-2M4 (b): compact single-line */
+.cand{display:grid;gap:var(--gap-sm);align-items:center;padding:var(--gap-sm) 10px;border-radius:var(--r-ctl)}
+.cand:hover{background:var(--sunk)}
+.cand.sel{background:var(--acc-soft);outline:1px solid var(--acc)}
+.cand .name{font-size:12.5px;font-weight:600;line-height:1.3;display:block;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cand .il{font-size:12px;font-weight:700;color:var(--ink2)}
+.cand .pick{width:20px;height:20px;border-radius:5px;border:1.5px solid var(--line2);background:var(--surface)}
+.cand.sel .pick{background:var(--acc);border-color:var(--acc)}
+.cand.eq{opacity:.92}
+
+/* results: decision table */
+.vcard{display:flex;gap:var(--gap-lg);align-items:center;padding:var(--gap-md) 18px;flex-wrap:wrap;margin-top:var(--gap-md)}
+.vbig{font-size:34px;font-weight:800;color:var(--up);letter-spacing:-.02em}
+.vrow{display:flex;gap:var(--gap-sm);flex-wrap:wrap;color:var(--ink2);font-size:12.5px;align-items:center}
+table.dt{width:100%;border-collapse:collapse;font-size:13px}
+.dt th{text-align:left;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);
+  padding:8px 10px;border-bottom:1px solid var(--line2);background:var(--canvas)}
+.dt td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+.dt tr:hover td{background:var(--sunk)}
+.dt .slotl{font-size:10px;font-weight:750;letter-spacing:.05em;text-transform:uppercase;color:var(--ink3)}
+.c-d{white-space:nowrap}
+@media (max-width:430px){
+  table.dt, .dt tbody, .dt tr, .dt td{display:block}
+  .dt thead{display:none}
+  .dt tr{display:grid;grid-template-columns:1fr auto;gap:3px 8px;padding:10px;border-bottom:1px solid var(--line)}
+  .dt td{border:0;padding:0}
+  .dt .c-slot{grid-column:1}.dt .c-d{grid-column:2;grid-row:1;text-align:right}
+  .dt .c-swap{grid-column:1/-1}.dt .c-meta{grid-column:1}.dt .c-act{grid-column:2;text-align:right}
+}
+.swap{display:flex;gap:7px;align-items:center;min-width:0}
+.swap .ar{color:var(--ink3)}
+.apply{border:1px solid var(--acc);color:var(--acc-text);background:var(--surface);border-radius:6px;padding:4px 12px;font-weight:650;font-size:12px}
+.apply.done{border-color:var(--up);color:var(--up);background:var(--up-soft)}
+
+/* palette switcher — theme radio segment (shared: gear + results headers) */
+.pal{margin-left:auto;display:flex;align-items:center;gap:8px}
+.pal .seg button{border:0;background:none;padding:5px 12px;font-size:12px;font-weight:650;color:var(--ink2)}
+.pal .seg button.on{background:var(--acc);color:var(--acc-ink)}
+
+/* toast (RED-2S C-2 keeps it; results apply flow + gear banner share it) */
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:76px;z-index:60;
+  background:var(--toast-bg);color:var(--toast-fg);border-radius:9px;padding:9px 16px;font-size:13px;
+  box-shadow:var(--shadow);display:flex;gap:12px;align-items:center;max-width:92vw}
+.toast a{color:inherit;text-decoration:underline;font-weight:700}
+.toast button{border:0;background:var(--toast-btn-bg);color:inherit;border-radius:6px;padding:3px 9px;font-weight:650;font-size:12px}
+.toast[hidden]{display:none}  /* .toast's display:flex beats the UA [hidden] rule */
+
+@media (max-width:430px){
+  main{padding:12px 10px 120px}
+  .topin{padding:9px 12px}
+  .runbar .in{padding:8px 12px;gap:10px}
+  .runbar .bud{margin-left:0;text-align:left;width:100%;order:3}
+  .runbtn{flex:1;margin-left:0}
+  /* RED-2M4 enriched cards stay enriched at 390, just denser */
+  .ic.big{width:30px;height:30px;font-size:11px;border-radius:6px}
+  .eqc{padding:5px 7px;gap:7px;min-height:52px}
+  .eqc .nm{font-size:11px}
+  .lvg .ilvl{font-size:10px;padding:0 5px}
+  .grd{font-size:9px}
+  .mod{font-size:9px;max-width:92px}
+  .cand{padding:6px 8px;gap:6px}
+  .eqc .lab{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .eqc .cnt{display:none} /* count lives in the flyout/panel/rail header at 390 */
+}
+
+/* =====================================================================
+   APP CHROME ATOMS (RED-3 merge of base.css/shell.css survivors) — the
+   accessibility floor (§6) + shared controls the pages and JS create.
+   Token-valued only. Rail stepper / run-bar old shell are deleted (§3).
+   ===================================================================== */
+html{scroll-padding-top:80px}          /* focus never hides behind sticky .qj (WCAG 2.4.11) */
+:focus-visible{outline:2px solid var(--acc-text);outline-offset:2px}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:0.01ms !important;animation-iteration-count:1 !important;transition-duration:0.01ms !important}}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+[hidden]{display:none !important}      /* hidden attr beats component display rules */
+.skip-link{position:absolute;left:-9999px;top:8px;z-index:100;background:var(--surface);color:var(--acc-text);
+  padding:10px 16px;border-radius:var(--r-ctl);border:1px solid var(--acc-text);text-decoration:none}
+.skip-link:focus{left:8px}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--surface);
+  border:1px solid var(--line2);border-radius:var(--r-ctl);padding:7px 10px}
+textarea{width:100%;min-height:150px;font-family:var(--mono);font-size:13px;resize:vertical}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--acc);outline-offset:1px;border-color:var(--acc)}
+input::placeholder,textarea::placeholder{color:var(--ink3)}
+input[type=checkbox]{accent-color:var(--acc);width:16px;height:16px}
+label{font-size:12.5px;color:var(--ink2)}
+a.btn,a.btn-ghost{display:inline-flex;align-items:center;justify-content:center;gap:var(--gap-sm);min-height:36px;
+  padding:8px 16px;border-radius:var(--r-ctl);font-size:13px;font-weight:600;text-decoration:none}
+a.btn{background:var(--acc);color:var(--acc-ink)}
+a.btn:hover{background:var(--acc-hover);text-decoration:none}
+a.btn-ghost{background:var(--surface);border:1px solid var(--line2);color:var(--ink2)}
+a.btn-ghost:hover{border-color:var(--acc);color:var(--acc-text)}
+button.btn-ghost{border:1px solid var(--line2);background:var(--surface);color:var(--ink2);
+  padding:10px 16px;font-size:13px;border-radius:var(--r-ctl);font-weight:600}
+button.btn-ghost:not(:disabled):hover{border-color:var(--acc);color:var(--acc-text)}
+button.btn-danger{border:1px solid var(--dn);background:var(--surface);color:var(--dn);
+  padding:10px 16px;font-size:13px;border-radius:var(--r-ctl)}
+button.btn-danger:not(:disabled):hover{background:var(--dn-soft)}
+button:disabled{border-color:var(--line);background:var(--sunk);color:var(--ink3);cursor:not-allowed;box-shadow:none}
+.num-badge{display:inline-grid;place-items:center;flex:0 0 auto;width:26px;height:26px;border-radius:50%;
+  border:1px solid var(--line2);background:var(--acc-soft);color:var(--acc-text);font-weight:700;font-size:12px;line-height:1}
+.num-badge-sm{width:20px;height:20px;font-size:11px}
+button.run-copy{width:26px;height:26px;padding:0;border-radius:6px;background:var(--surface);
+  border:1px solid var(--line2);color:var(--ink3);font-size:12px}
+button.run-copy:hover{color:var(--acc-text);border-color:var(--acc)}
+/* worker-cluster status chips (header band + history) */
+.status-chip{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:600;color:var(--ink2);
+  border:1px solid var(--line);border-radius:99px;padding:6px 11px;background:var(--surface);white-space:nowrap}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--ink3);flex:none}
+.status-ok{color:var(--up)} .status-ok .status-dot{background:var(--up)}
+.status-err{color:var(--dn)} .status-err .status-dot{background:var(--dn)}
+.status-warn{color:var(--warn)} .status-warn .status-dot{background:var(--warn)}
+.season-chip{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3);
+  border:1px solid var(--line);border-radius:999px;padding:3px 10px;white-space:nowrap}
+.char-chip{display:inline-flex;align-items:center;gap:9px;border:1px solid var(--line);background:var(--surface);
+  border-radius:99px;padding:8px 14px;font-size:12px;color:var(--ink2)}
+.char-chip b{color:var(--ink);font-size:14px}
+/* session-expired banner */
+.session-banner{position:sticky;top:0;z-index:60;display:flex;align-items:center;justify-content:center;gap:12px;
+  width:100%;padding:10px 16px;background:var(--warn-soft);border-bottom:1px solid var(--warn);color:var(--ink);font-size:14px}
+.session-banner a{color:var(--acc-text)}
+.session-banner button{width:26px;height:26px;padding:0;background:transparent;border:1px solid var(--line2);
+  border-radius:6px;color:var(--ink2);font-size:14px;line-height:1}
+.session-banner button:hover{border-color:var(--acc);color:var(--acc-text)}
+/* slot-section header controls (D-7: small, never shift the row grid) */
+.ctlr{margin-left:auto;display:inline-flex;gap:var(--gap-sm);align-items:center;flex:none;white-space:nowrap}
+.ctlr .lock{margin-left:0}
+button.slot-add-toggle,button.slot-add-button,button.slot-add-confirm{background:var(--surface);
+  border:1px solid var(--line2);color:var(--ink2);font-size:11px;font-weight:600;padding:4px 12px;
+  min-height:30px;border-radius:20px;margin:0;white-space:nowrap}
+button.slot-add-toggle:not(:disabled):hover,button.slot-add-button:not(:disabled):hover,
+button.slot-add-confirm:not(:disabled):hover{border-color:var(--acc);color:var(--acc-text)}
+button.slot-add-confirm{border-color:var(--acc);color:var(--acc-text)}
+.addid{display:inline-flex;gap:var(--gap-xs);align-items:center}
+.addid input{width:110px}
+button.slot-remove-added{position:absolute;top:6px;right:6px;background:transparent;border:1px solid transparent;
+  color:var(--ink3);font-size:15px;line-height:1;width:26px;height:26px;border-radius:50%;padding:0;margin:0}
+button.slot-remove-added:hover{color:var(--dn);border-color:var(--dn)}
+/* 2H conflict notice (rendered inside the affected section header) */
+.conflict-note{font-size:11.5px;font-weight:650;color:var(--warn)}
+/* parse/run error + warning panels (text ≥4.5 on its soft ground, both palettes) */
+.error-panel{margin-top:var(--gap-sm);padding:var(--gap-sm) var(--gap-md);border:1px solid var(--dn);
+  border-radius:var(--r-ctl);background:var(--dn-soft);color:var(--dn);font-size:13px;font-weight:600}
+.warning-panel{margin-top:var(--gap-sm);padding:var(--gap-sm) var(--gap-md);border:1px solid var(--warn);
+  border-radius:var(--r-ctl);background:var(--warn-soft);color:var(--warn);font-size:13px;font-weight:600}
+/* small nav links (topline/back) + eyebrow label */
+.back-link{color:var(--acc-text);text-decoration:none;font-size:12.5px;font-weight:600}
+.back-link:hover{text-decoration:underline}
+.eyebrow{font-size:10.5px;font-weight:750;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+/* import + enhancements <details> panels (D-4/D-6) */
+details.importpanel{margin-top:var(--gap-sm)}
+details.importpanel>summary, details.enhpanel>summary{cursor:pointer;display:inline-flex;align-items:center;gap:var(--gap-sm);
+  border:1px solid var(--line2);background:var(--surface);color:var(--ink2);border-radius:var(--r-ctl);
+  padding:6px 14px;font-weight:650;font-size:12.5px;list-style:none}
+details.importpanel>summary::-webkit-details-marker{display:none}
+details.enhpanel>summary::-webkit-details-marker{display:none}
+details.importpanel>summary:hover, details.enhpanel>summary:hover{border-color:var(--acc);color:var(--acc-text)}
+details.importpanel[open]>summary{margin-bottom:var(--gap-sm)}
+details.enhpanel{margin-top:var(--gap-lg)}
+details.enhpanel[open]>summary{margin-bottom:var(--gap-sm)}
+.importgrid{display:grid;gap:var(--gap-md);grid-template-columns:minmax(0,1fr)}
+@media(min-width:900px){.importgrid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.formrow{display:flex;gap:var(--gap-sm);flex-wrap:wrap;align-items:center;margin-top:var(--gap-sm)}
+.formhint{font-size:11.5px;color:var(--ink3)}
+.parse-warnings{margin-top:var(--gap-sm);display:flex;flex-direction:column;gap:var(--gap-xs)}
+.parse-warnings li{font-size:12px;color:var(--warn);list-style:none}
+.enhgrid{display:flex;flex-wrap:wrap;gap:var(--gap-md)}
+.enhgroup{display:flex;flex-direction:column;gap:var(--gap-xs);min-width:150px}
+.enhgroup label{display:inline-flex;gap:var(--gap-xs);align-items:center;font-size:12.5px;color:var(--ink)}
+.enh-count{font-size:11.5px;color:var(--ink3)}
+/* success/failure card (import done, run done/failed) — one component */
+.success-card{display:flex;gap:var(--gap-md);align-items:flex-start;padding:var(--gap-md);margin-top:var(--gap-md);
+  border:1px solid var(--line);border-left:3px solid var(--up);border-radius:var(--r-ctl);background:var(--surface)}
+.success-card.is-failed{border-left-color:var(--dn)}
+.success-icon{color:var(--up);font-size:22px;line-height:1}
+.success-card.is-failed .success-icon{color:var(--dn)}
+.success-card h2,.success-card h3{font-size:16px;margin-bottom:4px}
+.success-card p{color:var(--ink2);font-size:13px;margin-bottom:0}
+.success-actions{display:flex;gap:var(--gap-sm);flex-wrap:wrap;margin-top:var(--gap-md)}
+.success-log-tail{margin-top:10px;max-height:140px;overflow:auto;font:12px/1.5 var(--mono);color:var(--ink2);white-space:pre-wrap}
+/* review popover (results review-on-gear flow) */
+.review-popover{position:fixed;z-index:70;max-width:min(420px,92vw);padding:var(--gap-md);
+  display:flex;flex-direction:column;gap:var(--gap-sm);box-shadow:var(--shadow)}
+.review-popover .row{display:flex;gap:var(--gap-sm);justify-content:flex-end}
+/* wowhead icon fallback: initials monogram inside .ic */
+.icon-missing{font-family:var(--sans)}
+/* workflow status line (single clamped line in the run-bar zone) */
+.workflow-status{font-size:13px;color:var(--ink2);min-width:0;overflow:hidden;text-overflow:ellipsis;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2}
+.runbar .workflow-status{flex:1}
+
+/* =====================================================================
+   PALETTE BLOCKS — the only hex-valued regions (gate 10). V-DARK is a
+   pure token swap (style.css L7–17); contextual overrides that could not
+   be expressed as token swaps follow below, token-valued.
+   ===================================================================== */
+html[data-pal=dark]{
+  --canvas:#26282d; --surface:#2f3238; --sunk:#3a3d44;
+  --ink:#e8eaec; --ink2:#b4b8bf; --ink3:#a8aeb6;                     /* C-2 (dark 3.80→5.75) */
+  --line:#3b3e45; --line2:#54585f;
+  --acc:#5b8def; --acc-ink:#0e151e; --acc-soft:#22304a;               /* C-2 (was #fff, 3.23→5.68) */
+  --up:#4cc38a; --up-soft:#173021; --dn:#e0685c; --dn-soft:#371d1a;
+  --warn:#d8b955; --warn-soft:#33301a;
+  --r-epic:#bb8aeb; --r-rare:#67a4e6; --r-uncom:#63b36d;              /* C-2 (3.68→4.86) */
+  --gold:#f0b64f; --gold-line:#6e5c2e; --eq-bg:#141519;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.35);
+  /* dark values for the hoisted contextual tokens (style.css L18–41,
+     results.css .gain/.toast/kept fix) */
+  --acc-hover:#6f99f3;      /* dark hover must LIGHTEN the accent (ink-on-accent) */
+  --acc-text:#7fa7f2;       /* accent text on charcoal: 3.27→5.37 (C-2 rule ≥4.5) */
+  --eqtag-bg:#e2e5e8; --eqtag-fg:#17181c;   /* style.css L28–29 */
+  --ic-bg:#26282d;
+  --ic-epic-fg:#c39af0; --ic-rare-fg:#8dbcec;
+  --ic-bg-epic:#221b2c; --ic-bg-rare:#1a2330;
+  --q-epic:#c39af0; --q-rare:#8dbcec;
+  --grd-uncom:#7cc986;
+  --mod-ench-fg:#4fd6c3; --mod-ench-bd:#27514b; --mod-ench-bg:#122a26;
+  --mod-gem-fg:#8ed06a; --mod-gem-bd:#3c5a2c; --mod-gem-bg:#1b2a14;
+  --gain-bd:#27513a;                              /* results.css L31 */
+  --lock-on-bg:#f0b64f; --lock-on-bd:#f0b64f; --lock-on-fg:#241f10; /* style.css L34 */
+  --toast-bg:#e8eaec; --toast-fg:#17181c;         /* results.css L130 */
+}
+html[data-pal=dark] .eqc{background:var(--eq-bg);border-color:var(--gold-line)}
+html[data-pal=dark] .eqc .nm{color:var(--gold)}   /* equipped card: gold name register */
+html[data-pal=dark] .qj a:hover{border-color:var(--gold);color:var(--gold)}
+/* dark kept contrast (measured 3.22:1 ink3-on-sunk fails AA): names/headers go to
+   ink2 (5.46:1), the base pill sits on a surface chip so it stays visible on sunk. */
+html[data-pal=dark] .setrow.kept .name,html[data-pal=dark] .setrow.kept .sechead h2{color:var(--ink2)}
+html[data-pal=dark] .setrow.kept .d.eq{background:var(--surface);color:var(--ink2)}
+html[data-pal=light]{--gold:#846500;--eq-bg:var(--surface)}          /* C-2 (was #a67c00) */
