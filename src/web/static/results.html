@@ -1,31 +1,105 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-pal="dark">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SimC Helper · Results</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23191a1b'/%3E%3Cpath d='M16 6.5l8 4.6v9.8l-8 4.6-8-4.6v-9.8z' fill='none' stroke='%237170ff' stroke-width='2' stroke-linejoin='round'/%3E%3Ccircle cx='16' cy='16' r='3.2' fill='%237170ff'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="static/css/tokens.css?v=20261020-guir-3">
-  <link rel="stylesheet" href="static/css/base.css?v=20261020-guir-3">
-  <link rel="stylesheet" href="static/css/shell.css?v=20261020-guir-3">
-  <link rel="stylesheet" href="static/css/results.css?v=20261020-guir-3">
+  <script>
+  /* RED-3 theme pre-paint (contract §2): stored explicit choice wins; else OS. */
+  (function(){var s=null;try{s=localStorage.getItem('simc-theme')}catch(e){}
+  document.documentElement.dataset.pal=!s||s==='system'
+    ?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):s;})();
+  </script>
+  <link rel="stylesheet" href="static/css/tokens.css?v=red3-1">
+  <link rel="stylesheet" href="static/css/results.css?v=red3-1">
 </head>
-<body class="app-shell">
-  <main class="workspace-grid results-page">
-    <div class="history-topline">
-      <a class="back-link" href="./">← Start another comparison</a>
-      <a class="back-link" href="history">View run history</a>
+<body>
+<a class="skip skip-link" href="#verdict-slot">Skip to results</a>
+<script src="api/wowhead-tooltips.js?v=red3-1"></script>
+
+<header class="top"><div class="topin">
+  <b style="font-size:17px">SimC Helper</b>
+  <span class="chip">Comparison results</span>
+  <span style="margin-left:auto"></span>
+  <span class="pal">
+    <span class="seg" role="radiogroup" aria-label="Theme">
+      <button type="button" role="radio" data-th="system" aria-checked="false">System</button><button
+      type="button" role="radio" data-th="light" aria-checked="false">Light</button><button
+      type="button" role="radio" data-th="dark" aria-checked="false">Dark</button>
+    </span>
+  </span>
+</div></header>
+
+<main>
+  <div class="phead"><h1>Best upgrades</h1>
+    <span class="sub" id="results-subtitle">Loading your ranked results…</span>
+  </div>
+
+  <div id="verdict-slot"></div>
+
+  <div class="resgrid">
+    <div>
+      <section class="panel" id="recos-slot" hidden>
+        <div class="panelh"><h2>Recommended upgrades</h2><span class="sub"></span></div>
+        <div class="upgrid"></div>
+      </section>
+
+      <section class="panel setsec" id="set-slot" hidden style="margin-top:var(--gap-md)"></section>
+
+      <section class="panel" id="combos-slot" hidden style="margin-top:var(--gap-md)">
+        <div class="panelh"><h2>Combinations</h2>
+          <span class="sub">each row is one simulated set of changes</span></div>
+        <div class="combolist"></div>
+      </section>
+
+      <section class="panel" id="table-slot" hidden style="margin-top:var(--gap-md)">
+        <table class="dt">
+          <caption class="sr-only">Best candidates, ranked by DPS</caption>
+          <thead><tr>
+            <th scope="col" class="c-rk">#</th>
+            <th scope="col">Candidate</th>
+            <th scope="col" class="c-dps">DPS</th>
+            <th scope="col" class="c-d">Δ vs baseline</th>
+            <th scope="col" class="c-vb">% vs best</th>
+            <th scope="col">Changes</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
     </div>
-    <section class="panel-card results-hero full-width">
-      <p class="eyebrow">Simulation complete</p>
-      <!-- TG3-G (t_54bad356): mode-neutral headline — the compare-mode chip on
-           the baseline card states which mode produced the run. -->
-      <h1>Best upgrades</h1>
-      <p id="results-subtitle">Loading your ranked results…</p>
-    </section>
-    <section class="panel-card full-width" id="baseline-card" hidden></section>
-    <section class="full-width" id="result-list" aria-live="polite"></section>
-  </main>
-  <script type="module" src="static/js/pages/results.js?v=20261020-guir-3"></script>
+
+    <aside class="resaside">
+      <div class="side">
+        <h3>Run</h3>
+        <div id="side-run-kv"></div>
+        <a class="btn" id="btn-open-report" href="#" target="_blank" rel="noopener" hidden>Open full SimC report</a>
+        <a class="btn-ghost" href="./">Back to gear</a>
+        <a class="btn-ghost" href="history">View run history</a>
+      </div>
+      <div class="side">
+        <h3>Excluded runs</h3>
+        <div id="side-quarantine" role="status" class="honest"></div>
+      </div>
+      <div class="side">
+        <h3>How to read this</h3>
+        <p class="honest" id="side-mode-note"></p>
+        <p class="honest">DPS error bars come from the simulator; rows within 2× of the best row's
+          error are statistical ties ("≈ best") even when their DPS differs. Simulated runs that
+          failed or changed no gear are never ranked.</p>
+      </div>
+    </aside>
+  </div>
+
+  <div class="footmeta">
+    <a href="history">Run history</a>
+    <span id="app-version"></span>
+  </div>
+</main>
+
+<script type="module" src="static/js/pages/results.js?v=red3-1"></script>
+<noscript>
+  <p class="noscript-warning">This application requires JavaScript to function.</p>
+</noscript>
 </body>
 </html>

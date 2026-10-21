@@ -4,8 +4,6 @@ import { state } from '../core/state.js';
 
 import { escapeHtml } from '../core/dom.js';
 
-import { updateRailState } from '../core/rail.js';
-
 import { generateInput } from './payload.js';
 
 import { setWorkflowStatus } from './runbar.js';
@@ -157,7 +155,6 @@ export async function runSimulation() {
     log.textContent = '';
     document.getElementById('log-toolbar').hidden = false;
     startRunProgress();
-    updateRailState();
     const events = new EventSource(`api/simulation/stream/${data.task_id}?worker_id=${encodeURIComponent(data.worker_id)}`);
     events.onmessage = async event => {
       const message = JSON.parse(event.data);
@@ -176,7 +173,6 @@ export async function runSimulation() {
         stopRunProgress();
         document.getElementById('run-progress').hidden = true;
         if (message.type === 'done') state.simulationDone = true;
-        updateRailState();
         if (message.type === 'done' && message.report_file && message.task_id) {
           // MGE-2 §2 (A2): done navigates without a click; the results?task_id=
           // substring stays for its test pin. Failure never navigates.
@@ -206,5 +202,5 @@ function showRunFailureCard(message) {
   slot.querySelector('[data-back-gear]').addEventListener('click', backToGear);
 }
 function backToGear() {
-  document.getElementById('step-gear')?.scrollIntoView({ block: 'start' });
+  document.getElementById('gear-grid')?.scrollIntoView({ block: 'start' });
 }

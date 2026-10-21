@@ -2,15 +2,17 @@
 
 import { initializeSelections, state } from '../core/state.js';
 
-import { observeWorkflowSteps, renderRail, updateRailState } from '../core/rail.js';
-
 import { detectSeasonFromExport, loadUpgradeData, renderSeasonChip, upgradeData } from '../core/season.js';
 
-import { renderWorkflow, workflowContainer } from '../pages/setup.js';
+import { renderWorkflow } from '../pages/setup.js';
 
 import { updateArmoryState } from './armory.js';
 
+import { clearDraftKeys, persistDraft } from './draft.js';
+
 import { hydrateWowheadUpgrades } from './conflict.js';
+
+import { updateSummary } from './runbar.js';
 import { apiFetch } from '../core/api.js';
 
 const addonInput = document.getElementById('addon-input');
@@ -81,11 +83,11 @@ export async function applyParsedCharacter(data) {
   renderSeasonChip();
   state.simulationDone = false;
   initializeSelections();
-  renderRail();
   renderWorkflow();
   collapsePastePanel();
   hydrateWowheadUpgrades(state.parsedData.items_by_slot);
-  document.getElementById('baseline-gear-panel')
+  persistDraft();
+  document.getElementById('gear-grid')
     ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -118,21 +120,29 @@ btnParseAddon.addEventListener('click', async () => {
 /* ---------- Armory load (Step 7: no addon needed) ---------- */
 
 document.getElementById('btn-new-export').addEventListener('click', () => {
+  // RED-3: the page chrome is static — a fresh export only clears the
+  // rendered layers and re-opens the import band (draft keys are dropped:
+  // "new export" means a different character or a deliberate restart, §10).
   state.parsedData = null;
   state.generatedInput = null;
   state.simulationDone = false;
-  workflowContainer.innerHTML = '';
-  document.getElementById('run-bar').hidden = true;
+  clearDraftKeys();
+  document.getElementById('gear-grid').innerHTML = '';
+  document.getElementById('qj').innerHTML = '';
+  document.getElementById('enhancement-options').innerHTML = '';
   document.getElementById('char-chip').hidden = true;
-  // t_16e4f177: no gear list and no run bar anymore — restore the plain skip link.
+  const result = document.getElementById('run-result');
+  if (result) { result.hidden = true; result.innerHTML = ''; }
+  document.getElementById('run-progress').hidden = true;
+  document.getElementById('import-details').open = true;
+  // t_16e4f177: no gear list anymore — restore the plain skip link.
   const skipLink = document.querySelector('.skip-link');
   if (skipLink) {
     skipLink.href = '#main';
     skipLink.textContent = 'Skip to content';
   }
   resetPastePanel();
-  updateRailState();
-  observeWorkflowSteps();
+  updateSummary();
 });
 
 addonInput.addEventListener('input', updateCharCount);

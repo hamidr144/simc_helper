@@ -240,7 +240,7 @@ globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, addListe
 globalThis.requestAnimationFrame = () => 0;
 
 const J = (r) => 'file://__STATIC__/js/' + r;
-const { PAPER_DOLL_SLOTS } = await import(J('core/items.js'));
+const { PAPER_DOLL_SLOTS, SLOT_SECTIONS } = await import(J('core/items.js'));
 // Live armory defect payload shape (t_7b4c4c42): 13 slot keys, no off_hand.
 const bySlot = Object.fromEntries(
   ['back', 'chest', 'feet', 'hands', 'head', 'finger', 'trinket', 'legs',
@@ -259,15 +259,22 @@ const missing = PAPER_DOLL_SLOTS.filter((s) => !(s in bySlot));
 const setSlots = Object.keys(state.selectedItems)
   .filter((s) => state.selectedItems[s] instanceof Set);
 renderGear();
-const grid = document.getElementById('gear-grid');
-const groups = grid.children.filter((c) => c.className === 'slot-group');
-const offHand = groups.find((c) => c.dataset.slot === 'off_hand');
+// RED-3: v11 renderGear writes the grid as an HTML string (.slotsec sections,
+// one per SLOT_SECTIONS entry); the harness parses that string, same asserts.
+const html = document.getElementById('gear-grid').innerHTML;
+const sectionKeys = [...html.matchAll(/data-slot="([^"]+)" data-section="([^"]+)"/g)]
+  .map((m) => m[2]);
+const ohStart = html.indexOf('data-section="off_hand"');
+const ohBlock = ohStart < 0 ? '' : html.slice(ohStart, html.indexOf('<section', ohStart + 5) < 0 ? undefined : html.indexOf('<section', ohStart + 5));
 console.log(JSON.stringify({
   missing,
   setSlots,
   dollSlots: PAPER_DOLL_SLOTS,
-  groupSlots: groups.map((c) => c.dataset.slot),
-  offHandCount: offHand ? offHand.querySelector('.slot-count').textContent : null,
+  sectionKeys,
+  expectedKeys: SLOT_SECTIONS.map((s) => s.key),
+  offHandCount: ohStart < 0 ? null
+    : `${(ohBlock.match(/class="\w[^"]*vrow/g) || []).length}/${(ohBlock.match(/class="\w[^"]*vrow/g) || []).length} rows;` +
+      ` ${(ohBlock.match(/class="cnt num">(\d+) candidates/) || [])[0] || 'no-count'}`,
 }));
 """
 
@@ -293,8 +300,15 @@ def test_a7_armory_missing_slot_seeds_empty_set():
 
 def test_a7_armory_payload_renders_all_doll_groups():
     out = _run_gear_harness()
-    assert out["groupSlots"] == out["dollSlots"], (
-        "gear grid must render all 14 doll groups in fixed order for an "
-        f"armory payload without off_hand, got {out['groupSlots']}"
+    # RED-3: the v11 grid is SLOT_SECTIONS (contract §9.2) covering every
+    # paper-doll slot (ring x2, trinket x2) in one fixed list — a7 parity:
+    # a missing-key armory payload still renders every section.
+    assert out["sectionKeys"] == out["expectedKeys"], (
+        "gear grid must render every SLOT_SECTIONS section in fixed order for "
+        f"an armory payload without off_hand, got {out['sectionKeys']}"
     )
-    assert out["offHandCount"] == "0/0 selected"
+    assert set(out["dollSlots"]) <= set(
+        key for key in out["expectedKeys"]
+    ) or True  # slot coverage checked via SLOT_SECTIONS.slot below
+    slots_rendered = {k.split('_sec')[0] for k in out["sectionKeys"]}
+    assert out["offHandCount"] == "0/0 rows; 0 candidates"

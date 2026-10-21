@@ -15,35 +15,36 @@ APP_HTML = (STATIC / "app.html").read_text()
 
 
 def test_gear_card_is_a_dense_grid_row():
-    # §3.1: one 44px grid row, padding 6px 12px, no overflow clipping
-    # (overflow:hidden would clip the anchored upgrade popover on a row).
-    block = CSS.split(".gear-card {", 1)[1].split("}", 1)[0]
-    assert "display: grid;" in block
-    assert "grid-template-columns: minmax(0, 1fr) auto auto auto;" in block
-    assert "min-height: 44px;" in block
-    assert "padding: 6px 12px;" in block
-    assert "overflow: hidden" not in block
+    # RED-3 (v11 §M10): equipped card and candidate row are ONE shared grid —
+    # icon | name(minmax 0) | ilvl | grade | delta | pick; no overflow clipping
+    # (would cut the anchored upgrade popover / tooltip on a row).
+    block = CSS.split(".eqc,.vrow{display:grid", 1)[1].split("}", 1)[0]
+    assert "grid-template-columns:var(--col-ic) minmax(0,1fr) var(--col-il) var(--col-grd) var(--col-d) var(--col-pick)" in block
+    assert "overflow: hidden" not in block and "overflow:hidden" not in block
+    assert ".gear-card" not in CSS  # v11 retired the tile component
 
 
 def test_slot_conflict_line_and_collapse_keep_the_row_layout():
     # §3.4: the inline conflict line spans the row; un-hiding a collapsed
     # card restores the grid row, not the pre-redesign block stack.
-    assert ".gear-card .gear-conflict { grid-column: 1 / -1; }" in CSS
-    assert (".slot-items.is-expanded .gear-card.is-collapsed,\n"
-            ".gear-card.is-collapsed.is-selected { display: grid; }") in CSS
+    assert ".gear-conflict" in CSS  # v11: inline line under the section head
+    # v11 collapse = [hidden] attribute rows + native fold chip (never <div
+    # onclick>); un-hiding restores the row via the shared grid display.
+    assert "[hidden]{display:none !important}" in CSS
+    assert ".rows>.fold" in CSS
 
 
 def test_ilvl_prefix_replaces_item_level_label():
     # §3.1: same data, compact "ilvl N" pair; the old stacked label is gone.
-    assert '<span class="gear-card-slot"><span>ilvl</span>' in APP_JS
+    # RED-3: compact ilvl number column (the row header carries the label);
+    # the old stacked Item-level pair is gone.
+    assert 'class="il num"' in APP_JS
     assert "<span>Item level</span>" not in APP_JS
-    # 390px shrink chain: the name-inside-anchor must be allowed to shrink
-    # (stale flex:0 0 32px from .item-select-row caused min-content overflow).
-    link_block = CSS.split(".gear-card-info .item-icon-link {", 1)[1].split("}", 1)[0]
-    assert "flex: 0 1 auto;" in link_block
-    assert "min-width: 0;" in link_block
-    name_block = CSS.split(".gear-card-info .item-icon-link .gear-card-name {", 1)[1].split("}", 1)[0]
-    assert "flex: 1 1 0;" in name_block  # zero-basis: kills min-content overflow
+    # 390px shrink chain: name column is minmax(0,1fr) and ellipsized.
+    assert "minmax(0,1fr)" in CSS
+    name_block = CSS.split(".vrow .name{", 1)[1].split("}", 1)[0]
+    assert "overflow:hidden" in name_block
+    assert "text-overflow:ellipsis" in name_block
 
 
 def test_run_bar_helper_moved_to_title_and_sr_only():
@@ -60,10 +61,12 @@ def test_run_bar_helper_moved_to_title_and_sr_only():
 def test_run_bar_compaction_rules():
     # §3.2: padding 14->10 vertical, status stays shrink-safe for the
     # two-line conflict aggregate (TG3-C §3.4 real estate).
-    bar = CSS.split(".run-bar {", 1)[1].split("}", 1)[0]
-    assert "padding: 10px 24px;" in bar
-    status = CSS.split(".run-bar .workflow-status {", 1)[1].split("}", 1)[0]
-    assert "margin-top: 0; min-height: 0; min-width: 0; flex: 1; font-size: 13px;" in status
+    # RED-3: fixed .runbar inner line stays compact; status stays shrink-safe.
+    bar = CSS.split(".runbar .in{", 1)[1].split("}", 1)[0]
+    assert "padding:10px 20px" in bar
+    status = CSS.split(".workflow-status{", 1)[1].split("}", 1)[0]
+    assert "min-width:0" in status
+    assert "font-size:13px" in status
 
 
 def test_run_bar_status_clamped_to_two_lines():
@@ -71,18 +74,19 @@ def test_run_bar_status_clamped_to_two_lines():
     # must never grow the sticky run-bar past the G2 110px cap — 2-line clamp
     # + ellipsis; full text stays in textContent (aria-live) and is mirrored
     # to title by setWorkflowStatus.
-    status = CSS.split(".run-bar .workflow-status {", 1)[1].split("}", 1)[0]
-    assert "-webkit-line-clamp: 2;" in status
-    assert "line-clamp: 2;" in status
-    assert "overflow: hidden;" in status
+    status = CSS.split(".workflow-status{", 1)[1].split("}", 1)[0]
+    assert "-webkit-line-clamp:2" in status
+    assert "line-clamp:2" in status
+    assert "overflow:hidden" in status
 
 
 def test_group_chrome_gaps_match_contract():
-    assert "#gear-grid {\n  display: grid;" in CSS  # MGE-2 A7: two doll columns (t_94a15fe3)
-    assert "gap: var(--space-3);" in CSS  # MGE-2 A8: 12->18 tokenized
-    assert ".slot-group {\n  border-top: 1px solid var(--border-hairline);\n  padding-top: var(--space-2);" in CSS
-    assert "gap: var(--space-3);" in CSS  # MGE-2 A8 tokenized the TG3-D 0-gap (t_94a15fe3)
-    # footer merge: show-all + extra-socket share one grid line
-    assert ".slot-group > .slot-show-all { grid-column: 1; }" in CSS
-    socket_block = CSS.split(".slot-group .extra-socket-control {", 1)[1].split("}", 1)[0]
-    assert "grid-column: 2;" in socket_block and "justify-self: end;" in socket_block
+    # RED-3: >=900px splits the section list into two balanced columns;
+    # sections never break across them. Spacing is tokenized.
+    assert "#gear-grid{columns:2" in CSS
+    assert ".slotsec{break-inside:avoid}" in CSS
+    assert ".rows{margin-top:var(--gap-sm)" in CSS
+    # extra sockets moved into the enhancements panel (decision D-6); the
+    # per-slot group footer is gone with the tile era.
+    assert ".slot-group" not in CSS
+    assert ".extra-socket" in read_js("setup/enhancements.js")

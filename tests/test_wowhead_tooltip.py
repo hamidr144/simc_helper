@@ -265,18 +265,25 @@ def _static(name):
 
 
 def test_app_js_wires_debounced_preview():
+    # D-9 light (RED-3): in-card .upgrade-preview DOM is gone; the same Wowhead
+    # tooltip delta renders as the candidate row's native title on hover/focus.
     js = read_js()
     assert "api/wowhead/tooltip" in js
     assert "UPGRADE_PREVIEW_DEBOUNCE_MS = 400" in js
     assert "scheduleUpgradePreview" in js
-    assert "preview unavailable" in js
-    assert js.count("scheduleUpgradePreview(slot, item, card);") == 4  # track, rank, ascension, crafted grade
+    assert "row.title = text" in js  # the delta lands on the native row title
+    assert js.count("scheduleUpgradePreview(slot, row.dataset.item, row);") == 1  # section hover delegation
+    assert "querySelectorAll('.upgrade-preview')" not in js  # no in-card preview host left
 
 
 def test_style_css_defines_preview_classes():
+    # D-9 light: the preview surface classes are deleted from the design;
+    # candidate rows carry the delta natively. Add-by-ID keeps its inline panel.
     css = read_css()
-    for selector in (".upgrade-preview", ".upgrade-preview-delta.positive",
-                     ".upgrade-preview-stat.negative", ".upgrade-preview-stats"):
+    for removed in (".upgrade-preview", ".upgrade-preview-delta",
+                    ".upgrade-preview-stat", ".upgrade-preview-stats"):
+        assert removed not in css
+    for selector in (".slot-add-preview", ".slot-add-meta", ".vrow"):
         assert selector in css
 
 

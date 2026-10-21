@@ -13,6 +13,7 @@ export const state = {
   extraSockets: {},
   slotSorts: {},
   statScores: {},
+  slotLocks: {},            // RED-3 §3: client-only section locks; survives re-init, persists with draft
   addedItems: new Map(),
   twoHandedItems: new Set(),
   generatedInput: null,

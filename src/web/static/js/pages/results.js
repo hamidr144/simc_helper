@@ -7,14 +7,18 @@ import {
 import { resolveChips } from '../results/chips.js';
 import { renderResults } from '../results/table.js';
 import { renderHeroExtras } from '../results/hero.js';
+import { wireTheme } from '../core/theme.js';
+import { fetchVersion } from '../core/version.js';
+
+wireTheme(document.querySelector('.pal .seg'));
+fetchVersion();
 
 const query = new URLSearchParams(window.location.search);
 const taskId = query.get('task_id');
 const els = {
   subtitle: document.getElementById('results-subtitle'),
-  baselineCard: document.getElementById('baseline-card'),
-  resultList: document.getElementById('result-list'),
   baselineName: query.get('baseline'),
+  taskId,
 };
 
 async function fetchResults(attempt = 0) {
