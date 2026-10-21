@@ -96,3 +96,41 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
   .eqc .d{display:none}
   .eqc .il,.vrow .il{font-size:12px}
 }
+
+/* ---- RED-3 surviving controls, restyled in the v11 idiom (feature parity;
+   the mock had no add/sort/enhancements UI, so these keep the design voice) */
+.headtools{margin-left:auto;display:inline-flex;align-items:center;gap:var(--gap-sm);flex-wrap:wrap}
+.slot-sort-select,.slot-toggle-all,.slot-add-toggle{border:1px solid var(--line2);border-radius:6px;
+  background:var(--surface);color:var(--ink2);font-size:12px;padding:4px 10px;cursor:pointer}
+.slot-sort-select:hover,.slot-toggle-all:hover,.slot-add-toggle:hover{border-color:var(--acc);color:var(--acc-text)}
+.slot-sort-select.is-scoring{opacity:.55;pointer-events:none}
+.slot-add-form{display:flex;gap:var(--gap-sm);padding:8px 20px 0;max-width:560px}
+.slot-add-form[hidden]{display:none}
+.slot-add-input{flex:1;min-width:0;font-size:13px;padding:6px 10px}
+.slot-add-button{border:1px solid var(--acc);border-radius:6px;background:var(--acc);color:var(--acc-ink);
+  font-size:12.5px;font-weight:650;padding:5px 14px;cursor:pointer}
+.slot-add-button:hover{background:var(--acc-hover)}
+.slot-add-preview.is-ok{border-color:var(--ok-bd);background:var(--up-soft);color:var(--up)}
+.slot-add-preview.is-err{border-color:var(--dn);background:var(--dn-soft);color:var(--dn)}
+.addedline{display:flex;flex-wrap:wrap;gap:var(--gap-sm);padding:8px 20px;border-top:1px dashed var(--line)}
+.addeditem{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--ink3)}
+.row-x{border:1px solid var(--line2);border-radius:6px;background:none;color:var(--ink3);
+  font-size:13px;line-height:1;padding:3px 7px;cursor:pointer}
+.row-x:hover{color:var(--dn);border-color:var(--dn)}
+
+/* enhancements panel (the design's single step-3 surface) */
+.enh-search{width:100%;max-width:420px;font-size:13px;padding:7px 12px;margin:0 0 12px}
+.enh-section{border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--surface);margin-bottom:8px}
+.enh-section>summary{cursor:pointer;padding:10px 14px;font-size:13px;font-weight:600;color:var(--ink);list-style:none}
+.enh-section>summary::-webkit-details-marker{display:none}
+.enh-section>summary::before{content:"▸ ";color:var(--ink3)}
+.enh-section[open]>summary::before{content:"▾ "}
+.enh-section[open]>summary{border-bottom:1px solid var(--line)}
+.enhancement-group{display:flex;flex-wrap:wrap;gap:var(--gap-sm);border:0;padding:12px 14px;margin:0}
+.choice-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line2);border-radius:99px;
+  background:var(--surface);padding:4px 11px;font-size:12.5px;color:var(--ink2);cursor:pointer}
+.choice-chip:has(input:checked){border-color:var(--acc);color:var(--acc-text);background:var(--acc-soft, var(--sunk))}
+.choice-chip input{accent-color:var(--acc);margin:0}
+.equipped-badge{font-size:10.5px;color:var(--gold);font-weight:700;letter-spacing:.03em;text-transform:uppercase}
+.enhancement-name-link{color:inherit;text-decoration:none}
+.enhancement-name-link:hover{color:var(--acc-text)}
