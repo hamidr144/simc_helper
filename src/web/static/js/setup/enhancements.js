@@ -1,5 +1,7 @@
 // js module — mechanical port of app.js regions by t_94a15fe3 (gui-rewrite-contract §3.1: setup/enhancements)
-
+// RED-3: the step-3 panel is now the page's single enhancements surface (the
+// per-slot enh-chips are deleted, design contract §6), and the old per-slot
+// "extra socket" checkbox moved here (decision D-6).
 import { state } from '../core/state.js';
 
 import { PAPER_DOLL_SLOTS } from '../core/items.js';
@@ -8,47 +10,6 @@ import { createEnhancementWowheadLink, refreshWowheadLinks } from '../core/wowhe
 
 import { selectionChanged } from './runbar.js';
 
-// TG2-A (design t_0fbfd0bd §3.1): enhancement state chips on the slot-group
-// header — pure state echo of step-3 selections plus a jump-and-open shortcut.
-// No new state: labels recompute from state.selectedEnchants/state.selectedGems live.
-// TG2-F (t_61442157): worn items are pre-checked without entering the selected
-// sets, so the chip counts the UNION with the equipped sets to match the
-// step-3 panel's checked count by construction.
-export function enhancementChipLabel(kind, slot) {
-  if (kind === 'enchants') {
-    if (!(state.appConfig.enchantments?.[slot] || []).length) return null;
-    const k = new Set([...(state.selectedEnchants[slot] || []), ...(state.equippedEnchants[slot] || [])]).size;
-    const e = state.equippedEnchants[slot]?.size || 0;
-    return `Enchants: ${k} selected` + (e > 0 && e < k ? ` · worn ${e}` : '');
-  }
-  if (!(state.appConfig.gems?.standard || []).length) return null;
-  const k = new Set([...state.selectedGems, ...state.equippedGems]).size;
-  return k ? `Gems: ${k} selected` : 'Gems: none';
-}
-export function syncEnhancementChips() {
-  document.querySelectorAll('.enh-chip').forEach(chip => {
-    const label = enhancementChipLabel(chip.dataset.kind, chip.dataset.slot);
-    if (label) chip.textContent = label;
-  });
-}
-export function jumpToEnhancement(kind, slot) {
-  document.getElementById('step-enhance')?.scrollIntoView({ block: 'start' });
-  // Mirror generate_input.py's off_hand -> main_hand enchant-list fallback.
-  const titles = kind === 'gems'
-    ? ['Flawless gems']
-    : (slot === 'off_hand'
-      ? [`${slot.replace('_', ' ')} enchants`, 'main hand enchants']
-      : [`${slot.replace('_', ' ')} enchants`]);
-  const sections = [...document.querySelectorAll('#enhancement-options .enh-section')];
-  for (const title of titles) {
-    const section = sections.find(s => s.dataset.enhTitle === title);
-    if (section) {
-      section.open = true;
-      section.querySelector('summary')?.focus();
-      return;
-    }
-  }
-}
 // shortcut: PVP meta gems are excluded by name substring; upgrade to item-id
 // filtering when the backend exposes gem ids.
 const PVP_META_NAME_MATCH = /heliotrope/i;
@@ -97,7 +58,7 @@ export function renderEnhancements() {
         const name = typeof enchant === 'object' ? enchant.name : `Enchant ${id}`;
         const equipped = state.equippedEnchants[slot].has(id);
         const label = document.createElement('label');
-        label.className = 'choice-chip';
+        label.className = 'choice-chip extra-socket';
         label.innerHTML = `<input type="checkbox">${createEnhancementWowheadLink(enchant, name)}` +
           (equipped ? '<span class="equipped-badge">equipped</span>' : '');
         const input = label.querySelector('input');
@@ -167,6 +128,24 @@ export function renderEnhancements() {
           state.equippedGems.delete(id);
           if (event.target.checked) state.selectedMetaGems.add(id);
           for (const el of metaInputs) el.checked = state.selectedMetaGems.has(el.dataset.id);
+          selectionChanged();
+        });
+        group.appendChild(label);
+      }
+    });
+  }
+
+  // D-6 (design contract): the per-slot "extra socket" experiment checkbox
+  // lived under each gear group before; enhancements are one panel now.
+  if ((state.appConfig.gems?.standard || []).length && state.parsedData) {
+    addSection('Extra test sockets', group => {
+      group.className = 'enhancement-group sockets-group';
+      for (const slot of Object.keys(state.parsedData.items_by_slot || {})) {
+        const label = document.createElement('label');
+        label.className = 'choice-chip';
+        label.innerHTML = `<input type="checkbox"${state.extraSockets[slot] ? ' checked' : ''}> Add/test an extra socket on ${slot.replace('_', ' ')}`;
+        label.querySelector('input').addEventListener('change', event => {
+          state.extraSockets[slot] = event.target.checked;
           selectionChanged();
         });
         group.appendChild(label);

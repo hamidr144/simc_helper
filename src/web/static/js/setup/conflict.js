@@ -45,24 +45,26 @@ export async function hydrateWowheadUpgrades(itemsBySlot) {
   }
 }
 
-/* TG3-C slot conflict (design contract t_784b91c7 §3.4): inline role="alert"
-   line under each conflicting weapon card (card grows only while shown) plus
-   the aggregate line in #workflow-status. The authoritative rejection is the
-   server-side 400 from generate-simc, which generateInput() surfaces here too;
-   this is the pre-submit hint mirroring it — we never auto-remove selections. */
+/* TG3-C slot conflict (design t_784b91c7 §3.4) + RED-3: the inline
+   role="alert" line now renders once per conflicting weapon SECTION (rows
+   replaced cards), plus the aggregate line in #workflow-status. The
+   authoritative rejection is the server-side 400 from generate-simc, which
+   generateInput() surfaces here too; this is the pre-submit hint mirroring it
+   — we never auto-remove selections. */
 export function renderSlotConflict() {
   document.querySelectorAll('.gear-conflict').forEach(el => el.remove());
   const conflict = twoHandedConflict();
   if (!conflict) return;
   const mark = (slot, text) => {
-    for (const card of document.querySelectorAll(`.slot-group[data-slot="${slot}"] .gear-card.is-selected`)) {
-      if (slot === conflict.slot && !state.twoHandedItems.has(card.dataset.item || '')) continue;
-      const line = document.createElement('p');
-      line.className = 'gear-conflict';
-      line.setAttribute('role', 'alert');
-      line.textContent = text;
-      card.appendChild(line);
-    }
+    const section = document.querySelector(`#gear-grid .slotsec[data-slot="${slot}"]`);
+    const items = state.selectedItems[slot];
+    if (!section || !items?.size) return;
+    if (slot === conflict.slot && ![...items].some(item => state.twoHandedItems.has(item))) return;
+    const line = document.createElement('p');
+    line.className = 'gear-conflict conflict-note';
+    line.setAttribute('role', 'alert');
+    line.textContent = text;
+    section.querySelector('.slot-add-preview')?.after(line);
   };
   mark(conflict.slot, `Two-handed weapon — cannot be combined with ${SLOT_LABELS[conflict.other]}.`);
   mark(conflict.other, `Conflicts with the two-handed weapon in ${SLOT_LABELS[conflict.slot]}.`);

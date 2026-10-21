@@ -8,16 +8,18 @@ Behavioural coverage rides tests/test_master_api.py (parse+merge) and
 tests/test_worker.py (stage-3 log in artifacts.zip).
 """
 from pathlib import Path
+import pathlib
 from static_assets import read_css, read_js, resp  # t_94a15fe3 split pins
 
 RESULTS_JS = read_js()
+RESULTS_HTML = (pathlib.Path(__file__).resolve().parents[1] / "src" / "web" / "static" / "results.html").read_text()
 STYLE_CSS = read_css()
 
 
 def test_sidegrade_band_inputs_pinned():
     assert "topRow.mean_error_pct" in RESULTS_JS
     assert "2 * topRow.mean_error_pct / 100" in RESULTS_JS
-    assert 'class="is-sidegrade"' in RESULTS_JS
+    assert 'class="sidegrade"' in RESULTS_JS
     assert "≈ best (statistical tie)" in RESULTS_JS
     assert "sidegrades within 2× error of best" in RESULTS_JS
     # Presentation-only: the band never touches the sort — raw SimC mean
@@ -26,7 +28,7 @@ def test_sidegrade_band_inputs_pinned():
 
 
 def test_vs_best_column_pinned():
-    assert "% vs best" in RESULTS_JS
+    assert "% vs best" in RESULTS_HTML
     assert "((result.dps - topRow.dps) / topRow.dps * 100).toFixed(2)" in RESULTS_JS
     # Error suffix renders only when the server merged precision data
     # (legacy runs have no stage-3 log — the page must stay unchanged).
@@ -35,5 +37,5 @@ def test_vs_best_column_pinned():
 
 
 def test_sidegrade_styles_present():
-    assert ".results-table tr.is-sidegrade td" in STYLE_CSS
-    assert ".sidegrade-badge" in STYLE_CSS
+    assert ".dt tr.sidegrade td" in STYLE_CSS
+    assert ".sg-badge" in STYLE_CSS

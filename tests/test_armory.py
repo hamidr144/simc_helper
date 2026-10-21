@@ -682,7 +682,7 @@ class TestArmoryUiWiring:
         assert 'id="armory-input"' in html
         assert 'id="armory-region"' in html
         assert 'id="btn-armory-load"' in html
-        assert "Or load from Armory" in html
+        assert "load from your Armory character" in html
         # addon paste path stays present and primary
         assert 'id="addon-input"' in html
         assert 'id="btn-parse-addon"' in html
@@ -694,5 +694,5 @@ class TestArmoryUiWiring:
 
     def test_style_has_armory_classes(self):
         css = read_css()  # t_94a15fe3 split pins
-        for css_class in (".armory-import", ".armory-input", ".armory-region-select", ".armory-hint"):
+        for css_class in (".armory-controls", ".armory-input", ".armory-region-select", ".armory-hint"):
             assert css_class in css
