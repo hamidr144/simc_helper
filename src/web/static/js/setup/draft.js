@@ -54,6 +54,15 @@ export function loadDrafts() {
   return out.sort((a, b) => b.savedAt - a.savedAt);
 }
 
+/* t_e906dc02 (leader ruling 4): stale simc-apply / simc-draft localStorage
+   restores candidate state wholesale, so a prior session's item string can
+   come back with no row in the current parse (no name, no ilvl, renders as
+   'item <id>' and leaks into payloads).  Orphan-drop on restore; gear.js
+   keeps the 'item <id>' literal as the last-resort render fallback. */
+function knownCandidate(slot, item) {
+  return (state.parsedData?.items_by_slot?.[slot] || []).includes(item);
+}
+
 /* Restore explicit user state on top of a re-initialized selection layer:
    equipped pre-checks run first (same path as a fresh import), then the
    user's stored picks overlay them. Restoration is user-explicit per §10 —
@@ -61,7 +70,9 @@ export function loadDrafts() {
 export function applyDraftToState(draft) {
   state.slotLocks = { ...state.slotLocks, ...(draft.slotLocks || {}) };
   state.extraSockets = { ...state.extraSockets, ...(draft.extraSockets || {}) };
-  for (const [key, slot] of draft.addedItems || []) state.addedItems.set(key, slot);
+  for (const [key, slot] of draft.addedItems || []) {
+    if (knownCandidate(slot, key)) state.addedItems.set(key, slot);
+  }
   for (const [slot, ids] of Object.entries(draft.selectedEnchants || {})) {
     (state.selectedEnchants[slot] ||= new Set());
     for (const id of ids) state.selectedEnchants[slot].add(id);
@@ -79,7 +90,9 @@ export function applyDraftToState(draft) {
   }
   for (const [slot, items] of Object.entries(draft.selectedItems || {})) {
     (state.selectedItems[slot] ||= new Set());
-    for (const item of items) state.selectedItems[slot].add(item);
+    for (const item of items) {
+      if (knownCandidate(slot, item)) state.selectedItems[slot].add(item);
+    }
   }
   for (const [slot, byItem] of Object.entries(draft.gearUpgrades || {})) {
     for (const [item, entry] of Object.entries(byItem)) {
@@ -118,7 +131,7 @@ export function consumeApply() {
    replaces, never merges. */
 export function applyPayloadToState(payload) {
   state.selectedItems = Object.fromEntries(Object.entries(payload.selected_items || {})
-    .map(([slot, items]) => [slot, new Set(items)]));
+    .map(([slot, items]) => [slot, new Set(items.filter(item => knownCandidate(slot, item)))]));
   for (const [slot, ids] of Object.entries(payload.selected_enchants || {})) {
     state.selectedEnchants[slot] = new Set(ids);
   }

@@ -402,6 +402,29 @@ def test_gear_row_fold_budget_immune_to_selection():
     assert out["expandRevealsAll"] == [0, 1, 2, 3, 4, 5]
 
 
+def test_row_quality_resolver_and_draft_orphan_drop_node_probe():
+    # t_e906dc02: gear-row grade resolves through ONE resolver feeding
+    # qualityOf — hydration > Armory payload > param > COMMON (ruling 3) —
+    # and draft/payload restore drops candidates absent from items_by_slot
+    # (ruling 4). Real modules via node, fold_chips_harness.mjs pattern.
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    harness = os.path.join(os.path.dirname(__file__), "fixtures", "row_quality_harness.mjs")
+    result = subprocess.run([node, harness], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, f"harness failed: {result.stderr[-2000:]}"
+    out = json.loads(result.stdout)
+    # Pre-fix: resolveRowQuality did not exist (harness import failed) and the
+    # orphan rows came back from stale localStorage (gear.js params.quality).
+    assert out["armoryGrade"] == "Epic"
+    assert out["hydrationWins"] == "Rare"
+    assert out["paramFallback"] == "Uncommon"
+    assert out["commonFallback"] == "Common"
+    assert out["draftSelected"] == ["id=268265,bonus_id=6652,ilevel=334"]
+    assert out["draftAdded"] == ["id=268265,bonus_id=6652,ilevel=334"]
+    assert out["payloadSelected"] == []
+
+
 def test_add_by_id_slot_guard_node_probe():
     # t_1699829f: the client-side inventorySlot->slot guard, evaluated in node
     # (same harness pattern as test_crafted_badge_mapping_g4): a mismatch

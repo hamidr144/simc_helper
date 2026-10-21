@@ -19,7 +19,7 @@ from unittest.mock import AsyncMock, patch
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 import web.main as master
-from web.main import app, parse_wowhead_inventory_slot
+from web.main import app, parse_wowhead_inventory_slot, parse_wowhead_quality
 
 client = TestClient(app)
 
@@ -139,6 +139,14 @@ def test_parse_wowhead_inventory_slot():
     assert parse_wowhead_inventory_slot("not xml") is None
 
 
+def test_parse_wowhead_quality():
+    # t_e906dc02 ruling 2: <quality id="N"> from the cached item XML.
+    assert parse_wowhead_quality('<wowhead><item><quality id="4">Epic</quality></item></wowhead>') == 4
+    assert parse_wowhead_quality('<wowhead><item><quality id="x">?</quality></item></wowhead>') is None
+    assert parse_wowhead_quality("<wowhead><item></item></wowhead>") is None
+    assert parse_wowhead_quality("not xml") is None
+
+
 def test_upgrades_endpoint_lists_two_handed_items(monkeypatch):
     item = TWO_HANDED
     other = ONE_HANDED
@@ -152,6 +160,18 @@ def test_upgrades_endpoint_lists_two_handed_items(monkeypatch):
     data = response.json()
     assert data["two_handed"] == {"main_hand": [item]}
     assert data["gear_upgrades"]["main_hand"]  # upgrade mapping unchanged
+
+
+def test_upgrades_endpoint_emits_cached_qualities(monkeypatch):
+    # t_e906dc02 ruling 2: qualities ride the EXISTING per-item XML cache
+    # (no second fetch); items with no cached quality are omitted and the
+    # client resolver's fallbacks cover them.
+    monkeypatch.setattr(master, "wowhead_quality_cache", {master.wowhead_xml_url(TWO_HANDED): 4})
+    with patch("web.main.fetch_wowhead_upgrade", new=AsyncMock(return_value={"track": "myth", "rank": 6, "item_level": 289})):
+        response = client.post("/api/wowhead-upgrades", json={"items_by_slot": {"main_hand": [TWO_HANDED, ONE_HANDED]}})
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["qualities"] == {"main_hand": {TWO_HANDED: 4}}  # ONE_HANDED omitted
 
 
 # ------------------------------------------------------------ client hint

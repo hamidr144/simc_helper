@@ -190,6 +190,19 @@ export function qualityOf(quality) {
   return QUALITY[name] || { cls: 'common', word: name ? name[0].toUpperCase() + name.slice(1) : 'Common' };
 }
 
+/* t_e906dc02: the ONE row-grade resolver feeding qualityOf (§7 R-C3: class +
+   grade word resolve through qualityOf, never per item/slot).  Precedence
+   (leader ruling 3): Wowhead-hydration quality number
+   (state.wowheadQualities, conflict.js) ?? Armory payload grade word
+   (parsedData.item_qualities, /api/armory-load) ?? explicit quality= param.
+   qualityOf's COMMON stays the only true fallback.  Keyed by item string —
+   quality belongs to the item+bonus identity, not the slot. */
+export function resolveRowQuality(item) {
+  return state.wowheadQualities?.[item]
+    ?? state.parsedData?.item_qualities?.[item]
+    ?? parseItemParams(item).quality;
+}
+
 /* R-C3 rank/variant expansion (contract §3): base row per item, plus one row
    per export-ladder upgrade rank (upgrade_levels comment, authoritative and
    still preferred), plus the season-ladder fallback rows for real (comment

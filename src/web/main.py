@@ -227,6 +227,9 @@ class ArmoryLoadResponse(BaseModel):
     char_spec: str = ""
     char_ilvl: Optional[float] = None
     item_upgrades: Dict[str, Dict[str, Any]] = {}
+    # t_e906dc02: Blizzard grade word per item string (same keys as
+    # item_names), e.g. "epic".  SimC strings never carry quality=.
+    item_qualities: Dict[str, str] = {}
     warnings: List[str] = []
 
 
@@ -264,10 +267,16 @@ class WowheadUpgradesResponse(BaseModel):
     ``two_handed`` lists, per slot, the items whose Wowhead inventorySlot is
     Two-Hand (TG3-C slot-conflict hint for the client; empty until Wowhead
     resolved the item).
+
+    ``qualities`` maps slot -> item string -> Wowhead quality number
+    (t_e906dc02, QUALITY_BY_NUMBER space js/core/items.js), parsed from the
+    same cached XML fetch; items whose XML lacks a quality are omitted and
+    the client resolver's own fallbacks cover them.
     """
     status: str
     gear_upgrades: Dict[str, Dict[str, WowheadUpgradeInfo]]
     two_handed: Dict[str, List[str]] = {}
+    qualities: Dict[str, Dict[str, int]] = {}
     errors: List[str]
 
 
@@ -495,6 +504,9 @@ wowhead_upgrade_cache = {}
 # TG3-C: inventorySlot DBC id (17 = two-hand weapon) per item XML URL, cached
 # alongside the upgrade lookup (the same response feeds both parses).
 wowhead_invslot_cache: Dict[str, Optional[int]] = {}
+# t_e906dc02: item quality number (<quality id="4">) per item XML URL, cached
+# alongside — the same cached response feeds all three parses.
+wowhead_quality_cache: Dict[str, Optional[int]] = {}
 # t_1699829f: (inventorySlot id, display name) per bare Wowhead item id, for
 # the tooltip preview's Add-by-ID slot guard (no bonus list — id is invariant).
 wowhead_item_slot_cache: Dict[int, tuple[Optional[int], Optional[str]]] = {}
@@ -1239,6 +1251,24 @@ def parse_wowhead_inventory_slot_name(xml_text: str) -> Optional[str]:
     return name or None
 
 
+def parse_wowhead_quality(xml_text: str) -> Optional[int]:
+    """Quality number from a Wowhead item XML (``<quality id="4">Epic</quality>``).
+
+    t_e906dc02: the quality space is the client's QUALITY_BY_NUMBER map
+    (js/core/items.js).  Returns None when the XML carries no quality node —
+    the client resolver then falls back to lower-precedence sources.
+    """
+    try:
+        root = ElementTree.fromstring(xml_text)
+    except ElementTree.ParseError:
+        return None
+    node = root.find("item/quality")
+    if node is None:
+        return None
+    raw = node.get("id")
+    return int(raw) if raw and raw.isdigit() else None
+
+
 def parse_wowhead_icon_name(xml_text: str) -> Optional[str]:
     """Extract a safe icon name from a Wowhead item XML response."""
     try:
@@ -1694,6 +1724,7 @@ async def fetch_wowhead_upgrade(item: str) -> Optional[Dict[str, Any]]:
     upgrade = parse_wowhead_upgrade(response.text)
     wowhead_upgrade_cache[url] = upgrade
     wowhead_invslot_cache[url] = parse_wowhead_inventory_slot(response.text)
+    wowhead_quality_cache[url] = parse_wowhead_quality(response.text)
     return upgrade
 
 
@@ -2010,7 +2041,24 @@ async def get_wowhead_upgrades(payload: WowheadUpgradesRequest):
         if hits:
             two_handed[slot] = hits
 
-    return {"status": "success", "gear_upgrades": results, "two_handed": two_handed, "errors": errors}
+    # t_e906dc02: quality numbers for the gear-card grade word — same
+    # cache-read pattern as two_handed (never a second fetch).
+    qualities = {}
+    for slot, items in items_by_slot.items():
+        if not isinstance(items, list):
+            continue
+        hits = {}
+        for item in items:
+            if not isinstance(item, str):
+                continue
+            quality = wowhead_quality_cache.get(wowhead_xml_url(item) or "")
+            if quality is not None:
+                hits[item] = quality
+        if hits:
+            qualities[slot] = hits
+
+    return {"status": "success", "gear_upgrades": results, "two_handed": two_handed,
+            "qualities": qualities, "errors": errors}
 
 @app.post("/api/parse-addon", response_model=ParseAddonResponse, tags=["Addons"])
 async def parse_addon_text(request: Request, payload: ParseAddonRequest, current_user: str = Depends(require_session)):

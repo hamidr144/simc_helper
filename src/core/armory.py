@@ -27,8 +27,11 @@ Key facts pinned by that research (verified live 2026-10-13):
 
 The parsed result is returned in the same shape ``/api/parse-addon``
 returns (``base_profile`` / ``equipped_gear`` / ``items_by_slot`` /
-``item_names`` / ``char_name`` / ``char_class`` / ``item_upgrades`` /
-``warnings``) so the frontend can treat both sources identically.
+``item_names`` / ``item_qualities`` / ``char_name`` / ``char_class`` /
+``item_upgrades`` / ``warnings``) so the frontend can treat both sources
+identically.  ``item_qualities`` (t_e906dc02) is Armory-only: SimC item
+strings never carry ``quality=``, and the Blizzard payload is the only
+grade source for gear cards.
 """
 
 from __future__ import annotations
@@ -483,6 +486,7 @@ def parse_armory_model(payload: Dict[str, Any]) -> Dict[str, Any]:
     equipped_gear: Dict[str, str] = {}
     items_by_slot: Dict[str, List[str]] = {}
     item_names: Dict[str, str] = {}
+    item_qualities: Dict[str, str] = {}
 
     for slot_key, item in gear.items():
         if slot_key in ARMORY_COSMETIC_SLOTS:
@@ -500,6 +504,10 @@ def parse_armory_model(payload: Dict[str, Any]) -> Dict[str, Any]:
             item_name = str(item.get("name") or f"Item {item.get('id')}")
             level = (item.get("level") or {}).get("value") if isinstance(item.get("level"), dict) else None
             item_names[details] = f"{item_name} ({int(level)})" if isinstance(level, (int, float)) else item_name
+            quality = item.get("quality")
+            grade = quality.get("name") if isinstance(quality, dict) else None
+            if grade:
+                item_qualities[details] = str(grade).strip().lower()
 
     if not equipped_gear:
         raise ArmoryParseError(f"The Armory reported no usable gear for '{char_name}'.")
@@ -517,6 +525,7 @@ def parse_armory_model(payload: Dict[str, Any]) -> Dict[str, Any]:
         "equipped_gear": equipped_gear,
         "items_by_slot": items_by_slot,
         "item_names": item_names,
+        "item_qualities": item_qualities,
         "char_name": char_name,
         "char_class": char_class,
         "char_spec": char_spec,

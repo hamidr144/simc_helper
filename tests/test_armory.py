@@ -358,6 +358,17 @@ class TestGearParsingHamidriel:
         feet = self.parsed["equipped_gear"]["feet"]
         assert names[feet] == "Spellbreaker's March (331)"
 
+    # t_e906dc02 ruling 1: SimC strings never carry quality=, so the parsed
+    # payload must emit the Blizzard grade word per item string (the vendored
+    # hamidriel fixture already IS the minimal fixture — no new vendoring).
+    NECK = "id=268265,bonus_id=6652/13668/13334/13987/12854,ilevel=334"
+
+    def test_item_qualities_carry_blizzard_grade_words(self):
+        qualities = self.parsed["item_qualities"]
+        assert self.parsed["equipped_gear"]["neck"] == self.NECK
+        assert qualities[self.NECK] == "epic"  # Aqirbane Reliquary: quality.name 'Epic'
+        assert set(qualities) == set(self.parsed["item_names"])  # same keys as item_names
+
     def test_unicode_guild_survives(self):
         # The fixture's guild name is Cyrillic; parsing must not mangle names.
         assert self.parsed["char_name"] == "Hamidriel"
@@ -572,8 +583,11 @@ class TestArmoryLoadEndpoint:
         assert response.status_code == 200
         data = response.json()
         for key in ("base_profile", "equipped_gear", "items_by_slot", "item_names",
-                    "char_name", "char_class", "item_upgrades", "warnings"):
+                    "char_name", "char_class", "item_upgrades", "warnings",
+                    "item_qualities"):
             assert key in data
+        # t_e906dc02 ruling 1: ArmoryLoadResponse wires item_qualities through.
+        assert data["item_qualities"]["id=268265,bonus_id=6652/13668/13334/13987/12854,ilevel=334"] == "epic"
         assert data["char_name"] == "Hamidriel"
         assert data["char_class"] == "paladin"
         assert data["char_spec"] == "retribution"
