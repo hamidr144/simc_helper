@@ -635,3 +635,14 @@ def test_css_comments_are_balanced():
         assert "/*" not in stripped and "*/" not in stripped, f"unbalanced CSS comment in {sheet.name}"
     tokens = (css_dir / "tokens.css").read_text(encoding="utf-8")
     assert ":root{" in re.sub(r"/\*.*?\*/", "", tokens, flags=re.S)
+
+
+def test_chip_render_degrades_on_malformed_tooltip():
+    # RED-3 live-gate found one tooltip entry without a name crashing the whole
+    # results page (render threw, silent retry loop, page rendered half-empty).
+    # Malformed tooltip info must degrade to the pending chip instead.
+    from pathlib import Path
+    js = (Path(__file__).resolve().parents[1] / "src" / "web" / "static"
+          / "js" / "results" / "chips.js").read_text(encoding="utf-8")
+    assert js.count("if (!info || !info.name)") == 2
+    assert "base && base.name" in js

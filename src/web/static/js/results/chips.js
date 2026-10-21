@@ -55,9 +55,11 @@ function hrefFor(change) {
 /* Gap 5: replaces-context in the tooltip, resolved via the same batch path. */
 export function titleFor(change) {
   const info = chipInfo.get(change.id);
-  if (!info) return `${change.slot} #${change.id} (details unavailable)`;
+  // Defensive: a malformed tooltip entry (ok but no name — upstream Wowhead
+  // flake) must degrade to the pending chip, never crash the whole page.
+  if (!info || !info.name) return `${change.slot} #${change.id} (details unavailable)`;
   const base = change.before ? chipInfo.get(change.before) : null;
-  const replaces = base ? ` replaces ${base.name} (ilvl ${base.ilvl ?? '?'})` : '';
+  const replaces = base && base.name ? ` replaces ${base.name} (ilvl ${base.ilvl ?? '?'})` : '';
   return `${info.name} (ilvl ${info.ilvl ?? '?'})${replaces}`;
 }
 
@@ -67,7 +69,7 @@ export function chipHtml(change, variant = 'itemchip') {
   const info = chipInfo.get(change.id);
   const href = hrefFor(change);
   const title = escapeHtml(titleFor(change));
-  if (!info) {
+  if (!info || !info.name) {
     return `<span class="chip chip-pending" title="${title}">${escapeHtml(change.slot)} #${escapeHtml(change.id)}</span>`;
   }
   const color = info.quality_color ? ` style="color:${escapeHtml(info.quality_color)}"` : '';
