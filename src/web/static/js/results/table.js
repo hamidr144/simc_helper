@@ -185,7 +185,7 @@ export function renderResults(results, mode, els) {
   const sidegrades = band === null ? 0 : ranked.filter((r, i) => i > 0 && r.dps >= band).length;
 
   subtitle.textContent = ranked.length
-    ? `${ranked.length} alternatives ranked against ${isEquipped ? 'your equipped gear' : 'the top candidate'}.`
+    ? `${ranked.length} alternative${ranked.length === 1 ? '' : 's'} ranked against ${isEquipped ? 'your equipped gear' : 'the top candidate'}.`
     : (isEquipped ? 'Only your equipped baseline was simulated.' : 'No equipped baseline run was found in the report.');
   if (sidegrades > 0) subtitle.textContent += ` ${sidegrades} sidegrades within 2× error of best.`;
 

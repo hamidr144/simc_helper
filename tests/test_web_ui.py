@@ -351,14 +351,17 @@ def test_crafted_badge_mapping_g4():
         start = js.index(f"function {name}")
         return js[start:js.index("\n}", start) + 2]
 
+    # R9 re-pin (t_d7293a57): 464e989 (D-2 row-title move) made
+    # craftedBadgeHtml emit raw tooltip text; values pinned to that
+    # reviewer-ruled intentional output.
     script = _fn("parseItemParams") + "\n" + _fn("craftedBadgeHtml") + """
 const cases = [
-  ["chest=,id=1,crafted_stats=36/32", "Crafted \u00b7 no grade"],
-  ["chest=,id=1,crafted_stats=36/32,crafting_quality=3", "Crafted \u00b7 Quality 3/5"],
-  ["chest=,id=1,crafted_stats=36/32,crafting_quality=x5", "Crafted \u00b7 no grade"],
-  ["chest=,id=1,crafted_stats=36/32,crafting_quality=7", "Crafted \u00b7 Grade 7"],
-  ["finger1=,id=251513,crafting_quality=5", "Crafted \u00b7 Quality 5/5"],
-  ["chest=,id=1,crafted_stats=1/1,crafting_quality=0", "Crafted \u00b7 Quality 0/5"],
+  ["chest=,id=1,crafted_stats=36/32", "Crafted \u00b7 no grade (the addon export did not include a crafting quality)"],
+  ["chest=,id=1,crafted_stats=36/32,crafting_quality=3", "Crafted \u00b7 Quality 3/5 (from the addon export)"],
+  ["chest=,id=1,crafted_stats=36/32,crafting_quality=x5", "Crafted \u00b7 no grade (the addon export did not include a crafting quality)"],
+  ["chest=,id=1,crafted_stats=36/32,crafting_quality=7", "Crafted \u00b7 Grade 7 (from the addon export)"],
+  ["finger1=,id=251513,crafting_quality=5", "Crafted \u00b7 Quality 5/5 (from the addon export)"],
+  ["chest=,id=1,crafted_stats=1/1,crafting_quality=0", "Crafted \u00b7 Quality 0/5 (from the addon export)"],
 ];
 let fail = 0;
 for (const [item, want] of cases) {
@@ -489,6 +492,34 @@ def test_results_page_is_a_dedicated_user_friendly_view():
     # by the mode chip rendered from run metadata.
     assert "Best upgrades" in response.text
     assert "results.js" in response.text
+
+
+def test_results_subtitle_alternative_count_is_singular_correct():
+    # RED-3F2 SEV-4 (t_bec1d725): exactly 1 ranked alternative must read
+    # "1 alternative ranked", not "1 alternatives ranked".
+    js = resp(read_js()).text
+    assert "${ranked.length} alternative${ranked.length === 1 ? '' : 's'} ranked against" in js
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    # Node harness (same pattern as test_crafted_badge_mapping_g4): evaluate
+    # the served subtitle template itself for n=1 and n=2.
+    start = js.index("`${ranked.length} alternative")
+    template = js[start:js.index("`", start + 1) + 1]
+    script = (
+        "const mk = (n, isEquipped) => { const ranked = { length: n }; return "
+        + template + "; };"
+        "const cases = [[1, '1 alternative ranked against the top candidate.'], "
+        "[2, '2 alternatives ranked against your equipped gear.']];"
+        "let fail = 0;"
+        "for (const [n, want] of cases) {"
+        "  const got = mk(n, n !== 1);"
+        "  if (got !== want) { console.error(n + ' -> ' + got + ' (want ' + want + ')'); fail = 1; }"
+        "}"
+        "process.exit(fail);"
+    )
+    result = subprocess.run([node, "-e", script], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
 
 
 def test_successful_simulation_exposes_uploaded_report_link():
