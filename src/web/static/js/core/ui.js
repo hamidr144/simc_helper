@@ -77,7 +77,7 @@ export function itemRow(variant, d) {
       <span class="name q-${q.cls}" title="${esc(d.name)}">${stateTag(d)}${esc(d.name)}${d.ench ? '<span class="modi" title="enchant / modifier">⚡</span>' : ''}</span>
       <span class="il num">${d.ilvl ?? '—'}</span>
       <span class="grd ${q.cls}">${q.word}</span>${delta}
-      <span class="pick" aria-hidden="true"></span></button>`;
+    </button>`;
   }
   // results variants: the caller wraps (button/rowfoot state lives there)
   return `${icon}

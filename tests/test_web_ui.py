@@ -304,6 +304,25 @@ def test_crafted_items_do_not_auto_infer_midnight_grade_from_item_level_label():
     assert "Crafted · no grade" in js
 
 
+def test_candidate_controls_are_buttons_not_checkbox_mimics():
+    """Candidate selection remains a pressed button without a checkbox graphic."""
+    ui = Path(__file__).resolve().parent.parent / "src/web/static/js/core/ui.js"
+    setup_css = Path(__file__).resolve().parent.parent / "src/web/static/css/setup.css"
+    token_css = Path(__file__).resolve().parent.parent / "src/web/static/css/tokens.css"
+    enhancements = Path(__file__).resolve().parent.parent / "src/web/static/js/setup/enhancements.js"
+    ui = ui.read_text()
+    setup_css = setup_css.read_text()
+    token_css = token_css.read_text()
+    enhancements = enhancements.read_text()
+
+    row = ui.split("if (variant === 'vrow')", 1)[1].split("// results variants", 1)[0]
+    assert 'aria-pressed="${Boolean(d.sel)}"' in row
+    assert 'class="pick"' not in row
+    assert ".vrow.sel{" in setup_css
+    assert ".vrow .pick" not in setup_css
+    assert ".cand .pick" in token_css  # results-page atom is unrelated
+    assert 'type="checkbox"' in enhancements  # Extra test sockets stays a checkbox
+
 def test_voidforge_option_is_hidden_for_elevated_items():
     """t_60c19e5d: ilvl-344 Elevated Myth must not offer Ascendant ascension."""
     response = resp(read_js())

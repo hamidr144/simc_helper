@@ -17,10 +17,10 @@ APP_HTML = (STATIC / "app.html").read_text()
 
 def test_gear_card_is_a_dense_grid_row():
     # RED-3 (v11 §M10): equipped card and candidate row are ONE shared grid —
-    # icon | name(minmax 0) | ilvl | grade | delta | pick; no overflow clipping
-    # (would cut the anchored upgrade popover / tooltip on a row).
+    # icon | name(minmax 0) | ilvl | grade | delta; selection is conveyed by
+    # the button's pressed state, not a decorative square.
     block = CSS.split(".eqc,.vrow{display:grid", 1)[1].split("}", 1)[0]
-    assert "grid-template-columns:var(--col-ic) minmax(0,1fr) var(--col-il) var(--col-grd) var(--col-d) var(--col-pick)" in block
+    assert "grid-template-columns:var(--col-ic) minmax(0,1fr) var(--col-il) var(--col-grd) var(--col-d)" in block
     assert "overflow: hidden" not in block and "overflow:hidden" not in block
     assert ".gear-card" not in CSS  # v11 retired the tile component
 
