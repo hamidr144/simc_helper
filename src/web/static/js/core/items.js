@@ -120,7 +120,21 @@ function seasonFallbackRanks(slot, item) {
   if (!info?.track) info = inferMidnightUpgrade(slot, item, state.parsedData?.item_names?.[item]);
   const ladder = info?.track ? seasonTracks()[info.track] : null;
   const rank = Number(info?.rank) || 0;
-  if (!ladder || !rank || rank > ladder.length) return null;
+  if (!ladder || !rank || rank > ladder.length) {
+    // t_910b4761: a raw-id add no ladder can place (elevated ilvl above the
+    // myth 6/6 + ascension top, or an off-ladder warforged level) still shows
+    // its current rank context — one 'Current' row at the item's own ilvl —
+    // instead of zero rank rows. The row click encodes item_level = that ilvl
+    // (source 'export' wins server-side), so no payload downgrade is possible.
+    // shortcut: presence only per the ruling; no track re-derivation for
+    // off-ladder added ilvls.
+    if (state.addedItems.has(item) && (!ladder || !rank)) {
+      const current = Number(parseItemParams(item).ilevel)
+        || itemLevelFromLabel(state.parsedData?.item_names?.[item]);
+      if (current) return [{ rank: 1, track: null, ilvl: current, voidforged: false, label: 'Current' }];
+    }
+    return null;
+  }
   const crest = `${season().cost_per_rank} ${season().crest_name}`;
   const trackName = info.track[0].toUpperCase() + info.track.slice(1);
   const rows = [];

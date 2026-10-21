@@ -423,6 +423,44 @@ def test_row_quality_resolver_and_draft_orphan_drop_node_probe():
     assert out["draftSelected"] == ["id=268265,bonus_id=6652,ilevel=334"]
     assert out["draftAdded"] == ["id=268265,bonus_id=6652,ilevel=334"]
     assert out["payloadSelected"] == []
+    # t_910b4761: committed add-by-id — the tooltip preview quality persists
+    # into parsedData.item_qualities (the draft-persisted resolver slot), and
+    # the ladder-unplaceable raw-id item still renders one Current rank row.
+    assert out["addedCommittedEpic"] == "Epic"
+    assert out["addedRows"] == ["null:base:false", "1:344:false"]
+
+
+def test_add_by_id_commit_persists_preview_quality():
+    # t_910b4761: commitAddedItem must persist the tooltip preview's Wowhead
+    # quality into parsedData.item_qualities (resolveRowQuality slot 2, which
+    # round-trips through the draft) so the committed card renders Epic
+    # instead of Common; a null quality writes nothing; removeAddedItem drops
+    # the entry again. Function-extraction node probe, slot-guard pattern.
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    assert node
+    js = resp(read_js()).text
+    commit = js[js.index("function commitAddedItem"):js.index("export function removeAddedItem")]
+    rem = js[js.index("export function removeAddedItem"):js.index("function renderSlotAddPreview")] \
+        .replace("export function", "function", 1)
+    script = """
+const state = { parsedData: { items_by_slot: {}, item_names: {} }, selectedItems: {},
+  gearUpgrades: {}, voidforgedItems: {}, statScores: {}, addedItems: new Map() };
+const inferMidnightUpgrade = () => null;
+const renderGear = () => {}, renderCharChip = () => {}, updateSummary = () => {}, selectionChanged = () => {};
+""" + commit + "\n" + rem + """
+let fail = 0;
+commitAddedItem('neck', 268265, { name: 'Aqirbane Reliquary', ilvl: 344, quality: 4 });
+if (state.parsedData.item_qualities?.['id=268265'] !== 4) { console.error('preview quality not persisted: ' + JSON.stringify(state.parsedData.item_qualities)); fail = 1; }
+commitAddedItem('head', 111, { name: 'NoQuality', ilvl: 100 });
+if ('id=111' in (state.parsedData.item_qualities || {})) { console.error('absent quality wrote an entry'); fail = 1; }
+removeAddedItem('neck', 'id=268265');
+if ('id=268265' in state.parsedData.item_qualities) { console.error('quality not dropped on remove'); fail = 1; }
+process.exit(fail);
+"""
+    result = subprocess.run([node, "-e", script], capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_add_by_id_slot_guard_node_probe():
