@@ -191,15 +191,38 @@ def test_e2e_zero_combo_baseline_run_reaches_history(history_user, worker_ws):
     assert served.content == _fixture_bytes(BASELINE_ONLY_REPORT)
 
 
-def test_e2e_failed_run_records_failed_row_without_link(history_user, worker_ws):
+def test_e2e_failed_run_records_failed_row_without_link(history_user, worker_ws, monkeypatch):
     """A non-zero exit still lands a row (status=failed) and no dead link."""
     client = _authed_client(history_user)
+    existing_run_ids = {
+        r["run_id"] for r in client.get("/api/history").json()["runs"]
+    }
     task_id, _ = _drive_run(client, worker_ws, code=1)
 
-    runs = client.get("/api/history").json()["runs"]
-    assert any(r["status"] == "failed" for r in runs), runs
-    failed = [r for r in runs if r["status"] == "failed"][-1]
-    assert failed["report_url"] is None
+    get_history = client.get
+    polls = 0
+
+    def delayed_history(path, *args, **kwargs):
+        nonlocal polls
+        if path == "/api/history" and polls < 2:
+            polls += 1
+            return type("Response", (), {"json": lambda self: {"runs": []}})()
+        return get_history(path, *args, **kwargs)
+
+    monkeypatch.setattr(client, "get", delayed_history)
+    deadline = time.time() + 5.0
+    while True:
+        runs = client.get("/api/history").json()["runs"]
+        failed = [
+            r for r in runs
+            if r["status"] == "failed" and r["run_id"] not in existing_run_ids
+        ]
+        if failed or time.time() >= deadline:
+            break
+        time.sleep(0.2)
+    assert polls == 2
+    assert failed, f"no failed history row for task {task_id} in {runs} (waited 5.0s)"
+    assert failed[-1]["report_url"] is None
 
 
 # ---------------------------------------------------------------------------
