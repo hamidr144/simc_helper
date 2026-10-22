@@ -126,9 +126,15 @@ def test_populated_mobile_setup_geometry_and_safe_area(app_url, width):
         })""")
         main_box = main.bounding_box()
         page.mouse.move(width / 2, main_box["y"] + main_box["height"] / 2)
-        page.mouse.wheel(0, 10000)
-        page.wait_for_timeout(100)
+        # A single wheel event is intentionally bounded by browser input handling;
+        # use repeated real wheel input rather than assigning scrollTop.
         metrics = main.evaluate("el => [el.scrollTop, el.clientHeight, el.scrollHeight]")
+        for _ in range(40):
+            page.mouse.wheel(0, 1200)
+            page.wait_for_timeout(50)
+            metrics = main.evaluate("el => [el.scrollTop, el.clientHeight, el.scrollHeight]")
+            if metrics[0] + metrics[1] >= metrics[2] - 1:
+                break
         assert metrics[0] + metrics[1] >= metrics[2] - 1, metrics
         last_content = page.locator(".footmeta").bounding_box()
         runbar = page.locator(".runbar").bounding_box()
