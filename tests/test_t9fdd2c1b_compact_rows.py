@@ -15,14 +15,16 @@ ENHANCEMENTS_JS = (STATIC / "js/setup/enhancements.js").read_text()
 APP_HTML = (STATIC / "app.html").read_text()
 
 
-def test_setup_mobile_content_reserves_measured_runbar_height():
+def test_setup_mobile_runbar_and_content_share_non_overlapping_viewport():
     setup_css = (STATIC / "css" / "setup.css").read_text()
-    setup_js = (STATIC / "js" / "pages" / "setup.js").read_text()
-    mobile = setup_css.split("@media (max-width:430px){", 1)[1].split("}", 1)[0]
-    assert "var(--setup-runbar-height, 0px)" in mobile
-    assert "env(safe-area-inset-bottom)" in mobile
-    assert "ResizeObserver(reserve)" in setup_js
-    assert "getBoundingClientRect().height" in setup_js
+    assert "body{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}" in setup_css
+    assert "main{flex:1 1 auto;min-height:0;overflow-y:auto" in setup_css
+    assert ".runbar{position:static" in setup_css
+    assert "--setup-runbar-height" not in setup_css
+
+
+
+
 
 
 def test_gear_card_is_a_dense_grid_row():

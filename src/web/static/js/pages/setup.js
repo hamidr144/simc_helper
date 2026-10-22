@@ -83,13 +83,6 @@ export function renderWorkflow() {
 }
 
 export function wire() {
-  const runbar = document.querySelector('.runbar');
-  if (runbar && 'ResizeObserver' in window) {
-    const reserve = () => document.documentElement.style.setProperty(
-      '--setup-runbar-height', `${runbar.getBoundingClientRect().height}px`);
-    new ResizeObserver(reserve).observe(runbar);
-    reserve();
-  }
   wireTheme(document.querySelector('.pal .seg'));
   updateCharCount();
   // t_94a15fe3 split dropped these module wires (t_f9a0df27, QA t_23879205):
