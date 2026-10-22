@@ -1,0 +1,154 @@
+# Hamidriel - Retribution - 2026-10-16 02:19 - EU/Draenor
+# SimC Addon 12.1.5-01
+# WoW 12.1.5.70391, TOC 120105
+# Requires SimulationCraft 1000-01 or newer
+
+paladin="Hamidriel"
+level=90
+race=blood_elf
+region=eu
+server=draenor
+role=attack
+professions=blacksmithing=100/mining=100
+spec=retribution
+# loot_spec=retribution
+
+talents=CYEAzbn3egSOtoSwvPw1U1vTLAAAAAwoZbbmZWGzMzAAAAAAYmyYGmZsNmthZ2mxYMGmxCbAYWmtZmZrBBAAsAYAwYGGYGzMbAzMDjZMYA
+
+# Saved Loadout: herald single
+# talents=CYEAzbn3egSOtoSwvPw1U1vTLAAAAAAmttZmZZYmBAAAAAgZwsNDzM2Gz2wMbzYMmZYGLsNAAAmZsNzsNDAYDwAgxMMwMGzG2mBDjZMYA
+# Saved Loadout: herald m+
+# talents=CYEAzbn3egSOtoSwvPw1U1vTLAAAAAwwstNzMLjZmZAAAAAAMDGzwMjtxsNMz2MGjxwMWYDAzysNzMbGAAAYBwAgxMMwMmZ2AmZGGzYwA
+
+omnium_talents=136814:1/136818:1/136817:1/136816:1/136822:1
+
+# Warhelm of the Consecrated Flame (321)
+head=,id=271465,enchant_id=8017,bonus_id=13334/6652/13696/13692/13698/12850,redirected_base_stats=268229
+# Aqirbane Reliquary (334)
+neck=,id=268265,gem_id=240983/240892,bonus_id=6652/13668/13334/13987/12854
+# Pauldrons of the Consecrated Flame (321)
+shoulder=,id=271463,enchant_id=8001,bonus_id=6652/13440/13694/13697/12846,redirected_base_stats=251138
+# Cloak of the Consecrated Flame (321)
+back=,id=271460,bonus_id=6652/13440/12846,redirected_base_stats=251190
+# Bulwark of the Consecrated Flame (334)
+chest=,id=271468,enchant_id=7987,bonus_id=13334/6652/13690/13698/12854,redirected_base_stats=268222
+# Spellbreaker's Bracers (331)
+wrist=,id=237834,bonus_id=12214/13667/12497/13751/14001/13454/8960/8793/13836/13696,content_tuning=3615,crafted_stats=36/32,crafting_quality=5
+# Gauntlets of the Consecrated Flame (321)
+hands=,id=271466,bonus_id=6652/13691/13697/12846,redirected_base_stats=272257
+# Girdle of Toxic Regret (334)
+waist=,id=268259,bonus_id=6652/13696/13662/13334/12854
+# Greaves of the Consecrated Flame (334)
+legs=,id=271464,enchant_id=8159,bonus_id=13334/6652/13708/13693/13698/12854,redirected_base_stats=271878
+# Spellbreaker's March (331)
+feet=,id=237828,enchant_id=7963,bonus_id=12214/13667/12497/13751/14001/8793/13836,content_tuning=3615,crafted_stats=32/49,crafting_quality=5
+# Vile Alchemist's Band (328)
+finger1=,id=268249,enchant_id=7967,gem_id=240892,bonus_id=6652/13668/13334/12852
+# Loa Worshiper's Band (331)
+finger2=,id=251513,enchant_id=7967,gem_id=240892,bonus_id=12214/13667/8960/12497/13751/14001/13836,content_tuning=3615,crafting_quality=5
+# Voracious Heart of Ula'tek (328)
+trinket1=,id=270175,bonus_id=42/13334/12852
+# Zul'jin's Guillotine Technique (334)
+trinket2=,id=270173,bonus_id=6652/13334/12854
+# Maze-roa, Warlord's Fury (334)
+main_hand=,id=268213,enchant_id=7983,bonus_id=6652/13334/12854
+
+### Gear from Bags
+#
+# Gaze of the Coiled Watcher (315)
+# head=,id=271875,bonus_id=6652/13696/13662/13334/12844/13847,content_tuning=7359
+#
+# Helm of the Raptor King (311)
+# head=,id=239050,bonus_id=12843/13440/6652/13696/13662/12699,content_tuning=1279
+#
+# Errant Scrollsage's Hood (295)
+# head=,id=268242,bonus_id=6652/13696/13662/13333/12834/11215,content_tuning=7359
+#
+# Warhelm of the Consecrated Flame (321)
+# head=,id=271465,enchant_id=8017,bonus_id=12846/42/13696/13692/13698/1574,redirected_base_stats=272258
+#
+# Strand of Warding Fangs (311)
+# neck=,id=273781,bonus_id=12843/13440/6652/13668/12699,content_tuning=1279
+#
+# Reshii Wraps (170)
+# back=,id=235499,enchant_id=7409,gem_id=238044,bonus_id=12401/9893/12257,content_tuning=3008
+#
+# Tabard of Summer Flames (1)
+# tabard=,id=35280,content_tuning=394
+#
+# Shard-Tipped Vambraces (311)
+# wrist=,id=159425,bonus_id=12843/13440/6652/13696/13662/12699,content_tuning=1279
+#
+# Radiant Phoenix Band (282)
+# finger1=,id=256971,bonus_id=12826/6652/13668,content_tuning=4240
+#
+# Sickening Signet of Atroxus (321)
+# finger1=,id=252258,enchant_id=7967,gem_id=240890,bonus_id=13440/40/13668/12699/12846,content_tuning=1279
+#
+# Cyrce's Circlet (103)
+# finger1=,id=228411,enchant_id=7340,gem_id=0/0/228640,bonus_id=12028/1511
+#
+# Ruby Whelp Shell (321)
+# trinket1=,id=193757,bonus_id=13440/6652/12699/12846,content_tuning=1279
+#
+# Vile Vial of Volatile Venom (321)
+# trinket1=,id=273796,bonus_id=13440/42/12699/12846,content_tuning=1279
+#
+# First Mate's Shellward (321)
+# trinket1=,id=270160,bonus_id=6652/13334/12846,content_tuning=7359
+#
+# Manaheart's Binding Flame (311)
+# trinket1=,id=250243,bonus_id=12843/13440/42/12699,content_tuning=1279
+#
+# Kyrakka's Searing Embers (321)
+# trinket1=,id=193748,bonus_id=13440/6652/12699/12846,content_tuning=1279
+#
+# Tarnished Dawnlit Shortsword (253)
+# main_hand=,id=258951,bonus_id=13900,drop_level=90,content_tuning=5381
+#
+# Blood Knight's Warblade (331)
+# main_hand=,id=237846,enchant_id=7983,bonus_id=12214/13667/12497/13751/14004/13771/8960/8791/13836,content_tuning=3615,crafted_stats=49/36,crafting_quality=5
+#
+# Crackling Jade Kilij (321)
+# main_hand=,id=160216,enchant_id=8039,bonus_id=13440/6652/12701/12846,content_tuning=1279
+#
+# Swordsman's Emanation (308)
+# main_hand=,id=272283,enchant_id=8039,bonus_id=6652/12838,content_tuning=6014
+#
+# Resonating Crystal Scimitar (311)
+# main_hand=,id=158373,bonus_id=12843/13440/6652/12701,content_tuning=1279
+#
+# Baleful Hexblade (315)
+# main_hand=,id=268211,bonus_id=6652/13334/12844
+#
+# Jaw of the Shackled Goddess (321)
+# main_hand=,id=268202,bonus_id=6652/13334/13847/12846,content_tuning=7359
+#
+# Shadow's Edge (15)
+# main_hand=,id=49888,content_tuning=1023
+#
+# Ashbringer (10)
+# main_hand=,id=120978,bonus_id=737,content_tuning=642
+#
+# The Silver Hand (10)
+# main_hand=,id=128823,bonus_id=735,content_tuning=642
+#
+# Venom-Slashed Scuteward (321)
+# off_hand=,id=268196,bonus_id=6652/13334/12846,content_tuning=7359
+#
+# Teldrassil's Sacrifice (321)
+# off_hand=,id=251196,bonus_id=13440/6652/12699/12846,content_tuning=1279
+
+### Additional Character Info
+#
+# catalyst_currencies=2813:8/3269:8/3116:8/3378:8/3465:2
+#
+# upgrade_currencies=c:1792:1371/c:1931:22223/c:3442:685/c:3445:220/c:3443:370/c:1813:13115/c:3444:232/c:3446:18/i:274476:1/i:232875:5
+#
+# slot_high_watermarks=0:321:321/1:334:334/2:321:321/3:334:334/4:334:334/5:334:334/6:331:331/7:331:331/8:321:321/9:328:328/10:328:328/11:321:321/12:334:334/13:321:321/14:321:321/15:311:311/16:321:321
+#
+# upgrade_achievements=19326/19397/19577/19578/19579/40107/40115/40118/40939/40942/40943/40944/40945/41886/41887/41888/41892/42767/42768/42769/42770/61809/62410/62411/62412/62414
+#
+# bonus_roll_currencies=3418:0/3511:0
+
+# Checksum: bcb34dc0

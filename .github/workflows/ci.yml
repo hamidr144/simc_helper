@@ -51,3 +51,20 @@ jobs:
       - name: Run tests
         run: |
           pytest -q
+
+  mobile-browser:
+    name: mobile browser geometry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Install app and browser-test dependencies
+        run: |
+          python -m pip install -r requirements.txt -r requirements-browser.txt
+          python -m playwright install --with-deps chromium
+      - name: Run populated mobile geometry regression
+        run: |
+          pytest -q tests/test_mobile_geometry_browser.py
