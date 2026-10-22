@@ -70,7 +70,7 @@ def app_url(tmp_path_factory):
 def test_populated_mobile_setup_geometry_and_safe_area(app_url, width):
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
-        page = browser.new_page(viewport={"width": width, "height": 844}, device_scale_factor=1)
+        page = browser.new_page(viewport={"width": width, "height": 700 if width == 320 else 844}, device_scale_factor=1)
         page.goto(app_url, wait_until="networkidle")
         page.locator("#addon-input").evaluate(
             "(el, value) => { el.value = value; "
@@ -111,9 +111,25 @@ def test_populated_mobile_setup_geometry_and_safe_area(app_url, width):
                 [selector, ".runbar"],
             )
 
-        main.evaluate("el => el.scrollTo(0, el.scrollHeight)")
-        page.wait_for_timeout(50)
-        assert main.evaluate("el => el.scrollTop + el.clientHeight >= el.scrollHeight - 1")
+        page.evaluate("""() => new Promise(resolve => {
+          const main = document.querySelector('main');
+          let previous = main.scrollTop;
+          let stableFrames = 0;
+          const check = () => {
+            if (main.scrollTop === previous) stableFrames++;
+            else stableFrames = 0;
+            previous = main.scrollTop;
+            if (stableFrames >= 4) resolve();
+            else requestAnimationFrame(check);
+          };
+          requestAnimationFrame(check);
+        })""")
+        main_box = main.bounding_box()
+        page.mouse.move(width / 2, main_box["y"] + main_box["height"] / 2)
+        page.mouse.wheel(0, 10000)
+        page.wait_for_timeout(100)
+        metrics = main.evaluate("el => [el.scrollTop, el.clientHeight, el.scrollHeight]")
+        assert metrics[0] + metrics[1] >= metrics[2] - 1, metrics
         last_content = page.locator(".footmeta").bounding_box()
         runbar = page.locator(".runbar").bounding_box()
         assert last_content and runbar and last_content["y"] + last_content["height"] <= runbar["y"]
