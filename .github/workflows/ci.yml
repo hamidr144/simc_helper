@@ -67,4 +67,4 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Run populated mobile geometry regression
         run: |
-          pytest -q tests/test_mobile_geometry_browser.py
+          pytest -q browser_tests/test_mobile_geometry_browser.py
