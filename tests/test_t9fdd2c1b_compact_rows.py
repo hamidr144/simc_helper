@@ -15,6 +15,18 @@ ENHANCEMENTS_JS = (STATIC / "js/setup/enhancements.js").read_text()
 APP_HTML = (STATIC / "app.html").read_text()
 
 
+def test_setup_mobile_runbar_and_content_share_non_overlapping_viewport():
+    setup_css = (STATIC / "css" / "setup.css").read_text()
+    assert "body{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}" in setup_css
+    assert "main{flex:1 1 auto;min-height:0;overflow-y:auto" in setup_css
+    assert ".runbar{position:static" in setup_css
+    assert "--setup-runbar-height" not in setup_css
+
+
+
+
+
+
 def test_gear_card_is_a_dense_grid_row():
     # RED-3 (v11 §M10): equipped card and candidate row are ONE shared grid —
     # icon | name(minmax 0) | ilvl | grade | delta; selection is conveyed by

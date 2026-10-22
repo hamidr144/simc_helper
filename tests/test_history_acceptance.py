@@ -115,6 +115,19 @@ def _read_until_terminal(stream, timeout: float = 20.0) -> str:
     raise AssertionError("SSE stream closed without a terminal event")
 
 
+def _history_row_by_id(client, run_id: str, timeout: float = 5.0) -> dict:
+    """Poll for one exact history row, never an unrelated concurrent run."""
+    deadline = time.time() + timeout
+    while True:
+        runs = client.get("/api/history").json()["runs"]
+        matches = [r for r in runs if r["run_id"] == run_id]
+        if matches or time.time() >= deadline:
+            break
+        time.sleep(0.2)
+    assert matches, f"no history row {run_id} in {runs} (waited {timeout}s)"
+    return matches[0]
+
+
 def _history_row(client: TestClient, task_id: str, timeout: float = 5.0) -> dict:
     """The history row whose report lives under ``<user>/<task_id>/``.
 
@@ -191,15 +204,41 @@ def test_e2e_zero_combo_baseline_run_reaches_history(history_user, worker_ws):
     assert served.content == _fixture_bytes(BASELINE_ONLY_REPORT)
 
 
-def test_e2e_failed_run_records_failed_row_without_link(history_user, worker_ws):
-    """A non-zero exit still lands a row (status=failed) and no dead link."""
+def test_e2e_failed_run_records_failed_row_without_link(history_user, worker_ws, monkeypatch):
+    """A non-zero exit still lands its own row (status=failed) and no dead link."""
     client = _authed_client(history_user)
-    task_id, _ = _drive_run(client, worker_ws, code=1)
+    inserted_run_ids = []
+    insert = master.run_history_insert
 
-    runs = client.get("/api/history").json()["runs"]
-    assert any(r["status"] == "failed" for r in runs), runs
-    failed = [r for r in runs if r["status"] == "failed"][-1]
-    assert failed["report_url"] is None
+    def capture_insert(record):
+        inserted_run_ids.append(record["run_id"])
+        return insert(record)
+
+    monkeypatch.setattr(master, "run_history_insert", capture_insert)
+    task_id, _ = _drive_run(client, worker_ws, code=1)
+    assert len(inserted_run_ids) == 1
+    row = _history_row_by_id(client, inserted_run_ids[0])
+    assert row["status"] == "failed", f"task {task_id} recorded unexpected row {row}"
+    assert row["report_url"] is None
+
+
+def test_failed_history_poll_ignores_unrelated_failed_row():
+    """An unrelated failed run cannot satisfy polling for the target run."""
+    unrelated = {"run_id": "other", "status": "failed", "report_url": None}
+    target = {"run_id": "target", "status": "failed", "report_url": None}
+
+    class Client:
+        polls = 0
+
+        def get(self, path):
+            assert path == "/api/history"
+            self.polls += 1
+            runs = [unrelated] if self.polls == 1 else [unrelated, target]
+            return type("Response", (), {"json": lambda self: {"runs": runs}})()
+
+    client = Client()
+    assert _history_row_by_id(client, "target", timeout=1) is target
+    assert client.polls == 2
 
 
 # ---------------------------------------------------------------------------
