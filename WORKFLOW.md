@@ -98,6 +98,14 @@ git fetch origin prod && git tag vX.Y.Z refs/remotes/origin/prod && git push ori
 
 Every merged milestone bumps the prod version (MINOR for features, MAJOR for breaking, PATCH for prod hotfixes — hotfixes are also cherry-picked back to `dev` through a normal PR). A prod deploy is a deliberate, user-approved event — never merge-and-ship on autopilot.
 
+## Secure agent QA login
+
+Use a dedicated, least-privilege account for dev/test QA only. Do not reuse a production or personal account. An operator must approve the account and store its credentials in the centrally approved password manager, configured for each agent profile that needs access; vault availability and saved items are profile/environment-specific and are not assumed to synchronize automatically.
+
+On the test service's exact login origin, use the installed `browser_vault` flow: call `list` first to find a saved login (and whether a supported manager is locked), ask the user to unlock the manager with `unlock` if needed, then use `fill` with the listed handle. `fill` is restricted to a matching page origin. Never copy or type the password yourself. If the approved login is absent or inaccessible to your profile, stop and request that an operator configure approved vault access; do not ask for credentials in chat or work around authentication.
+
+Never put passwords, one-time codes, authenticator secrets, session cookies/tokens, or screenshots/artifacts containing them in Discord, Kanban, source code, logs, or other deliverables. Do not bypass or disable authentication for convenience. Use only the approved vault flow; do not create or register accounts as part of QA without explicit authorization.
+
 ## The two systems
 
 | | Prod system | Dev system |
