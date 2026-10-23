@@ -82,7 +82,7 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
 .eqc .eqx{grid-column:2}
 .eqc .mods{margin-top:var(--gap-2xs)}
 .eqc .il,.vrow .il{grid-column:3;justify-self:end;text-align:right;font-size:12.5px;font-weight:750;color:var(--ink2)}
-.eqc .grd,.vrow .grd{grid-column:4;justify-self:end;text-align:right}
+.eqc .grd,.vrow .grd{min-width:var(--col-grd);grid-column:4;justify-self:end;text-align:right}
 .eqc .d,.vrow .d{grid-column:5;justify-self:end}
 
 @media (max-width:430px){
