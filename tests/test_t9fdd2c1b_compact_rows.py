@@ -17,6 +17,7 @@ APP_HTML = (STATIC / "app.html").read_text()
 
 def test_setup_mobile_runbar_and_content_share_non_overlapping_viewport():
     setup_css = (STATIC / "css" / "setup.css").read_text()
+    assert "@media (max-width:850px){" in setup_css
     assert "body{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}" in setup_css
     assert "main{flex:1 1 auto;min-height:0;overflow-y:auto" in setup_css
     assert ".runbar{position:static" in setup_css
