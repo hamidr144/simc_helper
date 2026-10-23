@@ -3,7 +3,10 @@
    tokens.css); everything below is verbatim RED-2M12. */
 
 /* ---- vertical page-length list ---- */
-main{max-width:880px;padding-bottom:220px}
+body{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+.top,.qj,.runbar{flex:none}
+main{max-width:880px;padding-bottom:24px;flex:1 1 auto;min-height:0;overflow-y:auto}
+body>.runbar{position:static;inset:auto}
 .qj{position:sticky;top:0;z-index:40;background:var(--canvas);border-bottom:1px solid var(--line)}
 .qjin{max-width:880px;margin:0 auto;display:flex;align-items:center;flex-wrap:wrap;gap:var(--gap-sm);overflow-x:auto;padding:8px 20px;scrollbar-width:thin}
 .qj a{flex:none;border:1px solid var(--line2);background:var(--surface);color:var(--ink2);
@@ -48,10 +51,8 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
 .pal .seg button[aria-checked=true]{background:var(--acc);color:var(--acc-ink)}
 
 @media (max-width:430px){
-  body{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
-  .top,.qj,.runbar{flex:none}
   main{flex:1 1 auto;min-height:0;overflow-y:auto;padding:12px 10px}
-  .runbar{position:static;padding-bottom:env(safe-area-inset-bottom)}
+  .runbar{padding-bottom:env(safe-area-inset-bottom)}
   .qjin{padding:8px 10px}
   .slotsec{margin-top:var(--gap-md)}
   .eqc .nm{font-size:12px}

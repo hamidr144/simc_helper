@@ -697,7 +697,6 @@ def test_enhancements_use_gear_buttons_preserve_equipped_baseline_and_filter_gre
     )
     assert result.returncode == 0, result.stderr
     assert "q-${q.cls}" in ui
-    assert "padding-bottom:220px" in css
     assert "white-space:nowrap" in css
 
 
