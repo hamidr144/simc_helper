@@ -189,6 +189,8 @@ def test_api_history_report_url_resolves_for_existing_report(history_user):
         served = TestClient(app).get("/" + row["report_url"])
         assert served.status_code == 200
         assert "report" in served.text
+        assert 'name="viewport" content="width=device-width, initial-scale=1"' in served.text
+        assert open(report_file, "r", encoding="utf-8").read() == "<html>report</html>"
     finally:
         import shutil
 
