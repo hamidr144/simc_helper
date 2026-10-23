@@ -16,10 +16,12 @@ def test_uncommon_grade_and_item_level_do_not_overlap(app_url):
         )
         page.locator("#btn-parse-addon").click()
         page.locator("#gear-grid .slotsec").first.wait_for()
+        assert page.locator('link[href*="tokens.css"]').get_attribute("href").endswith("tokens.css?v=red3-3")
+        assert page.locator(":root").evaluate("el => getComputedStyle(el).getPropertyValue('--q-uncom').trim()")
         page.evaluate("""() => {
           const rows = document.querySelector('#gear-grid .slotsec[data-slot="main_hand"] .rows');
           const row = document.createElement('button');
-          row.className = 'cand vrow ex';
+          row.className = 'cand vrow';
           row.innerHTML = '<span class="ic">T</span><span class="name q-uncommon">Tarnished Dawnlit Shortsword</span>' +
             '<span class="il num">253</span><span class="grd uncommon">Uncommon</span>' +
             '<span class="d eq">base</span>';
