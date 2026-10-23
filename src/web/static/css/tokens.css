@@ -29,7 +29,7 @@
   --lh:1.45;
   /* RED-2M10 · shared row/card grid (gear eqc + vrow; results candup mirrors it):
      icon | name | ilvl | grade | delta pill | checkbox — fixed right-aligned cluster. */
-  --col-ic:42px; --col-il:40px; --col-grd:52px; --col-d:68px; --col-pick:20px;
+  --col-ic:42px; --col-il:40px; --col-grd:68px; --col-d:68px; --col-pick:20px;
   /* RED-3 · contextual tokens — hoists the zip's component-level hexes so every
      color lives in a palette block (gate 10). Values identical to RED-2M12 v11. */
   --gold:#846500; --eq-bg:#ffffff;                                   /* C-2 (was #a67c00, style.css L42) */
