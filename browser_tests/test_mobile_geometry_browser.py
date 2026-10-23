@@ -70,7 +70,8 @@ def app_url(tmp_path_factory):
 def test_populated_mobile_setup_geometry_and_safe_area(app_url, width):
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
-        page = browser.new_page(viewport={"width": width, "height": 700 if width == 320 else 844}, device_scale_factor=1)
+        viewport_height = 700 if width == 320 else 844
+        page = browser.new_page(viewport={"width": width, "height": viewport_height}, device_scale_factor=1)
         page.goto(app_url, wait_until="networkidle")
         page.locator("#addon-input").evaluate(
             "(el, value) => { el.value = value; "
@@ -85,10 +86,19 @@ def test_populated_mobile_setup_geometry_and_safe_area(app_url, width):
             assert box and box["width"] > 0 and box["height"] > 0
             assert box["x"] >= 0 and box["x"] + box["width"] <= width
             overlap, bounds = page.evaluate(
-                "([selector, bar]) => { const a=document.querySelector(selector).getBoundingClientRect(); const b=document.querySelector(bar).getBoundingClientRect(); return [a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top, {control:{top:a.top,bottom:a.bottom},runbar:{top:b.top,bottom:b.bottom}}]; }",
+                "([selector, bar]) => {"
+                "const a=document.querySelector(selector).getBoundingClientRect();"
+                "const b=document.querySelector(bar).getBoundingClientRect();"
+                "const m=document.querySelector('main').getBoundingClientRect();"
+                "const visible={left:Math.max(a.left,m.left,0),right:Math.min(a.right,m.right,innerWidth),"
+                "top:Math.max(a.top,m.top,0),bottom:Math.min(a.bottom,m.bottom,innerHeight)};"
+                "return [visible.left < b.right && visible.right > b.left && "
+                "visible.top < b.bottom && visible.bottom > b.top,"
+                "{control:{top:a.top,bottom:a.bottom},visible,main:{top:m.top,bottom:m.bottom},"
+                "runbar:{top:b.top,bottom:b.bottom}}]; }",
                 [selector, ".runbar"],
             )
-            assert not overlap, f"{selector} intersects the runbar at initial scroll position: {bounds}"
+            assert not overlap, f"{selector}'s painted region intersects the runbar at initial scroll position: {bounds}"
         assert neck.locator(".lock").is_visible()
         assert neck.locator(".eqc, .vrow").count() > 0
 
@@ -149,6 +159,34 @@ def test_populated_mobile_setup_geometry_and_safe_area(app_url, width):
         runbar = page.locator(".runbar").bounding_box()
         assert last_content and runbar and last_content["y"] + last_content["height"] <= runbar["y"]
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        browser.close()
+
+
+@pytest.mark.parametrize("width, height", [(320, 700), (390, 844)])
+def test_mobile_slot_navigation_and_runbar_clearance(app_url, width, height):
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": width, "height": height}, device_scale_factor=1)
+        page.goto(app_url, wait_until="networkidle")
+        page.locator("#addon-input").evaluate(
+            "(el, value) => { el.value = value; "
+            "el.dispatchEvent(new Event('input', {bubbles:true})); }",
+            FIXTURE.read_text(),
+        )
+        page.locator("#btn-parse-addon").click()
+        links = page.locator(".qjin a")
+        links.last.wait_for(state="visible", timeout=15000)
+        nav = page.locator(".qjin")
+        nav_metrics = nav.evaluate("el => [el.clientWidth, el.scrollWidth]")
+        assert nav_metrics[1] > nav_metrics[0], nav_metrics
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        nav.evaluate("el => el.scrollLeft = el.scrollWidth")
+        last_link = links.last.bounding_box()
+        nav_box = nav.bounding_box()
+        assert last_link and nav_box and nav_box["x"] <= last_link["x"]
+        assert last_link["x"] + last_link["width"] <= nav_box["x"] + nav_box["width"]
+        status = page.locator(".workflow-status").bounding_box()
+        assert status and status["y"] + status["height"] <= height - 8
         browser.close()
 
 
