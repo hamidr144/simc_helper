@@ -19,15 +19,17 @@ def test_uncommon_grade_and_item_level_do_not_overlap(app_url):
         page.evaluate("""() => {
           const rows = document.querySelector('#gear-grid .slotsec[data-slot="main_hand"] .rows');
           const row = document.createElement('button');
-          row.className = 'cand vrow';
-          row.innerHTML = '<span class="ic">T</span><span class="name">Tarnished Dawnlit Shortsword</span>' +
+          row.className = 'cand vrow ex';
+          row.innerHTML = '<span class="ic">T</span><span class="name q-uncommon">Tarnished Dawnlit Shortsword</span>' +
             '<span class="il num">253</span><span class="grd uncommon">Uncommon</span>' +
             '<span class="d eq">base</span>';
           rows.append(row);
         }""")
         row = page.locator('#gear-grid .slotsec[data-slot="main_hand"] .vrow').last
+        name = row.locator('.name')
         grade = row.locator('.grd').bounding_box()
         ilvl = row.locator('.il').bounding_box()
+        assert name.evaluate("el => getComputedStyle(el).color === getComputedStyle(el.parentElement.querySelector('.grd')).color")
         assert grade and ilvl and grade["x"] - (ilvl["x"] + ilvl["width"]) > 0
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
 
