@@ -921,6 +921,17 @@ def test_css_comments_are_balanced():
     assert ":root{" in re.sub(r"/\*.*?\*/", "", tokens, flags=re.S)
 
 
+def test_uncommon_item_name_matches_grade_color_token():
+    import re
+    from pathlib import Path
+    css = (Path(__file__).resolve().parents[1] / "src/web/static/css/tokens.css").read_text(encoding="utf-8")
+    assert re.search(r"\.q-uncommon\s*\{color:var\(--q-uncom\)\}", css)
+    assert re.search(r"\.grd\.uncommon\s*\{color:var\(--grd-uncom\)\}", css)
+    assert "--grd-uncom:var(--q-uncom)" in css
+    assert "--q-uncom:#2b7a3d" in css
+    assert "--q-uncom:#7cc986" in css
+
+
 def test_chip_render_degrades_on_malformed_tooltip():
     # RED-3 live-gate found one tooltip entry without a name crashing the whole
     # results page (render threw, silent retry loop, page rendered half-empty).
