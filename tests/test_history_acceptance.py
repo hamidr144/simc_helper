@@ -25,6 +25,7 @@ the SSE done event that fires the ``run_history`` insert hook, and the
 
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -56,6 +57,18 @@ BASELINE_ONLY_REPORT = os.path.join(FIXTURES, "simc_nightly_report_baseline_only
 def _fixture_bytes(path: str) -> bytes:
     with open(path, "rb") as f:
         return f.read()
+
+
+def _served_report_bytes(path: str) -> bytes:
+    content = _fixture_bytes(path)
+    if b'name="viewport"' not in content.lower():
+        head = re.search(br"<head(?:\s[^>]*)?>", content, re.IGNORECASE)
+        meta = b'<meta name="viewport" content="width=device-width, initial-scale=1">'
+        if head:
+            return content[:head.end()] + meta + content[head.end():]
+        return b"<head>" + meta + b"</head>" + content
+    return content
+
 
 
 def _make_user(prefix: str = "acc") -> str:
@@ -184,7 +197,7 @@ def test_e2e_run_records_history_row_with_real_nightly_report(history_user, work
     assert row["report_url"] == f"reports/{user_dir}/{task_id}/report_1.html"
     served = TestClient(app).get("/" + row["report_url"])
     assert served.status_code == 200
-    assert served.content == _fixture_bytes(MULTICOPY_REPORT)
+    assert served.content == _served_report_bytes(MULTICOPY_REPORT)
 
 
 def test_e2e_zero_combo_baseline_run_reaches_history(history_user, worker_ws):
@@ -201,7 +214,7 @@ def test_e2e_zero_combo_baseline_run_reaches_history(history_user, worker_ws):
     assert row["top_dps"] == 7877
     served = TestClient(app).get("/" + row["report_url"])
     assert served.status_code == 200
-    assert served.content == _fixture_bytes(BASELINE_ONLY_REPORT)
+    assert served.content == _served_report_bytes(BASELINE_ONLY_REPORT)
 
 
 def test_e2e_failed_run_records_failed_row_without_link(history_user, worker_ws, monkeypatch):
@@ -265,7 +278,7 @@ def test_restart_in_memory_loss_keeps_history_link_serving(history_user, worker_
 
         served = TestClient(app).get("/" + after["report_url"])
         assert served.status_code == 200
-        assert served.content == _fixture_bytes(MULTICOPY_REPORT)
+        assert served.content == _served_report_bytes(MULTICOPY_REPORT)
 
         # get-results' sibling lookup must also survive the lost map.
         resolved = TestClient(app).get(f"/api/report-url?task_id={task_id}")
@@ -425,7 +438,7 @@ def test_restart_persistence_two_process_history_link_serves_report(tmp_path):
         assert len(runs) == 1
         assert runs[0]["top_dps"] == 7887
         report_url = runs[0]["report_url"]
-        assert client.get("/" + report_url).content == report
+        assert client.get("/" + report_url).content == _served_report_bytes(MULTICOPY_REPORT)
 
         # ---- restart the process (same BASE_DIR volume) ----
         _stop_master(proc)
@@ -440,7 +453,7 @@ def test_restart_persistence_two_process_history_link_serves_report(tmp_path):
         # the /history link still serves the exact report bytes
         served = client.get("/" + report_url)
         assert served.status_code == 200
-        assert served.content == report
+        assert served.content == _served_report_bytes(MULTICOPY_REPORT)
 
         # report-url resolves with an EMPTY task map (glob fallback)
         resolved = client.get(f"/api/report-url?task_id={task_id}")

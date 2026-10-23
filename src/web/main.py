@@ -771,7 +771,23 @@ class _SessionStaticFiles(StaticFiles):
         user_id = require_session(Request(scope))
         if authentication_enabled() and path.split("/", 1)[0] != _user_report_dir(user_id):
             raise HTTPException(status_code=404)
-        return await super().get_response(path, scope)
+        response = await super().get_response(path, scope)
+        # SimC's standalone HTML omits viewport metadata. Adapt the served copy
+        # only; keep the engine-generated report on disk byte-for-byte intact.
+        if path.endswith(".html") and response.status_code == 200 and isinstance(response, FileResponse):
+            def read_report():
+                with open(response.path, "rb") as report_file:
+                    return report_file.read()
+
+            content = await asyncio.to_thread(read_report)
+            if b'name="viewport"' not in content.lower():
+                meta = b'<meta name="viewport" content="width=device-width, initial-scale=1">'
+                head = re.search(br"<head(?:\s[^>]*)?>", content, re.IGNORECASE)
+                if head:
+                    content = content[:head.end()] + meta + content[head.end():]
+                    return Response(content, media_type="text/html")
+                return Response(b"<head>" + meta + b"</head>" + content, media_type="text/html")
+        return response
 
 
 app.mount("/reports", _SessionStaticFiles(directory=REPORTS_DIR), name="reports")
