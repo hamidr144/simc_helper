@@ -757,13 +757,15 @@ def test_secfix_reports_mount_per_owner_authz(auth_on, monkeypatch):
             f"oracle: foreign={rf.content!r} missing={own_missing.content!r}")
         # No over-block: owner still loads their report (iframe path).
         rv = v.get(url)
-        assert rv.status_code == 200 and rv.text == body, \
-            f"owner blocked from own report: {rv.status_code}"
+        assert rv.status_code == 200 and body in rv.text
+        assert 'name="viewport"' in rv.text
         # Kill switch: auth disabled -> anonymous passthrough intact.
         monkeypatch.setattr(master, "authentication_enabled", lambda: False)
         r = TestClient(app).get(url)
-        assert r.status_code == 200 and r.text == body, (
+        assert r.status_code == 200 and body in r.text, (
             f"anonymous-mode passthrough broken: {r.status_code}")
+        assert 'name="viewport"' in r.text
+
     finally:
         shutil.rmtree(os.path.join(
             root, master._user_report_dir(v.user_id)), ignore_errors=True)
