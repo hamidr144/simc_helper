@@ -141,3 +141,38 @@ def test_populated_mobile_setup_geometry_and_safe_area(app_url, width):
         assert last_content and runbar and last_content["y"] + last_content["height"] <= runbar["y"]
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         browser.close()
+
+
+def test_populated_desktop_setup_rows_clear_runbar_initial_and_running(app_url):
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1000}, device_scale_factor=1)
+        page.goto(app_url, wait_until="networkidle")
+        page.locator("#addon-input").evaluate(
+            "(el, value) => { el.value = value; "
+            "el.dispatchEvent(new Event('input', {bubbles:true})); }",
+            FIXTURE.read_text(),
+        )
+        page.locator("#btn-parse-addon").click()
+        page.locator("#sec-neck .vrow").first.wait_for(state="visible", timeout=15000)
+
+        for running in (False, True):
+            if running:
+                page.locator("#run-progress").evaluate("el => el.hidden = false")
+            assert page.locator("#btn-run").is_visible()
+            assert page.locator(".runbar").evaluate("el => getComputedStyle(el).position") == "static"
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+            overlaps = page.evaluate("""() => {
+              const bar = document.querySelector('.runbar').getBoundingClientRect();
+              const main = document.querySelector('main').getBoundingClientRect();
+              return [...document.querySelectorAll('.vrow')].filter(row => {
+                const r = row.getBoundingClientRect();
+                const top = Math.max(r.top, main.top, 0);
+                const bottom = Math.min(r.bottom, main.bottom, innerHeight);
+                return top < bottom && r.left < bar.right && r.right > bar.left &&
+                  top < bar.bottom && bottom > bar.top;
+              }).map(row => row.textContent.trim());
+            }""")
+            assert not overlaps, {"running": running, "overlapping_rows": overlaps}
+            assert page.locator(".runbar").bounding_box()["y"] >= page.locator("main").bounding_box()["y"]
+        browser.close()
