@@ -64,7 +64,7 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
   .runbar > :is(.in) > :is(.workflow-status){grid-column:1 / -1}
   .runbtn{margin:0;padding:6px 10px;font-size:13px}
   .qjin{flex-wrap:nowrap;padding:8px 10px}
-  .slotsec{margin-top:var(--gap-md)}
+  .slotsec{margin-top:0}
   .eqc .nm{font-size:12px}
 }
 
