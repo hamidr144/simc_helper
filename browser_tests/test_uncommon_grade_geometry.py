@@ -10,6 +10,15 @@ def test_uncommon_grade_and_item_level_do_not_overlap(app_url):
         browser = playwright.chromium.launch()
         page = browser.new_page(viewport={"width": 1440, "height": 1000})
         page.goto(app_url, wait_until="networkidle")
+        quality_lookup = {}
+
+        def wowhead_quality(route):
+            items = route.request.post_data_json["items_by_slot"]["main_hand"]
+            item = next(item for item in items if "id=258951" in item and "bonus_id=13900" in item)
+            quality_lookup["item"] = item
+            route.fulfill(json={"status": "success", "gear_upgrades": {}, "two_handed": {}, "qualities": {"main_hand": {item: 2}}, "errors": []})
+
+        page.route("**/api/wowhead-upgrades", wowhead_quality)
         page.locator("#addon-input").evaluate(
             "(el, value) => { el.value = value; el.dispatchEvent(new Event('input', {bubbles:true})); }",
             FIXTURE.read_text(),
@@ -18,17 +27,16 @@ def test_uncommon_grade_and_item_level_do_not_overlap(app_url):
         page.locator("#gear-grid .slotsec").first.wait_for()
         assert page.locator('link[href*="tokens.css"]').get_attribute("href").endswith("tokens.css?v=red3-3")
         assert page.locator(":root").evaluate("el => getComputedStyle(el).getPropertyValue('--q-uncom').trim()")
-        page.evaluate("""() => {
-          const rows = document.querySelector('#gear-grid .slotsec[data-slot="main_hand"] .rows');
-          const row = document.createElement('button');
-          row.className = 'cand vrow';
-          row.innerHTML = '<span class="ic">T</span><span class="name q-uncommon">Tarnished Dawnlit Shortsword</span>' +
-            '<span class="il num">253</span><span class="grd uncommon">Uncommon</span>' +
-            '<span class="d eq">base</span>';
-          rows.append(row);
-        }""")
-        row = page.locator('#gear-grid .slotsec[data-slot="main_hand"] .vrow').last
+        section = page.locator('#gear-grid .slotsec[data-slot="main_hand"]')
+        section.locator('.fold').click()
+        row = section.locator('.vrow').filter(has_text='Tarnished Dawnlit Shortsword')
+        row.wait_for()
+        row.locator('.name.q-uncommon').wait_for()
+        assert "id=258951" in quality_lookup["item"] and "bonus_id=13900" in quality_lookup["item"]
+        assert 'id=258951' in row.get_attribute('data-item')
+        assert 'q-uncommon' in row.locator('.name').get_attribute('class')
         name = row.locator('.name')
+        assert name.evaluate("el => { const probe = document.createElement('span'); probe.style.color = 'var(--q-uncom)'; document.body.append(probe); const expected = getComputedStyle(probe).color; probe.remove(); return getComputedStyle(el).color === expected; }")
         grade = row.locator('.grd').bounding_box()
         ilvl = row.locator('.il').bounding_box()
         assert name.evaluate("el => getComputedStyle(el).color === getComputedStyle(el.parentElement.querySelector('.grd')).color")
