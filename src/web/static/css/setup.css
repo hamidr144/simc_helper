@@ -56,7 +56,7 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
   .topin{padding:6px 10px;gap:8px}
   #worker-status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
   .runbar{padding-bottom:env(safe-area-inset-bottom)}
-  .runbar > :is(.in){display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr);gap:4px 8px;padding:6px 10px}
+  .runbar > :is(.in){display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr);gap:0 8px;padding:0 10px}
   .runbar .est{grid-column:2 / -1;min-width:0}
   .runbar .bud{margin:0;text-align:left;width:auto;order:initial}
   .runbar .fight-style-select{min-width:0;max-width:100%;width:100%;padding:4px;font-size:11px}

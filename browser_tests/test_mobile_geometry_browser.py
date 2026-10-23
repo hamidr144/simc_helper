@@ -84,10 +84,11 @@ def test_populated_mobile_setup_geometry_and_safe_area(app_url, width):
             box = page.locator(selector).bounding_box()
             assert box and box["width"] > 0 and box["height"] > 0
             assert box["x"] >= 0 and box["x"] + box["width"] <= width
-            assert not page.evaluate(
-                "([selector, bar]) => { const a=document.querySelector(selector).getBoundingClientRect(); const b=document.querySelector(bar).getBoundingClientRect(); return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top; }",
+            overlap, bounds = page.evaluate(
+                "([selector, bar]) => { const a=document.querySelector(selector).getBoundingClientRect(); const b=document.querySelector(bar).getBoundingClientRect(); return [a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top, {control:{top:a.top,bottom:a.bottom},runbar:{top:b.top,bottom:b.bottom}}]; }",
                 [selector, ".runbar"],
-            ), f"{selector} intersects the runbar at initial scroll position"
+            )
+            assert not overlap, f"{selector} intersects the runbar at initial scroll position: {bounds}"
         assert neck.locator(".lock").is_visible()
         assert neck.locator(".eqc, .vrow").count() > 0
 
