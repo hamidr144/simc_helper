@@ -43,7 +43,7 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
 .vrow.sel{border-color:var(--acc);box-shadow:inset 0 0 0 1px var(--acc);background:var(--acc-soft)}
 .vrow.ex{background:var(--sunk);border-style:dashed}
 .vrow.ex .name{color:var(--ink3);font-weight:500}
-.vrow .name.q-uncommon{color:var(--q-uncom)}
+.vrow.ex .name.q-uncommon{color:var(--q-uncom)}
 .vrow.ex .ic{filter:grayscale(1);opacity:.6}
 .d.il-d{min-width:auto;white-space:nowrap}
 

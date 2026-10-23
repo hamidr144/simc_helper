@@ -19,7 +19,7 @@ def test_uncommon_grade_and_item_level_do_not_overlap(app_url):
         page.evaluate("""() => {
           const rows = document.querySelector('#gear-grid .slotsec[data-slot="main_hand"] .rows');
           const row = document.createElement('button');
-          row.className = 'cand vrow';
+          row.className = 'cand vrow ex';
           row.innerHTML = '<span class="ic">T</span><span class="name q-uncommon">Tarnished Dawnlit Shortsword</span>' +
             '<span class="il num">253</span><span class="grd uncommon">Uncommon</span>' +
             '<span class="d eq">base</span>';
