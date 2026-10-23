@@ -80,6 +80,15 @@ def test_populated_mobile_setup_geometry_and_safe_area(app_url, width):
         page.locator("#btn-parse-addon").click()
         neck = page.locator("#sec-neck")
         neck.locator(".slot-toggle-all").wait_for(state="visible", timeout=15000)
+        for selector in ("#sec-neck .slot-toggle-all", "#sec-neck .lock"):
+            box = page.locator(selector).bounding_box()
+            assert box and box["width"] > 0 and box["height"] > 0
+            assert box["x"] >= 0 and box["x"] + box["width"] <= width
+            overlap, bounds = page.evaluate(
+                "([selector, bar]) => { const a=document.querySelector(selector).getBoundingClientRect(); const b=document.querySelector(bar).getBoundingClientRect(); return [a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top, {control:{top:a.top,bottom:a.bottom},runbar:{top:b.top,bottom:b.bottom}}]; }",
+                [selector, ".runbar"],
+            )
+            assert not overlap, f"{selector} intersects the runbar at initial scroll position: {bounds}"
         assert neck.locator(".lock").is_visible()
         assert neck.locator(".eqc, .vrow").count() > 0
 
