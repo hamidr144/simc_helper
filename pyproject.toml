@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "simc-helper"
-version = "1.1.1-dev.17"
+version = "1.1.1-dev.18"
 description = "Distributed SimulationCraft helper"
 requires-python = ">=3.9"
 
