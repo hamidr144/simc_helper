@@ -112,3 +112,8 @@ def test_group_chrome_gaps_match_contract():
     # per-slot group footer is gone with the tile era.
     assert ".slot-group" not in CSS
     assert 'extra socket' in ENHANCEMENTS_JS
+
+
+def test_armory_placeholder_fits_mobile_with_full_accessible_label():
+    assert 'placeholder="Name-Realm or link"' in APP_HTML
+    assert 'Character name and realm, or a full Armory link' in APP_HTML
