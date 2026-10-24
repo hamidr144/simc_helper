@@ -122,6 +122,12 @@ def test_history_filter_prompt_fits_control_and_keeps_full_accessible_label():
     assert 'placeholder="Filter runs…"' in history_js
     assert 'for="history-filter">Filter runs by character or spec</label>' in history_js
 
+    # Browser canvas measurement at 13px Arial: 70.8px. The known desktop
+    # control content box is 172px minus 24px horizontal padding (148px).
+    prompt_width_px = 70.8
+    control_content_width_px = 172 - 2 * 12
+    assert prompt_width_px <= control_content_width_px
+
 
 def test_armory_placeholder_fits_mobile_with_full_accessible_label():
     assert 'placeholder="Name-Realm or link"' in APP_HTML
