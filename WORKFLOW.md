@@ -139,17 +139,22 @@ curl -s http://127.0.0.1:8000/health
 
 Rollback: `git checkout <last-good-tag>` in the prod worktree, rebuild, `docker compose -p simc_helper up -d --force-recreate`. `git checkout <tag>` detaches HEAD, so re-attach before the next deploy: `git checkout prod && git pull`. Data lives in named volumes and survives either way.
 
-## Inspecting a page with Playwright MCP
+## Inspecting a page with isolated browser sessions
 
-Use the installed Playwright MCP tools for focused live-page diagnosis; no project dependency or repo-specific harness is needed. Navigate to the intended environment first (use dev at `http://127.0.0.1:8001`, never prod for testing), then:
+For focused live-page diagnosis, use `functions.browser_exec` with a distinct named `session` for every concurrent agent/task. Reuse that same name across calls made by one agent so its tab and browser state persist. Calls using the same name share state: never use one session name concurrently for different agents/tasks. Example:
 
-1. Call `mcp__playwright__browser_snapshot` with `boxes: true` to inspect accessible names/roles and viewport-relative element bounds. This is the primary structural/layout view; use `depth` or `target` to narrow a large page.
-2. Call `mcp__playwright__browser_evaluate` with a read-only expression when you need a specific DOM fact, e.g. `() => ({title: document.title, viewport: [innerWidth, innerHeight], document: [document.documentElement.scrollWidth, document.documentElement.scrollHeight], headings: [...document.querySelectorAll('h1,h2')].map(e => e.innerText)})`.
-3. Check `mcp__playwright__browser_console_messages` at `warning` or `error` level for runtime failures.
-4. Check `mcp__playwright__browser_network_requests` with `static: false` to focus on non-static requests; set `filter` for a URL pattern. Use `mcp__playwright__browser_network_request` with a returned 1-based index only when request/response details are needed.
-5. Use `mcp__playwright__browser_take_screenshot` only as supplementary visual evidence; use the snapshot for actionable structure and targets.
+```python
+functions.browser_exec({"code": "# Inspect the current page\nprint(page_info())", "session": "agent-a-task-123"})
+```
 
-Record the URL/environment and what was actually observed; do not infer authenticated or populated-state behavior from an empty/unauthenticated page. Request-detail output can contain headers or bodies with sensitive data: inspect only what is necessary and never copy secrets into notes or reports. A locked/shared browser session or unreachable origin is a limitation to report, not a reason to claim a successful inspection.
+Use a different session name for another concurrent agent/task (for example, `agent-b-task-456`). `mcp__playwright__browser_*` tools are a separate singleton browser session, not isolated per-agent sessions; use them only when singleton access is suitable, not for simultaneous independent inspections. No project dependency or repo-specific harness is needed. Navigate to the intended environment first (use dev at `http://127.0.0.1:8001`, never prod for testing), then:
+
+1. Inspect accessible names/roles and element bounds with `page_info()` or read the page DOM via `js(...)`; prefer actionable structural/DOM evidence over screenshots.
+2. Use `js(...)` for a specific DOM fact, e.g. `js('({title: document.title, viewport: [innerWidth, innerHeight], document: [document.documentElement.scrollWidth, document.documentElement.scrollHeight], headings: [...document.querySelectorAll("h1,h2")].map(e => e.innerText)})')`.
+3. Check the browser console for runtime failures and network requests/responses for relevant request details; inspect only what is necessary because headers or bodies may contain sensitive data.
+4. Use a screenshot only as supplementary visual evidence; use DOM/accessibility information for actionable structure and targets.
+
+Record the URL/environment and what was actually observed; do not infer authenticated or populated-state behavior from an empty/unauthenticated page. An unreachable origin is a limitation to report, not a reason to claim a successful inspection.
 
 ## Quick rules
 
