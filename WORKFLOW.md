@@ -139,6 +139,18 @@ curl -s http://127.0.0.1:8000/health
 
 Rollback: `git checkout <last-good-tag>` in the prod worktree, rebuild, `docker compose -p simc_helper up -d --force-recreate`. `git checkout <tag>` detaches HEAD, so re-attach before the next deploy: `git checkout prod && git pull`. Data lives in named volumes and survives either way.
 
+## Inspecting a page with Playwright MCP
+
+Use the installed Playwright MCP tools for focused live-page diagnosis; no project dependency or repo-specific harness is needed. Navigate to the intended environment first (use dev at `http://127.0.0.1:8001`, never prod for testing), then:
+
+1. Call `mcp__playwright__browser_snapshot` with `boxes: true` to inspect accessible names/roles and viewport-relative element bounds. This is the primary structural/layout view; use `depth` or `target` to narrow a large page.
+2. Call `mcp__playwright__browser_evaluate` with a read-only expression when you need a specific DOM fact, e.g. `() => ({title: document.title, viewport: [innerWidth, innerHeight], document: [document.documentElement.scrollWidth, document.documentElement.scrollHeight], headings: [...document.querySelectorAll('h1,h2')].map(e => e.innerText)})`.
+3. Check `mcp__playwright__browser_console_messages` at `warning` or `error` level for runtime failures.
+4. Check `mcp__playwright__browser_network_requests` with `static: false` to focus on non-static requests; set `filter` for a URL pattern. Use `mcp__playwright__browser_network_request` with a returned 1-based index only when request/response details are needed.
+5. Use `mcp__playwright__browser_take_screenshot` only as supplementary visual evidence; use the snapshot for actionable structure and targets.
+
+Record the URL/environment and what was actually observed; do not infer authenticated or populated-state behavior from an empty/unauthenticated page. Request-detail output can contain headers or bodies with sensitive data: inspect only what is necessary and never copy secrets into notes or reports. A locked/shared browser session or unreachable origin is a limitation to report, not a reason to claim a successful inspection.
+
 ## Quick rules
 
 - Branch from `dev`, open PRs back to `dev` — direct push to `dev`/`prod` is blocked server-side for every push class, PR-head shas included (`GH013`/`GH006`); hotfixes reach prod through a PR too (then cherry-pick back to `dev` through a PR).
