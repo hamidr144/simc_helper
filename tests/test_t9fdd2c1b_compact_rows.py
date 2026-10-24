@@ -28,6 +28,9 @@ def test_mobile_runbar_selects_get_full_width_without_changing_desktop():
     setup_css = (STATIC / "css" / "setup.css").read_text()
     assert ".runbar .fight-style-select{grid-column:1 / -1;" in setup_css
     assert "grid-column" not in setup_css.split("@media (max-width:850px){", 1)[0]
+    for selector_id in ("fight-style", "compare-mode"):
+        selector = APP_HTML.split(f'id="{selector_id}"', 1)[1].split(">", 1)[0]
+        assert 'class="fight-style-select"' in selector
     assert 'id="fight-style"' in APP_HTML
     assert 'id="compare-mode"' in APP_HTML
 
@@ -112,6 +115,12 @@ def test_group_chrome_gaps_match_contract():
     # per-slot group footer is gone with the tile era.
     assert ".slot-group" not in CSS
     assert 'extra socket' in ENHANCEMENTS_JS
+
+
+def test_history_filter_prompt_fits_control_and_keeps_full_accessible_label():
+    history_js = (STATIC / "js" / "pages" / "history.js").read_text()
+    assert 'placeholder="Filter runs…"' in history_js
+    assert 'for="history-filter">Filter runs by character or spec</label>' in history_js
 
 
 def test_armory_placeholder_fits_mobile_with_full_accessible_label():
