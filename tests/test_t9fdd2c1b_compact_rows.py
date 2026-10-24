@@ -24,6 +24,14 @@ def test_setup_mobile_runbar_and_content_share_non_overlapping_viewport():
     assert "--setup-runbar-height" not in setup_css
 
 
+def test_mobile_runbar_selects_get_full_width_without_changing_desktop():
+    setup_css = (STATIC / "css" / "setup.css").read_text()
+    assert ".runbar .fight-style-select{grid-column:1 / -1;" in setup_css
+    assert "grid-column" not in setup_css.split("@media (max-width:850px){", 1)[0]
+    assert 'id="fight-style"' in APP_HTML
+    assert 'id="compare-mode"' in APP_HTML
+
+
 
 
 
