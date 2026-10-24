@@ -69,7 +69,7 @@ function renderList(runs) {
   </tr>`).join('');
   contentEl.innerHTML = `<section class="panel-card full-width history-table-card">
     <label class="sr-only" for="history-filter">Filter runs by character or spec</label>
-    <input id="history-filter" class="history-filter" type="search" placeholder="Filter by character or spec…" autocomplete="off">
+    <input id="history-filter" class="history-filter" type="search" placeholder="Filter runs…" autocomplete="off">
     <table class="history-table">
       <caption class="sr-only">Your simulation runs, newest first</caption>
       <thead><tr><th scope="col">When</th><th scope="col">Character</th><th scope="col">Spec</th><th scope="col">Fight</th><th scope="col">Top DPS</th><th scope="col">Status</th><th scope="col">Report</th><th scope="col">Run</th></tr></thead>
