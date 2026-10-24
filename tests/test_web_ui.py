@@ -774,17 +774,15 @@ def test_results_subtitle_alternative_count_is_singular_correct():
     assert result.returncode == 0, result.stderr
 
 
-def test_successful_simulation_exposes_uploaded_report_link():
+def test_successful_simulation_opens_in_app_results():
     response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
     assert "message.report_file && message.task_id" in js
-    # t_c968bf8d: durable reports live under /reports/<user_id>/<task_id>/, so
-    # the frontend resolves the URL via /api/report-url instead of building it.
-    assert "api/report-url?task_id=" in js
-    assert "document.getElementById('btn-open-report')" in js  # MGE-2 A2 hero link (t_94a15fe3), RED-3 static anchor in results.html
-    assert "link.hidden = false;" in js
+    assert "window.location.href = `results?task_id=${encodeURIComponent(message.task_id)}" in js
+    assert "api/report-url?task_id=" not in js
+    assert "btn-open-report" not in js
 
 
 # ---------------------------------------------------------------------------

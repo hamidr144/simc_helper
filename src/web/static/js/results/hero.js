@@ -1,10 +1,8 @@
 // js/results/hero.js — run identity facts for the results side rail
 // (RED-3: the old .results-hero block is replaced by the v11 resaside;
-// run id + copy + full-report link semantics unchanged from t_94a15fe3 port).
-import { apiFetch } from '../core/api.js';
-import { escapeHtml } from '../core/dom.js';
+// run id + copy semantics unchanged from t_94a15fe3 port.
 
-export async function renderHeroExtras(taskId) {
+export function renderHeroExtras(taskId) {
   const kv = document.getElementById('side-run-kv');
   if (!kv) return;
   const short = String(taskId || '').slice(0, 8);
@@ -30,15 +28,4 @@ export async function renderHeroExtras(taskId) {
   value.append(copy);
   row.append(label, value);
   kv.append(row);
-  try {
-    const response = await apiFetch(`api/report-url?task_id=${encodeURIComponent(taskId)}`);
-    if (response.ok) {
-      const data = await response.json();
-      const link = document.getElementById('btn-open-report');
-      if (data.url && link) {
-        link.href = data.url;
-        link.hidden = false;
-      }
-    }
-  } catch { /* report link is best-effort */ }
 }

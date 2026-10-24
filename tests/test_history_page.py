@@ -72,6 +72,26 @@ def history_user():
 # Page route
 # ---------------------------------------------------------------------------
 
+def test_history_links_to_in_app_results_by_task_id():
+    history_js = os.path.join(os.path.dirname(__file__), "../src/web/static/js/pages/history.js")
+    source = open(history_js, encoding="utf-8").read()
+    assert "results?task_id=${encodeURIComponent(taskId)}" in source
+    assert "String(run.report_url).split('/').slice(-2, -1)[0]" in source
+    assert 'href="${escapeHtml(run.report_url)}"' not in source
+    assert "reportCell(run)" not in source
+
+
+def test_results_ui_has_no_raw_simc_report_link():
+    static = os.path.join(os.path.dirname(__file__), "../src/web/static")
+    results_html = open(os.path.join(static, "results.html"), encoding="utf-8").read()
+    hero_js = open(os.path.join(static, "js/results/hero.js"), encoding="utf-8").read()
+    history_js = open(os.path.join(static, "js/pages/history.js"), encoding="utf-8").read()
+    assert "Open full SimC report" not in results_html
+    assert "api/report-url" not in hero_js
+    assert "Open report" not in history_js
+    assert 'target="_blank"' not in history_js
+
+
 def test_history_page_served_when_auth_disabled():
     response = TestClient(app).get("/history")
     assert response.status_code == 200
@@ -84,7 +104,7 @@ def test_history_page_served_when_auth_disabled():
     assert ".history-table thead{display:none}" in css_text
     assert ".history-table td::before{content:attr(data-label)" in css_text
     assert all(f'data-label="{label}"' in js_text for label in (
-        "When", "Character", "Spec", "Fight", "Top DPS", "Status", "Report", "Run"
+        "When", "Character", "Spec", "Fight", "Top DPS", "Status", "Results", "Run"
     ))
     assert "@media(min-width:481px){.history-table-card{overflow-x:visible}}" in css_text
 
