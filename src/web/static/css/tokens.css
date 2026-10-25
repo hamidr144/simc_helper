@@ -39,7 +39,8 @@
   --ic-bg:#eef0f4;          /* icon frame ground (style.css L18 dark: canvas) */
   --ic-epic-fg:#5c3a92; --ic-rare-fg:#245a94;        /* .ic.epic/.rare monogram ink */
   --ic-bg-epic:#f4eefa; --ic-bg-rare:#eef4fb;        /* .ic.big.epic/.rare ground */
-  --q-epic:#6b41b8; --q-rare:#2a65a8; --q-uncom:#2b7a3d; /* quality-colored names/grade words */
+  --q-epic:#6b41b8; --q-rare:#2a65a8; --q-uncom:#2b7a3d; /* quality names/words — Wowhead .q2/.q3/.q4 hue family, light-adjusted for C-2 ≥4.5 (dark keeps Wowhead canonical, see dark block) */
+  --q-common:#6e6e6e; --q-legendary:#b45309; --q-artifact:#7a5c12; /* light-adjusted (Wowhead #9d9d9d/#ff8000/#e6cc80 fail on white) */
   --grd-uncom:var(--q-uncom);                        /* .grd.uncommon */
   --mod-ench-fg:#6b41b8; --mod-ench-bd:#ddcfee; --mod-ench-bg:#f4eefa;
   --mod-gem-fg:#2a65a8; --mod-gem-bd:#c9dbef; --mod-gem-bg:#eef4fb;
@@ -146,8 +147,12 @@ main{max-width:1240px;margin:0 auto;padding:16px 20px 96px}
 /* quality grade word (WOW-tooltip style), quality-colored */
 .grd{font-size:10px;font-weight:750;letter-spacing:.03em;text-transform:uppercase}
 .grd.epic{color:var(--q-epic)} .grd.rare{color:var(--q-rare)} .grd.uncommon{color:var(--grd-uncom)}
-/* quality-colored names (zip scoped .q-epic/.q-rare/.q-uncommon on eqc/cchip/cdet/setcard → one pair) */
-.q-epic{color:var(--q-epic)} .q-rare{color:var(--q-rare)} .q-uncommon{color:var(--q-uncom)}
+.grd.common{color:var(--q-common)} .grd.legendary{color:var(--q-legendary)} .grd.artifact{color:var(--q-artifact)}
+/* quality-colored names (zip scoped .q-epic/.q-rare/.q-uncommon on eqc/cchip/cdet/setcard → one pair);
+   the .nm.q-* twin ties .st .nm{color} on specificity and wins on source order
+   (qualification precedent setup.css:46) so eqc names ride their grade color */
+.q-epic,.nm.q-epic{color:var(--q-epic)} .q-rare,.nm.q-rare{color:var(--q-rare)} .q-uncommon,.nm.q-uncommon{color:var(--q-uncom)}
+.q-common,.nm.q-common{color:var(--q-common)} .q-legendary,.nm.q-legendary{color:var(--q-legendary)} .q-artifact,.nm.q-artifact{color:var(--q-artifact)}
 .modi{color:var(--acc-text);font-size:11px;padding-left:2px}
 .doll{position:relative;display:grid;place-items:center;padding:12px 0}
 .doll svg{width:100%;max-width:215px;height:auto;display:block}
@@ -353,7 +358,7 @@ html[data-pal=dark]{
   --ic-bg:#26282d;
   --ic-epic-fg:#c39af0; --ic-rare-fg:#8dbcec;
   --ic-bg-epic:#221b2c; --ic-bg-rare:#1a2330;
-  --q-epic:#c39af0; --q-rare:#8dbcec; --q-uncom:#7cc986;
+  --q-epic:#a335ee; --q-rare:#0070dd; --q-uncom:#1eff00; --q-common:#9d9d9d; --q-legendary:#ff8000; --q-artifact:#e6cc80; /* Wowhead global.css .q4/.q3/.q2/.q0/.q5/.q6 canonical */
   --grd-uncom:var(--q-uncom);
   --mod-ench-fg:#4fd6c3; --mod-ench-bd:#27514b; --mod-ench-bg:#122a26;
   --mod-gem-fg:#8ed06a; --mod-gem-bd:#3c5a2c; --mod-gem-bg:#1b2a14;
@@ -362,7 +367,7 @@ html[data-pal=dark]{
   --toast-bg:#e8eaec; --toast-fg:#17181c;         /* results.css L130 */
 }
 html[data-pal=dark] .eqc{background:var(--eq-bg);border-color:var(--gold-line)}
-html[data-pal=dark] .eqc .nm{color:var(--gold)}   /* equipped card: gold name register */
+/* gold .nm register removed (user request): equipped names ride their grade color via .nm.q-* */
 html[data-pal=dark] .qj a:hover{border-color:var(--gold);color:var(--gold)}
 /* dark kept contrast (measured 3.22:1 ink3-on-sunk fails AA): names/headers go to
    ink2 (5.46:1), the base pill sits on a surface chip so it stays visible on sunk. */
