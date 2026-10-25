@@ -130,6 +130,10 @@ function gearStringFor(row, change) {
   return row.gear?.[rawSlot(change.slot)] || `id=${change.id}`;
 }
 
+export function slotRankLabel(candidates) {
+  return `rank 1 of ${candidates.length}`;
+}
+
 function selectedItemMap(row, baseline) {
   const map = {};
   for (const change of changesFromBaseline(row, baseline)) {
@@ -245,8 +249,7 @@ export function renderResults(results, mode, els) {
     slots.recos.querySelector('.panelh .sub').textContent =
       'best ranked candidate per slot · deltas vs your baseline';
     slots.recos.querySelector('.upgrid').innerHTML = [...bySlot.entries()].map(([slot, candidates]) => {
-      const { result, change, index } = candidates[0];
-      const total = candidates.length;
+      const { result, change } = candidates[0];
       const info = infoFor(change.id);
       const baseInfo = change.before ? infoFor(change.before) : null;
       const delta = result.dps - baseline.dps;
@@ -255,7 +258,7 @@ export function renderResults(results, mode, els) {
       const raw = rawSlot(change.slot);
       const gearString = gearStringFor(result, change);
       const replaces = baseInfo ? `replaces ${baseInfo.name}${typeof info?.ilvl === 'number' && typeof baseInfo.ilvl === 'number' ? ` · ilvl ${baseInfo.ilvl}` : ''}` : '';
-      return `<section class="slotsec" aria-label="${escapeHtml(`${slot} recommended upgrade`)}"><div class="sechead"><h2>${escapeHtml(slot)}</h2><span class="cnt num">rank ${index + 1} of ${total}</span></div>
+      return `<section class="slotsec" aria-label="${escapeHtml(`${slot} recommended upgrade`)}"><div class="sechead"><h2>${escapeHtml(slot)}</h2><span class="cnt num">${slotRankLabel(candidates)}</span></div>
         <div class="cand candup"${ariaRecLabel(slot, info, change, pct, baseLabel, baseInfo)}>
           ${iconSpan(change.id, info?.name || slot)}
           <a class="name" href="https://www.wowhead.com/item=${encodeURIComponent(change.id)}" target="_blank" rel="noopener" title="${escapeHtml(titleFor(change))}">${escapeHtml(info?.name || `#${change.id}`)}</a>
