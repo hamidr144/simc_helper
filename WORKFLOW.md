@@ -106,6 +106,10 @@ On the test service's exact login origin, use the installed `browser_vault` flow
 
 Never put passwords, one-time codes, authenticator secrets, session cookies/tokens, or screenshots/artifacts containing them in Discord, Kanban, source code, logs, or other deliverables. Do not bypass or disable authentication for convenience. Use only the approved vault flow; do not create or register accounts as part of QA without explicit authorization.
 
+### Browser tools for web-view QA
+
+For every agent doing SimC Helper web-view QA, use Hermes core browser (`browser.backend=off`): navigate to the intended dev page with `browser_navigate`, then use `browser_snapshot`, `browser_click`, and `browser_type` on that same page; reserve `browser_type` for ordinary non-credential fields. For authentication, credentials must be filled only through `browser_vault`, never copied or typed. This tool is deferred; if it is not listed, discover it with `hermes_tool_search` for `browser_vault`, load its schema with `tool_describe`, then call `action=list`; unlock only if needed, and use `fill` with the listed saved-login handle on the exact matching origin. Preserve the same-origin and private-address safeguards; do not bypass authentication or create accounts. Never expose credentials, tokens, codes, or artifacts containing them. Keep page interaction in this core-browser/Vault context—do not substitute `computer_use`, Playwright, or another context. `computer_use` is only for native desktop/browser chrome, never app page content; a Chrome window on another macOS Space is not a reason to switch contexts or foreground-escalate. Verify `/api/state` returns HTTP 200 before protected QA. If a fresh task session lacks required browser tools, stop and report the exact missing capability for leader provisioning; do not improvise or weaken safeguards.
+
 ## The two systems
 
 | | Prod system | Dev system |
@@ -139,22 +143,9 @@ curl -s http://127.0.0.1:8000/health
 
 Rollback: `git checkout <last-good-tag>` in the prod worktree, rebuild, `docker compose -p simc_helper up -d --force-recreate`. `git checkout <tag>` detaches HEAD, so re-attach before the next deploy: `git checkout prod && git pull`. Data lives in named volumes and survives either way.
 
-## Inspecting a page with isolated browser sessions
+## Inspecting a page
 
-For focused live-page diagnosis, use `functions.browser_exec` with a distinct named `session` for every concurrent agent/task. Reuse that same name across calls made by one agent so its tab and browser state persist. Calls using the same name share state: never use one session name concurrently for different agents/tasks. Example:
-
-```python
-functions.browser_exec({"code": "# Inspect the current page\nprint(page_info())", "session": "agent-a-task-123"})
-```
-
-Use a different session name for another concurrent agent/task (for example, `agent-b-task-456`). `mcp__playwright__browser_*` tools are a separate singleton browser session, not isolated per-agent sessions; use them only when singleton access is suitable, not for simultaneous independent inspections. No project dependency or repo-specific harness is needed. Navigate to the intended environment first (use dev at `http://127.0.0.1:8001`, never prod for testing), then:
-
-1. Inspect accessible names/roles and element bounds with `page_info()` or read the page DOM via `js(...)`; prefer actionable structural/DOM evidence over screenshots.
-2. Use `js(...)` for a specific DOM fact, e.g. `js('({title: document.title, viewport: [innerWidth, innerHeight], document: [document.documentElement.scrollWidth, document.documentElement.scrollHeight], headings: [...document.querySelectorAll("h1,h2")].map(e => e.innerText)})')`.
-3. Check the browser console for runtime failures and network requests/responses for relevant request details; inspect only what is necessary because headers or bodies may contain sensitive data.
-4. Use a screenshot only as supplementary visual evidence; use DOM/accessibility information for actionable structure and targets.
-
-Record the URL/environment and what was actually observed; do not infer authenticated or populated-state behavior from an empty/unauthenticated page. An unreachable origin is a limitation to report, not a reason to claim a successful inspection.
+For all SimC Helper web-view QA, follow **Secure agent QA login** above: use the Hermes core browser and same-page Vault context for page content and interaction. Do not use `browser_exec`, Playwright, `computer_use`, or another browser context for this work. Inspect with `browser_snapshot`, prefer accessible structure over screenshots, and record the URL/environment and what you actually observed. Do not infer authenticated or populated-state behavior from an empty/unauthenticated page; report an unreachable origin as a limitation rather than claiming success.
 
 ## Quick rules
 
