@@ -106,10 +106,29 @@ main{max-width:1240px;margin:0 auto;padding:16px 20px 96px}
 
 /* run bar — F-8: wraps, CTA never clips */
 .runbar{position:fixed;inset:auto 0 0 0;background:var(--surface);border-top:1px solid var(--line);z-index:50}
+/* t_d671cd7c directive 5: the gear page's run controls live in a card at the
+   TOP of main (the fixed-bottom .runbar stays for the results action bar). */
+.runbar-top{position:static;inset:auto;z-index:auto;border:1px solid var(--line);border-radius:var(--r-card)}
+.runbar-top .in{padding:10px 14px}
 .runbar .in{max-width:1240px;margin:0 auto;display:flex;align-items:center;gap:var(--gap-md);padding:10px 20px;flex-wrap:wrap}
 .runbar .est{color:var(--ink2);font-size:13px}
 .runbar .bud{margin-left:auto;text-align:right;font-size:12px;color:var(--ink3)}
 .footmeta{display:flex;gap:var(--gap-md);color:var(--ink3);font-size:11.5px;padding:var(--gap-md) 2px 0;flex-wrap:wrap}
+/* t_d671cd7c directive 6: header profile dropdown (replaces the footer nav
+   links). Panel opens below the trigger, right-aligned, so it can never
+   cover the theme selector. */
+.profile-menu{position:relative;display:inline-flex}
+.profile-menu-btn{border:1px solid var(--line2);background:var(--surface);color:var(--ink2);
+  border-radius:var(--r-ctl);padding:6px 12px;font:inherit;font-size:12.5px;font-weight:600;
+  cursor:pointer;min-height:36px;white-space:nowrap}
+.profile-menu-btn:hover,.profile-menu-btn[aria-expanded="true"]{border-color:var(--acc);color:var(--acc-text)}
+.profile-menu-panel{position:absolute;right:0;top:calc(100% + 6px);z-index:70;min-width:170px;
+  display:flex;flex-direction:column;gap:2px;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r-ctl);box-shadow:var(--shadow);padding:4px}
+.profile-menu-panel a{padding:8px 10px;border-radius:6px;color:var(--ink2);text-decoration:none;
+  font-size:13px;white-space:nowrap}
+.profile-menu-panel a:hover{background:var(--acc-soft);color:var(--acc-text)}
+.profile-menu-panel a:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
 
 /* doll + flanking slot columns (shared backbone) */
 .panel{margin-top:var(--gap-md)}
@@ -210,6 +229,7 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
   main{padding:12px 10px 120px}
   .topin{padding:9px 12px}
   .runbar .in{padding:8px 12px;gap:10px}
+  .runbar-top .in{padding:8px 10px}
   .runbar .bud{margin-left:0;text-align:left;width:100%;order:3}
   .runbtn{flex:1;margin-left:0}
   /* RED-2M4 enriched cards stay enriched at 390, just denser */
@@ -239,6 +259,15 @@ html{scroll-padding-top:80px}          /* focus never hides behind sticky .qj (W
 .skip-link:focus{left:8px}
 input,select,textarea{font:inherit;color:var(--ink);background:var(--surface);
   border:1px solid var(--line2);border-radius:var(--r-ctl);padding:7px 10px}
+/* t_d671cd7c directive 7: one select language on every page — native chevron
+   off, an inline-SVG chevron drawn INSIDE the control's right padding.
+   shortcut: fixed neutral gray (rgb, not hex, to stay gate-10 clean) sits on
+   the --surface/--sunk fills in both palettes; upgrade to per-theme tokens
+   only if a future palette breaks the contrast. */
+select{appearance:none;-webkit-appearance:none;padding-right:28px;
+  background-repeat:no-repeat;background-position:right 8px center;background-size:12px 12px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='rgb(140 145 155)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")}
+select:disabled{opacity:.55}
 textarea{width:100%;min-height:150px;font-family:var(--mono);font-size:13px;resize:vertical}
 input:focus,select:focus,textarea:focus{outline:2px solid var(--acc);outline-offset:1px;border-color:var(--acc)}
 input::placeholder,textarea::placeholder{color:var(--ink3)}
@@ -425,14 +454,14 @@ html[data-pal=light]{--gold:#846500;--eq-bg:var(--surface)}          /* C-2 (was
 .armory-field{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}
 .armory-field .armory-input{background:var(--sunk);border:1px solid var(--line2);border-radius:var(--r-ctl);
   color:var(--ink);padding:7px 10px;font:inherit;font-size:12.5px;min-width:0}
-.armory-field .armory-region-select{background:var(--sunk);border:1px solid var(--line2);border-radius:var(--r-ctl);
-  color:var(--ink);padding:7px 8px;font:inherit;font-size:12.5px}
+.armory-field .armory-region-select{background-color:var(--sunk);border:1px solid var(--line2);border-radius:var(--r-ctl);
+  color:var(--ink);padding:7px 28px 7px 10px;font:inherit;font-size:12.5px;min-height:36px}
 .armory-field .btn{border:1px solid var(--line2);background:var(--surface);color:var(--ink);
-  border-radius:var(--r-ctl);padding:7px 12px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+  border-radius:var(--r-ctl);padding:7px 12px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;min-height:36px}
 .armory-field .btn:hover{border-color:var(--acc);color:var(--acc-text)}
 .armory-hint{color:var(--ink3);font-size:11.5px}
-.fight-style-select{background:var(--sunk);border:1px solid var(--line2);border-radius:var(--r-ctl);
-  color:var(--ink);padding:6px 8px;font:inherit;font-size:12.5px;max-width:260px}
+.fight-style-select{background-color:var(--sunk);border:1px solid var(--line2);border-radius:var(--r-ctl);
+  color:var(--ink);padding:6px 28px 6px 10px;font:inherit;font-size:12.5px;max-width:260px;min-height:36px}
 .fight-style-select:hover{border-color:var(--acc)}
 @media(max-width:480px){
   .history-table,.history-table tbody,.history-table tr,.history-table td{display:block;width:auto}

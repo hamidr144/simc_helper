@@ -35,6 +35,38 @@ def map_enchant_groups(enchantments):
     return mapped
 
 
+# t_d671cd7c directive 3: optional gem secondary-stat classification used by
+# the gear page to split gems into one column per stat. Canonical values are
+# lowercase snake_case; anything else is dropped (frontend shows 'Other').
+GEM_STATS = {"mastery", "crit", "versatility", "haste"}
+GEM_STAT_ALIASES = {
+    "critical_strike": "crit", "crit_strike": "crit", "critical": "crit",
+}
+
+
+def normalize_gem_stats(config):
+    """Validate the optional ``stat`` field on gem records at load time.
+
+    Returns the config unchanged in shape; a record whose ``stat`` is not a
+    canonical secondary stat (after aliasing) simply loses the field, so
+    unknown spellings degrade to the 'Other' column instead of a fifth
+    mystery column."""
+    gems = config.get("gems")
+    if not isinstance(gems, dict):
+        return config
+    for group in ("standard", "meta"):
+        for record in gems.get(group) or []:
+            if not isinstance(record, dict) or "stat" not in record:
+                continue
+            norm = str(record["stat"] or "").strip().lower().replace("-", "_").replace(" ", "_")
+            norm = GEM_STAT_ALIASES.get(norm, norm)
+            if norm in GEM_STATS:
+                record["stat"] = norm
+            else:
+                del record["stat"]
+    return config
+
+
 def load_config(config_path="config.json"):
     """Loads enchant and gem options from a JSON config file, mapping
     Midnight enchant-group keys to gear-slot keys at this single load edge
@@ -47,6 +79,7 @@ def load_config(config_path="config.json"):
             config = json.load(f)
         if isinstance(config.get("enchantments"), dict):
             config["enchantments"] = map_enchant_groups(config["enchantments"])
+        normalize_gem_stats(config)
         return config
     except Exception as e:
         print(f"Error loading config: {e}")

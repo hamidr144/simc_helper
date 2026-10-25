@@ -56,7 +56,7 @@ def test_tokens_css_has_no_duplicate_rule_blocks():
 
 
 def test_cache_bust_and_inline_style_removal():
-    assert "css/tokens.css?v=red3-4" in APP_HTML
-    assert "css/setup.css?v=red3-17" in APP_HTML
-    assert "css/run.css?v=red3-4" in APP_HTML
+    assert "css/tokens.css?v=red3-5" in APP_HTML
+    assert "css/setup.css?v=red3-18" in APP_HTML
+    assert "css/run.css?v=red3-5" in APP_HTML
     assert 'class="run-actions" style=' not in APP_HTML
