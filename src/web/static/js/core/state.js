@@ -27,6 +27,7 @@ export const state = {
   logRenderQueued: false,
   currentTaskId: '',
   selectedMetaGems: new Set(),
+  selectedAugurnium: new Set(),  // t_76a0ceb9: client-side only; payload.js is frozen
   gearTouchedByUser: new Map(),
 };
 
@@ -39,6 +40,7 @@ export function initializeSelections() {
   state.equippedEnchants = {};
   state.equippedGems = new Set();
   state.selectedMetaGems = new Set();
+  state.selectedAugurnium = new Set();
   state.gearUpgrades = {};
   state.voidforgedItems = {};
   state.extraSockets = {};

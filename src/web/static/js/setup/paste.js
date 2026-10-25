@@ -5,7 +5,7 @@ import { initializeSelections, state } from '../core/state.js';
 import { detectSeasonFromExport, loadUpgradeData, renderSeasonChip, upgradeData } from '../core/season.js';
 
 // t_26c5ddef: token must equal the app.html entry ?v= token or the browser loads a second pages/setup.js instance (pinned by tests/test_add_item_sorting.py)
-import { renderWorkflow } from '../pages/setup.js?v=red3-4';
+import { renderWorkflow } from '../pages/setup.js?v=red3-5';
 
 import { updateArmoryState } from './armory.js';
 
@@ -14,6 +14,7 @@ import { clearDraftKeys, persistDraft } from './draft.js';
 import { hydrateWowheadUpgrades } from './conflict.js';
 
 import { updateSummary } from './runbar.js';
+import { resetRunUI } from './run.js';
 import { apiFetch } from '../core/api.js';
 
 const addonInput = document.getElementById('addon-input');
@@ -48,7 +49,6 @@ function clearParseWarning() {
   if (panel) { panel.hidden = true; panel.textContent = ''; }
 }
 function collapsePastePanel() {
-  document.getElementById('paste-guide').hidden = true;
   addonInput.hidden = true;
   btnParseAddon.hidden = true;
   const armoryCard = document.getElementById('armory-import');
@@ -58,7 +58,6 @@ function collapsePastePanel() {
   if (counter) counter.textContent = 'Character ready below.';
 }
 function resetPastePanel() {
-  document.getElementById('paste-guide').hidden = false;
   addonInput.hidden = false;
   addonInput.value = '';
   addonInput.focus();
@@ -124,17 +123,21 @@ document.getElementById('btn-new-export').addEventListener('click', () => {
   // RED-3: the page chrome is static — a fresh export only clears the
   // rendered layers and re-opens the import band (draft keys are dropped:
   // "new export" means a different character or a deliberate restart, §10).
+  // t_76a0ceb9 directive 5: enhancement/log cards go back to hidden; the
+  // static enhancement shells stay (renderEnhancements clears bodies itself).
   state.parsedData = null;
   state.generatedInput = null;
   state.simulationDone = false;
   clearDraftKeys();
   document.getElementById('gear-grid').innerHTML = '';
   document.getElementById('qj').innerHTML = '';
-  document.getElementById('enhancement-options').innerHTML = '';
+  document.getElementById('gear-step').hidden = true;
+  document.getElementById('enh-card').hidden = true;
+  document.getElementById('log-card').hidden = true;
+  resetRunUI();
   document.getElementById('char-chip').hidden = true;
   const result = document.getElementById('run-result');
   if (result) { result.hidden = true; result.innerHTML = ''; }
-  document.getElementById('run-progress').hidden = true;
   document.getElementById('import-details').open = true;
   // t_16e4f177: no gear list anymore — restore the plain skip link.
   const skipLink = document.querySelector('.skip-link');

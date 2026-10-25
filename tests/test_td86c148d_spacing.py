@@ -44,7 +44,7 @@ def test_dead_details_panel_rules_removed():
 
 
 def test_setup_css_has_no_duplicate_rule_blocks():
-    for selector in (".enh-section{", ".headtools{", ".choice-chip{", ".slot-add-form{"):
+    for selector in (".enh-section{", ".choice-chip{", ".slot-add-form{"):
         assert SETUP_CSS.count(selector) == 1, selector
 
 
@@ -57,6 +57,6 @@ def test_tokens_css_has_no_duplicate_rule_blocks():
 
 def test_cache_bust_and_inline_style_removal():
     assert "css/tokens.css?v=red3-4" in APP_HTML
-    assert "css/setup.css?v=red3-16" in APP_HTML
-    assert "css/run.css?v=red3-3" in APP_HTML
+    assert "css/setup.css?v=red3-17" in APP_HTML
+    assert "css/run.css?v=red3-4" in APP_HTML
     assert 'class="run-actions" style=' not in APP_HTML

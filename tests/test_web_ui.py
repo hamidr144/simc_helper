@@ -111,7 +111,6 @@ def test_gear_selection_uses_midnight_track_rank_upgrades():
     assert "inferMidnightUpgrade" in js
     assert "itemLevelFromLabel" in js
     assert ".vrow" in css
-    assert ".eqc" in css
     assert ".item-level-input" not in css
 
 
@@ -132,10 +131,8 @@ def test_gear_selection_uses_compact_icon_tiles_instead_of_text_rows():
     assert "renameLinks: false" in html  # t_27ceb173 (B1): wh.js must not rename our gear links (UI-2)
     assert "createWowheadIconLink" in js
     assert "vrow" in js
-    assert "eqc" in js
     assert "item-icon-link" in js
     assert ".vrow" in css
-    assert ".eqc" in css
     assert ".item-icon-link" in css
     assert "auto-fill" not in css
     assert "sr-only" in css
@@ -596,7 +593,7 @@ def test_setup_boot_surfaces_saved_drafts_in_import_band():
     # every saved-draft character (newest first) with the re-load instruction.
     # Draft lifecycle itself stays unchanged.
     js = resp(read_js()).text
-    assert "load that character again (addon export or Armory) and your selections are restored" in js
+    assert "load the character to restore" in js
     assert "drafts-note" in js
     assert "pendingBoot.drafts" in js
     assert ".drafts-note" in read_css()
@@ -688,7 +685,7 @@ def test_enhancements_use_gear_buttons_preserve_equipped_baseline_and_filter_gre
     assert "createElement(\'button\')" in enhancements
     assert "aria-pressed" in enhancements
     assert "visibleEnchants(enchants)" in enhancements
-    assert "search.type = \'search\'" in enhancements
+    assert "document.getElementById('enh-search')" in enhancements  # t_76a0ceb9: search box is static markup in app.html
     assert "extraSockets" in enhancements
     node = shutil.which("node") or str(Path.home() / ".hermes/tools/node-26.7.0-darwin-arm64/bin/node")
     module = (Path(__file__).parent / "fixtures/enhancements.mjs").as_uri()
@@ -712,7 +709,7 @@ def test_wowhead_link_click_cannot_toggle_enhancement_selection():
     # The selection listener belongs only to the button; the anchor is appended
     # directly to the group afterward, so its click cannot bubble through it.
     assert "button.addEventListener('click', () => {" in enhancements
-    assert enhancements.count("group.appendChild(button);\n        appendWowheadLink(group,") == 3
+    assert enhancements.count("appendWowheadLink(group,") == 5
     assert "group.appendChild(wrapper.firstElementChild)" in enhancements
     assert 'class="enhancement-name-link wowhead-item-link"' in wowhead
     assert "button.innerHTML = createEnhancementWowheadLink" not in enhancements
@@ -888,23 +885,26 @@ def test_wowhead_tooltip_config_keeps_gear_icons():
     assert "iconizeLinks: true" not in html
 
 
-def test_enhancement_state_chips_on_slot_headers():
-    """TG2-A §3.4: step-2 slot headers echo step-3 enhancement state in
-    jump-and-open chips (design t_0fbfd0bd §3.1): chip class + label strings,
-    section-open target, and the step-3 hint."""
+def test_enhancement_trio_sections_open_by_default_with_count_labels():
+    """t_76a0ceb9 directives 10/11: the enhancements trio (Gems,
+    Enchantments, Augurnium) is three static open-by-default sections; the
+    summary label carries the selection count; search hides non-matching
+    chips/sections instead of the old open/close dance (supersedes the
+    RED-3 §6 search-open pins and the t_16e4f177 close-all ruling)."""
     js = resp(read_js()).text
+    html = client.get("/").text
     assert js, "app.js must be served"
 
-    # RED-3 (contract §6): per-slot enh-chips deleted; the enhancements
-    # <details> panel now owns enhancement state. Stable title stamps,
-    # checked-count summary labels, and search-driven open/close are pinned.
-    assert "section.dataset.enhTitle = title" in js
+    for group in ("Gems", "Enchantments", "Augurnium"):
+        assert f'data-enh-group="{group}" open' in html, f"{group} section must ship open"
+    assert "section.dataset.enhGroup" in js
     assert "'Flawless gems'" in js
-    assert "${checked} selected" in js
+    assert "${chips} selected" in js
     assert "'.choice-chip'" in js
-    assert "searchOpened.add(section)" in js
-    assert "section.open = true" in js
-    assert "section.open = false" in js
+    assert "chip.hidden = !hit" in js
+    assert "section.hidden = Boolean(needle)" in js
+    assert "searchOpened" not in js  # old open/close mechanism deleted
+    assert "if (augurnium.length)" in js  # Augurnium stays visible even when the config has no entries
 
 
 def test_css_comments_are_balanced():

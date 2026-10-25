@@ -341,4 +341,4 @@ def test_style_css_defines_preview_classes():
 def test_app_html_cache_busted():
     html = _static("app.html")
     assert "tokens.css?v=red3-4" in html  # MGE-2 split assets (t_94a15fe3)
-    assert "pages/setup.js?v=red3-4" in html  # current setup entry cache token
+    assert "pages/setup.js?v=red3-5" in html  # current setup entry cache token

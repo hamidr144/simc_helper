@@ -1,6 +1,6 @@
 // js/setup/gear.js — RED-3 slot-section renderer (design contract §3). The
-// mockup gear-run.html structure ported: equipped cards (.eqc, delta base),
-// always-visible candidate rows (.vrow native buttons, one click = add/remove
+// mockup gear-run.html structure ported: candidate rows (.vrow native buttons,
+// one click = add/remove; t_76a0ceb9: equipped gear rides the same rows),
 // on the frozen payload sets), per-section lock, scrollY-preserving render
 // (F-5). Surviving features keep their hosts: per-slot sort select and
 // Add-by-ID live in the header cluster (decision D-7), extra sockets moved to
@@ -62,7 +62,7 @@ export function renderGear() {
   const sections = SLOT_SECTIONS.filter(s => !s.hideWhen || !s.hideWhen());
   for (const key of Object.keys(bySlot)) {
     if (!sections.some(s => s.slot === key)) {
-      sections.push({ key, label: key.replace('_', ' '), slot: key, equipKeys: [key] });
+      sections.push({ key, label: key.replace('_', ' '), slot: key });
     }
   }
 
@@ -81,32 +81,18 @@ export function renderGear() {
     }));
     const equippedSet = new Set(equippedStrings);
 
-    const eqBlock = section.equipKeys.map((equipKey, index) => {
-      const item = (state.parsedData.equipped_gear || {})[equipKey];
-      if (!item) return '';
-      const label = state.parsedData.item_names[item] || item;
-      const params = parseItemParams(item);
-      const card = itemRow('eqc', {
-        id: params.id,
-        name: String(label).replace(/\s*\(\d+\)/, ''),
-        quality: resolveRowQuality(item),  // t_e906dc02: one resolver, never params alone (armory strings carry no quality=)
-        ilvl: Number(params.ilevel) || itemLevelFromLabel(label),
-        slotLabel: section.label,
-        slotTag: section.equipKeys.length > 1 ? `slot ${index + 1}` : '',
-        link: true,  // shortcut: no bonus ids here; bonus-aware eq icons need the W map, upgrade when it lands
-      });
-      return `<div class="eqrow"><div class="eqtag"><span class="tag eq">equipped${section.equipKeys.length > 1 ? ` · slot ${index + 1}` : ''}</span></div>${card}</div>`;
-    }).join('');
-
+    // t_76a0ceb9 directives 7/8: equipped items ride the SAME .vrow grid as
+    // every candidate (no oversized .eqc card, no size difference); the
+    // equipped base row carries the equipped tag and — because
+    // initializeSelections seeds selectedItems with the equipped set — shows
+    // in the selected state on first render. Everything else starts
+    // unselected. CRIT t_632eeef0 rank/VF rows stay for equipped items.
     const rows = items.flatMap(item => {
       const params = parseItemParams(item);
       const cleanName = String(state.parsedData.item_names[item] || `item ${params.id || ''}`)
         .replace(/\s*\(\d+\)/, '');
       const variants = ranksForItem(slot, item);
-      // CRIT t_632eeef0: real gear is equipped-only, and filtering equipped
-      // items out entirely made rank/VF rows unreachable. An equipped piece
-      // now renders its upgrade rows; the eqc card above stays its base row.
-      const visible = equippedSet.has(item) ? variants.filter(v => v.rank !== null) : variants;
+      const visible = variants;
       return visible.map(variant => {
         const level = variant.ilvl
           ?? (Number(params.ilevel) || itemLevelFromLabel(state.parsedData.item_names[item]) || null);
@@ -123,6 +109,7 @@ export function renderGear() {
           quality: variant.voidforged ? 'epic' : resolveRowQuality(item),
           ilvl: level,
           sel: variantMatches(slot, item, variant.rank, variant.voidforged),
+          eq: !variant.rank && !variant.voidforged && equippedSet.has(item),
           disabled: locked,
           deltaHtml: rowDelta(equipped, level),
           title,
@@ -157,11 +144,11 @@ export function renderGear() {
         </span></header>
       <div class="slot-add-form">
         <input type="text" class="slot-add-input" inputmode="numeric" autocomplete="off"
-          placeholder="Own it but not in the export? Add by Wowhead item id…"
+          placeholder="Wowhead item id"
           aria-label="Wowhead item id to add to ${esc(section.label)}">
         <button type="button" class="slot-add-button">Preview</button></div>
       <div class="slot-add-preview" hidden></div>
-      ${eqBlock}${addedBlock}
+      ${addedBlock}
       <div class="rows">${rows}</div></section>`;
   }).join('');
   if (window.scrollTo) window.scrollTo(0, y);

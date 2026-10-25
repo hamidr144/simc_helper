@@ -32,13 +32,10 @@ function iconHtml(d) {
   return `<span class="ic${cls}${size}" aria-hidden="true">${img}${esc(initials(d.name))}</span>`;
 }
 
-function modsHtml(ench, gem) {
-  const mods = (ench ? `<span class="mod ench" title="Enchant: ${esc(ench)}">⚡ ${esc(ench)}</span>` : '')
-    + (gem ? `<span class="mod gem" title="Gem: ${esc(gem)}">◆ ${esc(gem)}</span>` : '');
-  return mods ? `<span class="mods">${mods}</span>` : '';
-}
-
 function stateTag(d) {
+  // t_76a0ceb9 directive 7/8: equipped items are ordinary rows in the selected
+  // state, marked with the equipped tag; nothing renders bigger.
+  if (d.eq) return '<span class="tag eq">equipped</span> ';
   if (d.ex) return '<span class="tag ex">excluded</span> ';
   if (d.sel) return '<span class="tag sel">selected</span> ';
   return '';
@@ -51,23 +48,15 @@ export function ilvlDeltaHtml(delta) {
   return `<span class="d il-d ${delta > 0 ? 'up' : 'dn'} num">${delta > 0 ? '+' : '−'}${Math.abs(delta)} ilvl</span>`;
 }
 
-/* ONE component, four grid variants (contract §9.3): the same six cells in
-   different skins — page CSS only re-skins (setup.css .eqc/.vrow, results.css
-   .candup/.setcard). d = {id,name,quality,ilvl,ench,gem,sel,ex,deltaHtml,
-   slotLabel,slotTag,aria,size} */
+/* ONE component, three grid variants (contract §9.3): the same six cells in
+   different skins — page CSS only re-skins (setup.css .vrow, results.css
+   .candup/.setcard). The eqc equipped-card variant is deleted (t_76a0ceb9
+   directive 8): equipped gear rides plain .vrow rows, selected by default.
+   d = {id,name,quality,ilvl,ench,gem,sel,ex,eq,deltaHtml,slotLabel,slotTag,aria,size} */
 export function itemRow(variant, d) {
   const q = qualityOf(d.quality);
   const icon = iconHtml(d);
   const delta = d.deltaHtml ?? '<span class="d eq">base</span>';
-  if (variant === 'eqc') {
-    const aria = d.aria ?? `Equipped ${d.slotLabel || ''}${d.slotTag ? ' ' + d.slotTag : ''}: ${d.name}, item level ${d.ilvl ?? '?'}, ${q.word}${d.ench ? ', enchanted ' + d.ench : ''}${d.gem ? ', socketed ' + d.gem : ''}. Click a candidate below to swap.`;
-    return `<div class="st eqc" role="img" aria-label="${esc(aria)}">
-      ${iconHtml({ ...d, size: 'big' })}
-      <span class="eqx"><span class="nm q-${q.cls}" title="${esc(d.name)}">${esc(d.name)}</span>
-        ${modsHtml(d.ench, d.gem)}</span>
-      <span class="il num">${d.ilvl ?? '—'}</span><span class="grd ${q.cls}">${q.word}</span>
-      <span class="d eq">base</span></div>`;
-  }
   if (variant === 'vrow') {
     return `<button type="button" class="cand vrow${d.sel ? ' sel' : ''}${d.ex ? ' ex' : ''}"
       ${d.ex || d.disabled ? 'disabled' : ''} aria-pressed="${Boolean(d.sel)}"

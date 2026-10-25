@@ -31,7 +31,7 @@ import { persistDraft } from '../setup/draft.js';
 
 import { generateInput } from '../setup/payload.js';
 
-import { downloadLog, runSimulation, stopSimulation } from '../setup/run.js';
+import { downloadLog, runSimulation, stopSimulation, openRunView, closeRunView } from '../setup/run.js';
 
 import { renderReviewPopover, selectionChanged, setWorkflowStatus, updateSummary } from '../setup/runbar.js';
 import { fetchVersion } from '../core/version.js';
@@ -66,6 +66,11 @@ export function renderWorkflow() {
   renderGear();
   renderEnhancements();
   renderCharChip();
+  // t_76a0ceb9 directive 5: enhancements and the log area appear only once a
+  // gear import is present (renderWorkflow runs only after a successful one).
+  document.getElementById('gear-step').hidden = false;
+  document.getElementById('enh-card').hidden = false;
+  document.getElementById('log-card').hidden = false;
   // R7 (ruling D-4): the import band collapses once a character has loaded;
   // btn-new-export re-opens it (paste.js).
   const importBand = document.getElementById('import-details');
@@ -99,6 +104,9 @@ export function wire() {
   document.getElementById('compare-mode').addEventListener('change', selectionChanged);
   document.getElementById('btn-stop').addEventListener('click', stopSimulation);
   document.getElementById('btn-log-download').addEventListener('click', downloadLog);
+  // t_76a0ceb9 directive 6: the run view's enter/exit wires.
+  document.getElementById('btn-close-runview').addEventListener('click', closeRunView);
+  document.getElementById('btn-open-run').addEventListener('click', openRunView);
   wirePopover(document.getElementById('btn-review'),
     document.getElementById('review-popover'), renderReviewPopover);
   // §10: fresh draft hint before any import (offer rehydration path).
@@ -118,13 +126,12 @@ export function wire() {
       note.className = 'drafts-note';
       note.setAttribute('role', 'status');
       note.textContent =
-        `Draft${pendingBoot.drafts.length > 1 ? 's' : ''} saved for ${list} — load that character again (addon export or Armory) and your selections are restored.`;
+        `Draft${pendingBoot.drafts.length > 1 ? 's' : ''} saved for ${list} — load the character to restore.`;
       band.querySelector('.cardbody').append(note);
       // btn-new-export clears all drafts (paste.js) — do not leave the note claiming them.
       document.getElementById('btn-new-export')?.addEventListener('click', () => note.remove());
     }
-    setWorkflowStatus(`You have saved draft${pendingBoot.drafts.length > 1 ? 's' : ''} (${pendingBoot.drafts.map(d => d.parsedData.char_name).join(', ')}). ` +
-      'Loading that character restores your selection automatically.');
+    setWorkflowStatus(`Saved draft${pendingBoot.drafts.length > 1 ? 's' : ''} for ${pendingBoot.drafts.map(d => d.parsedData.char_name).join(', ')} — loading the character restores the selection.`);
   }
 }
 
