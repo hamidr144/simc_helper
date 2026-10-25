@@ -234,7 +234,9 @@ export function renderResults(results, mode, els) {
   const bySlot = new Map();
   for (const [index, result] of ranked.entries()) {
     for (const change of changesFromBaseline(result, baseline)) {
-      if (!bySlot.has(change.slot)) bySlot.set(change.slot, { result, change, index });
+      const candidates = bySlot.get(change.slot) || [];
+      candidates.push({ result, change, index });
+      bySlot.set(change.slot, candidates);
     }
   }
   const recButtons = [];
@@ -242,8 +244,9 @@ export function renderResults(results, mode, els) {
     slots.recos.hidden = false;
     slots.recos.querySelector('.panelh .sub').textContent =
       'best ranked candidate per slot · deltas vs your baseline';
-    const total = bySlot.size;
-    slots.recos.querySelector('.upgrid').innerHTML = [...bySlot.entries()].map(([slot, { result, change, index }]) => {
+    slots.recos.querySelector('.upgrid').innerHTML = [...bySlot.entries()].map(([slot, candidates]) => {
+      const { result, change, index } = candidates[0];
+      const total = candidates.length;
       const info = infoFor(change.id);
       const baseInfo = change.before ? infoFor(change.before) : null;
       const delta = result.dps - baseline.dps;
