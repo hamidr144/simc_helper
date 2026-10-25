@@ -130,10 +130,6 @@ function gearStringFor(row, change) {
   return row.gear?.[rawSlot(change.slot)] || `id=${change.id}`;
 }
 
-export function slotRankLabel(candidates) {
-  return `rank 1 of ${candidates.length}`;
-}
-
 function selectedItemMap(row, baseline) {
   const map = {};
   for (const change of changesFromBaseline(row, baseline)) {
@@ -258,7 +254,7 @@ export function renderResults(results, mode, els) {
       const raw = rawSlot(change.slot);
       const gearString = gearStringFor(result, change);
       const replaces = baseInfo ? `replaces ${baseInfo.name}${typeof info?.ilvl === 'number' && typeof baseInfo.ilvl === 'number' ? ` · ilvl ${baseInfo.ilvl}` : ''}` : '';
-      return `<section class="slotsec" aria-label="${escapeHtml(`${slot} recommended upgrade`)}"><div class="sechead"><h2>${escapeHtml(slot)}</h2><span class="cnt num">${slotRankLabel(candidates)}</span></div>
+      return `<section class="slotsec" aria-label="${escapeHtml(`${slot} recommended upgrade`)}"><div class="sechead"><h2>${escapeHtml(slot)}</h2><span class="cnt num">rank 1 of ${candidates.length}</span></div>
         <div class="cand candup"${ariaRecLabel(slot, info, change, pct, baseLabel, baseInfo)}>
           ${iconSpan(change.id, info?.name || slot)}
           <a class="name" href="https://www.wowhead.com/item=${encodeURIComponent(change.id)}" target="_blank" rel="noopener" title="${escapeHtml(titleFor(change))}">${escapeHtml(info?.name || `#${change.id}`)}</a>
