@@ -10,8 +10,10 @@ import pathlib
 from static_assets import read_js
 
 JS = read_js()
-RESULTS_HTML = (pathlib.Path(__file__).resolve().parents[1] / "src" / "web" / "static" / "results.html").read_text()
-SETUP_JS = (pathlib.Path(__file__).resolve().parents[1] / "src" / "web" / "static" / "js" / "pages" / "setup.js").read_text()
+STATIC = pathlib.Path(__file__).resolve().parents[1] / "src" / "web" / "static"
+RESULTS_HTML = (STATIC / "results.html").read_text()
+RESULTS_CSS = (STATIC / "css" / "results.css").read_text()
+SETUP_JS = (STATIC / "js" / "pages" / "setup.js").read_text()
 
 REC_SRC = "enhancement recommendations (app config), not per-combo output"
 
@@ -39,6 +41,10 @@ def test_r2_rec_chips_and_source_label():
 
 
 def test_r3_runbar_and_batched_apply_queue():
+    # The fixed action bar must have normal-suite CSS clearance; this is a
+    # source contract, not a live viewport geometry check.
+    assert "main{padding-bottom:120px}" in RESULTS_CSS
+    assert "results.css?v=red3-6" in RESULTS_HTML
     # §4 run bar hosts; per-row buttons toggle aria-pressed; ONE writeApply
     # rides the Review-on-Gear navigation (queue), not per-row navigation.
     for host in ("results-runbar", "btn-review-gear", "btn-apply-all-bar",
