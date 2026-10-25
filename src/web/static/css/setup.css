@@ -60,6 +60,7 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
   .runbar .est{grid-column:2 / -1;min-width:0}
   .runbar .bud{margin:0;text-align:left;width:auto;order:initial}
   .runbar .fight-style-select{grid-column:1 / -1;min-width:0;max-width:100%;width:100%;padding:4px;font-size:11px}
+  .runbar #compare-mode{margin-block-start:var(--gap-xs)}
   .runbar .popover-host{min-width:0}
   .runbar > :is(.in) > :is(.workflow-status){grid-column:1 / -1}
   .runbtn{margin:0;padding:6px 10px;font-size:13px}
