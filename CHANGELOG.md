@@ -10,6 +10,35 @@ new version is prepared and reviewer-approved as a mandatory step (see WORKFLOW.
 "Milestone: dev → prod"); the `CHANGELOG.md` update ships in the same merge commit
 that bumps the version and tag.
 
+## [1.4.1] — 2026-10-25
+
+PATCH release from the Gear-page rework merged to dev (source `5c3659a9`).
+
+### Features
+
+- Simulation runs now open in their own full-screen view with the live log,
+  combo count, elapsed timer and progress, and jump straight to Results when
+  the run finishes (t_76a0ceb9).
+- Enhancements move into a single searchable card grouping Gems,
+  Enchantments and Augurnium together (t_76a0ceb9).
+
+### Improvements
+
+- The Gear page is a guided step flow: gear, enhancements and the log appear
+  as you progress, instead of all at once (t_76a0ceb9).
+- Ring and Trinket each become one merged section that correctly maps both
+  equipped items, replacing the duplicated Ring 1/Ring 2 and Trinket lists
+  (t_76a0ceb9).
+- Gear rows are uniform and compact, with consistent card spacing and
+  button sizes across the page; equipped items ride as ordinary rows tagged
+  "equipped" and are pre-selected on import (t_76a0ceb9).
+- Item tooltips from Wowhead appear on hover over gear names (t_76a0ceb9).
+
+### Bug fixes
+
+- Imported characters no longer auto-select unequipped candidate items; the
+  initial selection is the equipped set only (t_76a0ceb9).
+
 ## [1.4.0] — 2026-10-25
 
 MINOR milestone from the `1.1.1-dev.N` line, prepared from the pinned
