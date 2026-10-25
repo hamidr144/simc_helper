@@ -16,7 +16,9 @@ export function createEnhancementWowheadLink(enhancement, name) {
   const itemMatch = String(configuredUrl || '').match(/^https:\/\/(?:www\.)?wowhead\.com\/item=(\d+)/);
   const itemId = itemMatch?.[1];
   if (!itemId) return `<span>${escapeHtml(name)}</span>`;
-  return `<a href="https://www.wowhead.com/item=${itemId}" class="enhancement-name-link wowhead-item-link" data-wowhead="" target="_blank">${escapeHtml(name)}</a>`;
+  // t_76a0ceb9 directive 11: same tooltip pattern as the gear item icons
+  // (createWowheadIconLink): icon anchor, data-wowhead, rich Wowhead tooltip.
+  return `<a href="https://www.wowhead.com/item=${itemId}" class="enhancement-name-link wowhead-item-link" data-wowhead="iconsize=large" target="_blank" rel="noopener" aria-label="${escapeHtml(name)} on Wowhead"><img src="api/item-icon/${itemId}" alt="" loading="lazy" onerror="this.remove()"></a>`;
 }
 export function refreshWowheadLinks() {
   if (window.WH?.Tooltips?.refreshLinks) window.WH.Tooltips.refreshLinks();

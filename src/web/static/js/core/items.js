@@ -199,26 +199,24 @@ export const PAPER_DOLL_SLOTS = ['head', 'neck', 'shoulder', 'back', 'chest', 'w
   'hands', 'waist', 'legs', 'feet', 'finger', 'trinket', 'main_hand', 'off_hand'];
 
 /* ---- RED-3 design model (contract §9.2): the ONE slot list. Order, labels,
-   ring×2/trinket×2 expansion and the 2H off-hand hide live only here; render
-   loops iterate SLOT_SECTIONS. `slot` = the payload-side key (payload.js
-   frozen: finger/trinket pools and selectedItems keys unchanged); `equipKeys`
-   = equipped_gear keys whose items render as equipped cards in the section. */
+   ring×2/trinket×2 share visible sections; the 2H off-hand hide remains here.
+   `slot` stays the payload-side key (payload.js frozen: finger/trinket pools
+   and selectedItems keys unchanged). */
 export const SLOT_SECTIONS = [
-  { key: 'head', label: 'Head', slot: 'head', equipKeys: ['head'] },
-  { key: 'neck', label: 'Neck', slot: 'neck', equipKeys: ['neck'] },
-  { key: 'shoulder', label: 'Shoulders', slot: 'shoulder', equipKeys: ['shoulder'] },
-  { key: 'back', label: 'Back', slot: 'back', equipKeys: ['back'] },
-  { key: 'chest', label: 'Chest', slot: 'chest', equipKeys: ['chest'] },
-  { key: 'wrist', label: 'Wrist', slot: 'wrist', equipKeys: ['wrist'] },
-  { key: 'hands', label: 'Hands', slot: 'hands', equipKeys: ['hands'] },
-  { key: 'waist', label: 'Waist', slot: 'waist', equipKeys: ['waist'] },
-  { key: 'legs', label: 'Legs', slot: 'legs', equipKeys: ['legs'] },
-  { key: 'feet', label: 'Feet', slot: 'feet', equipKeys: ['feet'] },
-  { key: 'finger1', label: 'Ring 1', slot: 'finger', equipKeys: ['finger1'] },
-  { key: 'finger2', label: 'Ring 2', slot: 'finger', equipKeys: ['finger2'] },
-  { key: 'trinket', label: 'Trinkets', slot: 'trinket', equipKeys: ['trinket1', 'trinket2'] },
-  { key: 'main_hand', label: 'Main Hand', slot: 'main_hand', equipKeys: ['main_hand'] },
-  { key: 'off_hand', label: 'Off Hand', slot: 'off_hand', equipKeys: ['off_hand'],
+  { key: 'head', label: 'Head', slot: 'head' },
+  { key: 'neck', label: 'Neck', slot: 'neck' },
+  { key: 'shoulder', label: 'Shoulders', slot: 'shoulder' },
+  { key: 'back', label: 'Back', slot: 'back' },
+  { key: 'chest', label: 'Chest', slot: 'chest' },
+  { key: 'wrist', label: 'Wrist', slot: 'wrist' },
+  { key: 'hands', label: 'Hands', slot: 'hands' },
+  { key: 'waist', label: 'Waist', slot: 'waist' },
+  { key: 'legs', label: 'Legs', slot: 'legs' },
+  { key: 'feet', label: 'Feet', slot: 'feet' },
+  { key: 'finger', label: 'Ring', slot: 'finger' },
+  { key: 'trinket', label: 'Trinket', slot: 'trinket' },
+  { key: 'main_hand', label: 'Main Hand', slot: 'main_hand' },
+  { key: 'off_hand', label: 'Off Hand', slot: 'off_hand',
     // data-driven §7: a two-handed main hand occupies both weapon slots.
     hideWhen: () => equippedTwoHanded() },
 ];
