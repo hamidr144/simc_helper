@@ -234,7 +234,9 @@ export function renderResults(results, mode, els) {
   const bySlot = new Map();
   for (const [index, result] of ranked.entries()) {
     for (const change of changesFromBaseline(result, baseline)) {
-      if (!bySlot.has(change.slot)) bySlot.set(change.slot, { result, change, index });
+      const candidates = bySlot.get(change.slot) || [];
+      candidates.push({ result, change, index });
+      bySlot.set(change.slot, candidates);
     }
   }
   const recButtons = [];
@@ -242,8 +244,8 @@ export function renderResults(results, mode, els) {
     slots.recos.hidden = false;
     slots.recos.querySelector('.panelh .sub').textContent =
       'best ranked candidate per slot · deltas vs your baseline';
-    const total = bySlot.size;
-    slots.recos.querySelector('.upgrid').innerHTML = [...bySlot.entries()].map(([slot, { result, change, index }]) => {
+    slots.recos.querySelector('.upgrid').innerHTML = [...bySlot.entries()].map(([slot, candidates]) => {
+      const { result, change } = candidates[0];
       const info = infoFor(change.id);
       const baseInfo = change.before ? infoFor(change.before) : null;
       const delta = result.dps - baseline.dps;
@@ -252,7 +254,7 @@ export function renderResults(results, mode, els) {
       const raw = rawSlot(change.slot);
       const gearString = gearStringFor(result, change);
       const replaces = baseInfo ? `replaces ${baseInfo.name}${typeof info?.ilvl === 'number' && typeof baseInfo.ilvl === 'number' ? ` · ilvl ${baseInfo.ilvl}` : ''}` : '';
-      return `<section class="slotsec" aria-label="${escapeHtml(`${slot} recommended upgrade`)}"><div class="sechead"><h2>${escapeHtml(slot)}</h2><span class="cnt num">rank ${index + 1} of ${total}</span></div>
+      return `<section class="slotsec" aria-label="${escapeHtml(`${slot} recommended upgrade`)}"><div class="sechead"><h2>${escapeHtml(slot)}</h2><span class="cnt num">rank 1 of ${candidates.length}</span></div>
         <div class="cand candup"${ariaRecLabel(slot, info, change, pct, baseLabel, baseInfo)}>
           ${iconSpan(change.id, info?.name || slot)}
           <a class="name" href="https://www.wowhead.com/item=${encodeURIComponent(change.id)}" target="_blank" rel="noopener" title="${escapeHtml(titleFor(change))}">${escapeHtml(info?.name || `#${change.id}`)}</a>
