@@ -50,10 +50,10 @@ def test_nb3_btn_danger_uses_danger_token():
 
 
 def test_nb4_search_recloses_only_sections_it_opened():
-    assert "if (!section.open) searchOpened.add(section);" in APP_JS
-    assert "} else if (!needle && searchOpened.has(section)) {" in APP_JS
-    assert "searchOpened.delete(section)" in APP_JS
-    assert "section.open = false" in APP_JS
+    # SUPERSEDED by t_76a0ceb9 directive 10: enhancement sections are
+    # open-by-default and search filters chips (no open/close bookkeeping).
+    assert "searchOpened" not in APP_JS
+    assert "chip.hidden = !hit" in APP_JS
 
 
 def test_nb5_worker_chip_empty_state_wording():

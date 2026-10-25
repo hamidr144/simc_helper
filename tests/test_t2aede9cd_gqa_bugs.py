@@ -42,21 +42,17 @@ def test_bug_t2aede9cd_1_slot_group_header_wraps_at_narrow_width():
     )
 
 
-def test_bug_t2aede9cd_2a_enhancement_groups_closed_by_default():
-    """BUG t_16e4f177 (TC-A11Y-TABSTOPS, leader ruling): the design doc's
-    open-if-checked clause (section.open = Boolean(group.querySelector
-    ('input:checked'))) forced every enhancement group that held an
-    equipped/checked candidate open on a real export, keeping 136 chip +
-    wowhead-link stops permanently in the tab order (137 of 281 visible
-    stops). Groups must start closed and show selection state in the
-    summary label instead."""
+def test_bug_t2aede9cd_2a_enhancement_groups_open_by_default():
+    """t_76a0ceb9 overrides the old close-all ruling: enhancement sections
+    start open per the explicit user request, and selection counts remain in
+    the summary. """
     assert "section.open = Boolean" not in APP_JS, (
         "enhancement <details> groups must not auto-open on checked content"
     )
-    assert "${checked} selected" in ENHANCEMENTS_JS, (
+    assert "${chips} selected" in ENHANCEMENTS_JS, (
         "summary label must show the checked count (e.g. 'Gems · 2 selected')"
     )
-    assert "group.addEventListener('click', renderLabel)" in ENHANCEMENTS_JS, (
+    assert "section.addEventListener('click', renderLabel)" in ENHANCEMENTS_JS, (
         "summary label must update when a selection changes"
     )
     # Chrome >=131 hides closed <details> via paint containment on

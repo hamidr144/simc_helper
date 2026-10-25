@@ -73,6 +73,9 @@ def test_populated_mobile_setup_geometry_and_safe_area(app_url, width):
         viewport_height = 700 if width == 320 else 844
         page = browser.new_page(viewport={"width": width, "height": viewport_height}, device_scale_factor=1)
         page.goto(app_url, wait_until="networkidle")
+        assert page.locator("#gear-step").is_hidden()
+        assert page.locator("#enh-card").is_hidden()
+        assert page.locator("#log-card").is_hidden()
         page.locator("#addon-input").evaluate(
             "(el, value) => { el.value = value; "
             "el.dispatchEvent(new Event('input', {bubbles:true})); }",
@@ -99,8 +102,16 @@ def test_populated_mobile_setup_geometry_and_safe_area(app_url, width):
                 [selector, ".runbar"],
             )
             assert not overlap, f"{selector}'s painted region intersects the runbar at initial scroll position: {bounds}"
-        assert neck.locator(".lock").is_visible()
-        assert neck.locator(".eqc, .vrow").count() > 0
+        assert neck.locator(".vrow").count() > 0
+        assert page.locator("#enh-card").is_visible()
+        assert page.locator("#log-card").is_visible()
+        pressed = page.locator(".vrow[aria-pressed=true]")
+        assert pressed.count() > 0
+        assert pressed.count() == page.locator(".vrow .tag.eq").count()
+        button_heights = page.locator("main button:not(.cand):not(.row-x), .runbar button:not(.cand)").evaluate_all(
+            "els => els.filter(el => !el.hidden && el.getBoundingClientRect().height > 0).map(el => [el.id, el.className, el.getBoundingClientRect().height])"
+        )
+        assert button_heights and max(row[2] for row in button_heights) - min(row[2] for row in button_heights) <= 1, button_heights
 
         session = page.context.new_cdp_session(page)
         session.send(
@@ -168,6 +179,9 @@ def test_mobile_slot_navigation_and_runbar_clearance(app_url, width, height):
         browser = playwright.chromium.launch()
         page = browser.new_page(viewport={"width": width, "height": height}, device_scale_factor=1)
         page.goto(app_url, wait_until="networkidle")
+        assert page.locator("#gear-step").is_hidden()
+        assert page.locator("#enh-card").is_hidden()
+        assert page.locator("#log-card").is_hidden()
         page.locator("#addon-input").evaluate(
             "(el, value) => { el.value = value; "
             "el.dispatchEvent(new Event('input', {bubbles:true})); }",
@@ -195,6 +209,9 @@ def test_populated_desktop_setup_rows_clear_runbar_initial_and_running(app_url):
         browser = playwright.chromium.launch()
         page = browser.new_page(viewport={"width": 1440, "height": 1000}, device_scale_factor=1)
         page.goto(app_url, wait_until="networkidle")
+        assert page.locator("#gear-step").is_hidden()
+        assert page.locator("#enh-card").is_hidden()
+        assert page.locator("#log-card").is_hidden()
         page.locator("#addon-input").evaluate(
             "(el, value) => { el.value = value; "
             "el.dispatchEvent(new Event('input', {bubbles:true})); }",

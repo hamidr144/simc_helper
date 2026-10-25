@@ -4,17 +4,21 @@
    (.progress-*, .log-*, .simulation-log, .run-actions, .slot-add-preview)
    so run.js hosts move without renaming; tokenized throughout. */
 
-/* expanding progress panel, docked inside the fixed run bar */
-.runbar .progwrap{border-top:1px dashed var(--line);padding:var(--gap-sm) 20px var(--gap-md);
-  max-height:min(45vh,340px);overflow:auto}
-.runbar .progwrap[hidden]{display:none}
-@media (max-width:430px){.runbar .progwrap{padding:var(--gap-sm) 12px var(--gap-md)}}
+/* t_76a0ceb9 directive 6: a run opens as its own full-screen view (run-view
+   overlay); the progress panel and the log hosts ride inside it. */
+.runview{position:fixed;inset:0;z-index:80;background:var(--bg);overflow:auto}
+.runview-in{max-width:1240px;margin:0 auto;padding:var(--gap-md) 20px 40px}
+.runview-title{font-size:15px}
+.runview-log{margin-top:var(--gap-md)}
+.runview .simulation-log{max-height:none;min-height:40vh}
+@media (max-width:430px){.runview-in{padding:var(--gap-sm) 12px 24px}}
+.progwrap{border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--surface);
+  padding:var(--gap-md) 18px;display:flex;flex-direction:column;gap:10px}
+.progwrap[hidden]{display:none}
 
 .run-actions{display:flex;gap:var(--gap-sm);flex-wrap:wrap;align-items:center;margin-top:var(--gap-sm)}
 .run-actions .runbtn{min-height:44px}
 
-.progress-card{display:flex;flex-direction:column;gap:10px;
-  border:1px solid var(--line);background:var(--surface);border-radius:var(--r-ctl);padding:14px 16px}
 .progress-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .progress-track{height:8px;border-radius:4px;background:var(--sunk);border:1px solid var(--line2);overflow:hidden}
 .progress-fill{height:100%;width:0%;border-radius:3px;background:var(--acc);

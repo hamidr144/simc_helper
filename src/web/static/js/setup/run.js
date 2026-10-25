@@ -23,13 +23,42 @@ function startRunProgress() {
   lastMetaAt = 0;
   const resultSlot = document.getElementById('run-result');
   if (resultSlot) { resultSlot.hidden = true; resultSlot.innerHTML = ''; }
+  const combos = document.getElementById('runview-combos');
+  if (combos) combos.textContent =
+    `${document.getElementById('combo-count').textContent} ${document.getElementById('combo-word').textContent}`;
   document.getElementById('run-progress').hidden = false;
+  document.getElementById('btn-open-run').hidden = false;  // back affordance after "back"
   setRunProgress(0, 'Starting…');
   setRunStage('');
   document.getElementById('run-elapsed').textContent = '00:00';
   state.runTimer = setInterval(() => {
     document.getElementById('run-elapsed').textContent = formatElapsed(Date.now() - state.runStartedAt);
   }, 1000);
+}
+/* t_76a0ceb9 directive 6: the run lives in its own full-screen view; the log
+   hosts (#run-result, #log-toolbar, #simulation-log) are moved into it while
+   a run is active, and back to the page's log card when the run is over. */
+export function openRunView() {
+  document.getElementById('runview-log')
+    .append(document.getElementById('run-result'),
+      document.getElementById('log-toolbar'),
+      document.getElementById('simulation-log'));
+  const view = document.getElementById('run-view');
+  view.hidden = false;
+  view.scrollTop = 0;
+}
+export function closeRunView() {
+  document.getElementById('run-view').hidden = true;
+}
+export function resetRunUI() {
+  closeRunView();
+  document.getElementById('run-progress').hidden = true;
+  document.getElementById('btn-open-run').hidden = true;
+  document.getElementById('log-card').append(
+    document.getElementById('run-result'),
+    document.getElementById('log-toolbar'),
+    document.getElementById('simulation-log'));
+  document.getElementById('simulation-log').textContent = '';
 }
 function stopRunProgress() {
   if (state.runTimer) { clearInterval(state.runTimer); state.runTimer = null; }
@@ -154,6 +183,7 @@ export async function runSimulation() {
     log.hidden = false;
     log.textContent = '';
     document.getElementById('log-toolbar').hidden = false;
+    openRunView();
     startRunProgress();
     const events = new EventSource(`api/simulation/stream/${data.task_id}?worker_id=${encodeURIComponent(data.worker_id)}`);
     events.onmessage = async event => {
@@ -202,5 +232,6 @@ function showRunFailureCard(message) {
   slot.querySelector('[data-back-gear]').addEventListener('click', backToGear);
 }
 function backToGear() {
+  closeRunView();
   document.getElementById('gear-grid')?.scrollIntoView({ block: 'start' });
 }

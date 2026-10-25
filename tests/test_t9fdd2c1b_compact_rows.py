@@ -19,7 +19,7 @@ def test_setup_mobile_runbar_and_content_share_non_overlapping_viewport():
     setup_css = (STATIC / "css" / "setup.css").read_text()
     assert "@media (max-width:850px){" in setup_css
     assert "body{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}" in setup_css
-    assert "main{flex:1 1 auto;min-height:0;overflow-y:auto" in setup_css
+    assert "main{flex:1 1 auto;min-height:0;min-width:0;width:100%;box-sizing:border-box;overflow-y:auto" in setup_css
     assert ".runbar{position:static" in setup_css
     assert "--setup-runbar-height" not in setup_css
 
@@ -40,12 +40,14 @@ def test_mobile_runbar_selects_get_full_width_without_changing_desktop():
 
 
 def test_gear_card_is_a_dense_grid_row():
-    # RED-3 (v11 §M10): equipped card and candidate row are ONE shared grid —
-    # icon | name(minmax 0) | ilvl | grade | delta; selection is conveyed by
-    # the button's pressed state, not a decorative square.
-    block = CSS.split(".eqc,.vrow{display:grid", 1)[1].split("}", 1)[0]
+    # t_76a0ceb9: equipped rows and candidate rows share exactly one .vrow
+    # grid; equipped status is a tag/state, never a larger .eqc component.
+    block = CSS.split(".vrow{display:grid", 1)[1].split("}", 1)[0]
     assert "grid-template-columns:var(--col-ic) minmax(0,1fr) var(--col-il) var(--col-grd) var(--col-d)" in block
     assert "overflow: hidden" not in block and "overflow:hidden" not in block
+    setup_css = (STATIC / "css" / "setup.css").read_text()
+    assert ".eqc{min-height" not in setup_css
+    assert ".vrow{display:grid" in setup_css
     assert ".gear-card" not in CSS  # v11 retired the tile component
 
 
