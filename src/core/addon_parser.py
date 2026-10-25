@@ -249,6 +249,8 @@ def parse_addon_lines(lines: List[str]) -> Tuple[str, Dict[str, str], Dict[str, 
     char_name = "Unknown"
     char_class = "Unknown"
     current_name_comment = ""
+    # t_5fe563ac: previous line was itself a "# Name (ilvl)" comment.
+    prev_line_name_comment = False
     current_upgrade: Optional[Dict[str, Any]] = None
     in_bags = False
     in_copy = False
@@ -276,9 +278,19 @@ def parse_addon_lines(lines: List[str]) -> Tuple[str, Dict[str, str], Dict[str, 
             # never part of the base profile.
             current_upgrade = parse_upgrade_levels(upgrade_match.group(1))
             continue
+        line_is_name_comment = False
         if line_strip.startswith("# ") and not re.match(r"^#\s+\w+=", line_strip):
             if _ITEM_NAME_PAREN_RE.search(line_strip):
-                current_name_comment = line_strip[2:]
+                # t_5fe563ac: two directly consecutive "# Name (ilvl)" comments
+                # are the exporter profile-block shape (all names grouped ahead
+                # of the gear lines). A block cannot say which line a name
+                # belongs to, so drop the pending hint instead of stamping the
+                # block's last name on the first following gear line (that is
+                # how head 271465 rendered as "Maze-roa, Warlord's Fury").
+                # Adjacent comments stay a hint; /api/parse-addon hydrates the
+                # missing names from Wowhead XML.
+                current_name_comment = "" if prev_line_name_comment else line_strip[2:]
+                line_is_name_comment = True
             current_upgrade = None
 
         name_match = re.match(r"^(\w+)=[\"']?([^\"'\s,]+)[\"']?$", line_strip)
@@ -306,7 +318,10 @@ def parse_addon_lines(lines: List[str]) -> Tuple[str, Dict[str, str], Dict[str, 
                     items_by_slot.setdefault(norm_slot, [])
                     if details not in items_by_slot[norm_slot]:
                         items_by_slot[norm_slot].append(details)
-                        item_names[details] = current_name_comment
+                        # t_5fe563ac: never store empty names — missing keys
+                        # are hydrated server-side from Wowhead XML.
+                        if current_name_comment:
+                            item_names[details] = current_name_comment
                         current_name_comment = ""
                     if current_upgrade:
                         item_upgrades.setdefault(details, current_upgrade)
@@ -322,11 +337,20 @@ def parse_addon_lines(lines: List[str]) -> Tuple[str, Dict[str, str], Dict[str, 
                     items_by_slot.setdefault(norm_slot, [])
                     if details not in items_by_slot[norm_slot]:
                         items_by_slot[norm_slot].append(details)
-                        item_names[details] = current_name_comment
+                        # t_5fe563ac: never store empty names — missing keys
+                        # are hydrated server-side from Wowhead XML.
+                        if current_name_comment:
+                            item_names[details] = current_name_comment
                         current_name_comment = ""
                     if current_upgrade:
                         item_upgrades.setdefault(details, current_upgrade)
                 current_upgrade = None
+
+        # t_5fe563ac: consecutive-name-comment detection spans line breaks.
+        # The copy=/blank/upgrade/header continue branches leave a stale True
+        # behind, which only ever drops a name hint (safe direction — the name
+        # is hydrated from Wowhead XML instead of possibly misattributed).
+        prev_line_name_comment = line_is_name_comment
 
     return "".join(base_profile), equipped_gear, items_by_slot, item_names, char_name, char_class, item_upgrades
 

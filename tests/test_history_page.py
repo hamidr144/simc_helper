@@ -72,10 +72,41 @@ def history_user():
 # Page route
 # ---------------------------------------------------------------------------
 
+def test_history_links_to_in_app_results_by_task_id():
+    history_js = os.path.join(os.path.dirname(__file__), "../src/web/static/js/pages/history.js")
+    source = open(history_js, encoding="utf-8").read()
+    assert "results?task_id=${encodeURIComponent(taskId)}" in source
+    assert "String(run.report_url).split('/').slice(-2, -1)[0]" in source
+    assert 'href="${escapeHtml(run.report_url)}"' not in source
+    assert "reportCell(run)" not in source
+
+
+def test_results_ui_has_no_raw_simc_report_link():
+    static = os.path.join(os.path.dirname(__file__), "../src/web/static")
+    results_html = open(os.path.join(static, "results.html"), encoding="utf-8").read()
+    hero_js = open(os.path.join(static, "js/results/hero.js"), encoding="utf-8").read()
+    history_js = open(os.path.join(static, "js/pages/history.js"), encoding="utf-8").read()
+    assert "Open full SimC report" not in results_html
+    assert "api/report-url" not in hero_js
+    assert "Open report" not in history_js
+    assert 'target="_blank"' not in history_js
+
+
 def test_history_page_served_when_auth_disabled():
     response = TestClient(app).get("/history")
     assert response.status_code == 200
     assert "history.js" in response.text
+    css = (os.path.dirname(__file__) + "/../src/web/static/css/tokens.css")
+    css_text = open(css, encoding="utf-8").read()
+    history_js = (os.path.dirname(__file__) + "/../src/web/static/js/pages/history.js")
+    js_text = open(history_js, encoding="utf-8").read()
+    assert "@media(max-width:480px)" in css_text
+    assert ".history-table thead{display:none}" in css_text
+    assert ".history-table td::before{content:attr(data-label)" in css_text
+    assert all(f'data-label="{label}"' in js_text for label in (
+        "When", "Character", "Spec", "Fight", "Top DPS", "Status", "Results", "Run"
+    ))
+    assert "@media(min-width:481px){.history-table-card{overflow-x:visible}}" in css_text
 
 
 def test_history_page_redirects_to_login_when_auth_on(monkeypatch):
@@ -178,6 +209,8 @@ def test_api_history_report_url_resolves_for_existing_report(history_user):
         served = TestClient(app).get("/" + row["report_url"])
         assert served.status_code == 200
         assert "report" in served.text
+        assert 'name="viewport" content="width=device-width, initial-scale=1"' in served.text
+        assert open(report_file, "r", encoding="utf-8").read() == "<html>report</html>"
     finally:
         import shutil
 

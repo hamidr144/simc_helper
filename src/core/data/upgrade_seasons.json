@@ -57,6 +57,11 @@
         "hero": [305, 308, 311, 315, 318, 321],
         "myth": [318, 321, 324, 328, 331, 334]
       },
+      "upgrade_bonuses": {
+        "12846": {"track": "myth", "rank": 2},
+        "12852": {"track": "myth", "rank": 4},
+        "12854": {"track": "myth", "rank": 6}
+      },
       "elevated_ilvls": [344],
       "ascension": {
         "name": "Ascendant Venomforged",

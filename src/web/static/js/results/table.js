@@ -185,11 +185,11 @@ export function renderResults(results, mode, els) {
   const sidegrades = band === null ? 0 : ranked.filter((r, i) => i > 0 && r.dps >= band).length;
 
   subtitle.textContent = ranked.length
-    ? `${ranked.length} alternative${ranked.length === 1 ? '' : 's'} ranked against ${isEquipped ? 'your equipped gear' : 'the top candidate'}.`
+    ? `${ranked.length} alternative${ranked.length === 1 ? '' : 's'} ranked against ${isEquipped ? 'your equipped gear' : 'the top candidate (fallback baseline)'}.`
     : (isEquipped ? 'Only your equipped baseline was simulated.' : 'No equipped baseline run was found in the report.');
   if (sidegrades > 0) subtitle.textContent += ` ${sidegrades} sidegrades within 2× error of best.`;
 
-  const baseLabel = isEquipped ? 'equipped gear' : 'top candidate';
+  const baseLabel = isEquipped ? 'your equipped gear' : 'the top candidate (fallback baseline)';
   const modeChip = MODE_LABELS[mode]
     ? `<span class="chip">${MODE_LABELS[mode]}</span>` : '';
   if (slots.modeNote) slots.modeNote.textContent = MODE_HINTS[mode] ||
@@ -234,16 +234,18 @@ export function renderResults(results, mode, els) {
   const bySlot = new Map();
   for (const [index, result] of ranked.entries()) {
     for (const change of changesFromBaseline(result, baseline)) {
-      if (!bySlot.has(change.slot)) bySlot.set(change.slot, { result, change, index });
+      const candidates = bySlot.get(change.slot) || [];
+      candidates.push({ result, change, index });
+      bySlot.set(change.slot, candidates);
     }
   }
   const recButtons = [];
   if (bySlot.size) {
     slots.recos.hidden = false;
     slots.recos.querySelector('.panelh .sub').textContent =
-      'best ranked candidate per slot · deltas vs your baseline';
-    const total = bySlot.size;
-    slots.recos.querySelector('.upgrid').innerHTML = [...bySlot.entries()].map(([slot, { result, change, index }]) => {
+      `best ranked candidate per slot · deltas vs ${baseLabel}`;
+    slots.recos.querySelector('.upgrid').innerHTML = [...bySlot.entries()].map(([slot, candidates]) => {
+      const [{ result, change, index }] = candidates;
       const info = infoFor(change.id);
       const baseInfo = change.before ? infoFor(change.before) : null;
       const delta = result.dps - baseline.dps;
@@ -252,7 +254,7 @@ export function renderResults(results, mode, els) {
       const raw = rawSlot(change.slot);
       const gearString = gearStringFor(result, change);
       const replaces = baseInfo ? `replaces ${baseInfo.name}${typeof info?.ilvl === 'number' && typeof baseInfo.ilvl === 'number' ? ` · ilvl ${baseInfo.ilvl}` : ''}` : '';
-      return `<section class="slotsec" aria-label="${escapeHtml(`${slot} recommended upgrade`)}"><div class="sechead"><h2>${escapeHtml(slot)}</h2><span class="cnt num">rank ${index + 1} of ${total}</span></div>
+      return `<section class="slotsec" aria-label="${escapeHtml(`${slot} recommended upgrade`)}"><div class="sechead"><h2>${escapeHtml(slot)}</h2><span class="cnt num">rank 1 of ${candidates.length}</span></div>
         <div class="cand candup"${ariaRecLabel(slot, info, change, pct, baseLabel, baseInfo)}>
           ${iconSpan(change.id, info?.name || slot)}
           <a class="name" href="https://www.wowhead.com/item=${encodeURIComponent(change.id)}" target="_blank" rel="noopener" title="${escapeHtml(titleFor(change))}">${escapeHtml(info?.name || `#${change.id}`)}</a>

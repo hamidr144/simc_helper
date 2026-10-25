@@ -102,14 +102,28 @@ export function wire() {
   wirePopover(document.getElementById('btn-review'),
     document.getElementById('review-popover'), renderReviewPopover);
   // §10: fresh draft hint before any import (offer rehydration path).
+  // t_1699829f: the old hint sat in the footer and named only the newest
+  // draft, so after a session-expiry re-login the page showed the empty
+  // import band while the 401 banner claimed "your work is still here".
+  // Persistent note INSIDE the import band, one line per saved character
+  // (loadDrafts is newest-first). Draft lifecycle unchanged: nothing here
+  // clears or writes drafts.
   if (pendingBoot.drafts.length) {
-    const d = pendingBoot.drafts[0];
-    const note = document.getElementById('draft-note');
-    if (note) {
+    const list = pendingBoot.drafts
+      .map(d => `${d.parsedData.char_name} (saved ${new Date(d.savedAt * 1000).toLocaleString()})`)
+      .join(', ');
+    const band = document.getElementById('import-details');
+    if (band?.querySelector('.cardbody')) {
+      const note = document.createElement('p');
+      note.className = 'drafts-note';
+      note.setAttribute('role', 'status');
       note.textContent =
-        `draft: ${d.parsedData.char_name} (saved ${new Date(d.savedAt * 1000).toLocaleString()}) — paste or load that character to restore`;
+        `Draft${pendingBoot.drafts.length > 1 ? 's' : ''} saved for ${list} — load that character again (addon export or Armory) and your selections are restored.`;
+      band.querySelector('.cardbody').append(note);
+      // btn-new-export clears all drafts (paste.js) — do not leave the note claiming them.
+      document.getElementById('btn-new-export')?.addEventListener('click', () => note.remove());
     }
-    setWorkflowStatus(`You have a saved draft for ${d.parsedData.char_name}. ` +
+    setWorkflowStatus(`You have saved draft${pendingBoot.drafts.length > 1 ? 's' : ''} (${pendingBoot.drafts.map(d => d.parsedData.char_name).join(', ')}). ` +
       'Loading that character restores your selection automatically.');
   }
 }

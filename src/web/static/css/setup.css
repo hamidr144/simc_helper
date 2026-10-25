@@ -3,7 +3,10 @@
    tokens.css); everything below is verbatim RED-2M12. */
 
 /* ---- vertical page-length list ---- */
-main{max-width:880px}
+body{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+.top,.qj,.runbar{flex:none}
+main{max-width:880px;padding-bottom:24px;flex:1 1 auto;min-height:0;overflow-y:auto}
+body>.runbar{position:static;inset:auto}
 .qj{position:sticky;top:0;z-index:40;background:var(--canvas);border-bottom:1px solid var(--line)}
 .qjin{max-width:880px;margin:0 auto;display:flex;align-items:center;flex-wrap:wrap;gap:var(--gap-sm);overflow-x:auto;padding:8px 20px;scrollbar-width:thin}
 .qj a{flex:none;border:1px solid var(--line2);background:var(--surface);color:var(--ink2);
@@ -40,6 +43,7 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
 .vrow.sel{border-color:var(--acc);box-shadow:inset 0 0 0 1px var(--acc);background:var(--acc-soft)}
 .vrow.ex{background:var(--sunk);border-style:dashed}
 .vrow.ex .name{color:var(--ink3);font-weight:500}
+.vrow .name.q-uncommon,.vrow.ex .name.q-uncommon{color:var(--q-uncom)}
 .vrow.ex .ic{filter:grayscale(1);opacity:.6}
 .d.il-d{min-width:auto;white-space:nowrap}
 
@@ -47,10 +51,20 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
 .pal .seg{background:var(--surface)}
 .pal .seg button[aria-checked=true]{background:var(--acc);color:var(--acc-ink)}
 
-@media (max-width:430px){
-  main{padding:12px 10px 130px}
-  .qjin{padding:8px 10px}
-  .slotsec{margin-top:var(--gap-md)}
+@media (max-width:850px){
+  main{flex:1 1 auto;min-height:0;overflow-y:auto;padding:8px 10px}
+  .topin{padding:6px 10px;gap:8px}
+  #worker-status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  .runbar{padding-bottom:max(env(safe-area-inset-bottom), 8px)}
+  .runbar > :is(.in){display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr);gap:0 8px;padding:0 10px}
+  .runbar .est{grid-column:2 / -1;min-width:0}
+  .runbar .bud{margin:0;text-align:left;width:auto;order:initial}
+  .runbar .fight-style-select{grid-column:1 / -1;min-width:0;max-width:100%;width:100%;padding:4px;font-size:11px}
+  .runbar .popover-host{min-width:0}
+  .runbar > :is(.in) > :is(.workflow-status){grid-column:1 / -1}
+  .runbtn{margin:0;padding:6px 10px;font-size:13px}
+  .qjin{width:100%;min-width:0;box-sizing:border-box;flex-wrap:nowrap;padding:8px 10px}
+  .slotsec{margin-top:0}
   .eqc .nm{font-size:12px}
 }
 
@@ -69,28 +83,22 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
   .slotsec{break-inside:avoid}
 }
 
-/* ---- RED-2M10 · shared row/card grid (audit item 2) ----
-   Equipped card (.eqc) and candidate row (.vrow) are ONE content box: identical left
-   inset for the icon and name columns and a right-aligned fixed control cluster
-   (ilvl | grade | delta pill | checkbox), so numbers form true vertical columns down
-   each section. Explicit column indices let the HTML keep any child order. */
+/* Equipped cards and selectable candidate buttons share a compact five-column row. */
 .eqc,.vrow{display:grid;align-items:center;column-gap:var(--gap-sm);padding:var(--gap-sm) 12px;
   border-radius:var(--r-ctl);grid-template-rows:1fr;
-  grid-template-columns:var(--col-ic) minmax(0,1fr) var(--col-il) var(--col-grd) var(--col-d) var(--col-pick)}
-.eqc>*,.vrow>*{grid-row:1}  /* one row, ever: cluster parts must never wrap onto a second line */
+  grid-template-columns:var(--col-ic) minmax(0,1fr) var(--col-il) var(--col-grd) var(--col-d)}
+.eqc>*,.vrow>*{grid-row:1}
 .eqc .ic.big{justify-self:start}
 .eqc .eqx{grid-column:2}
 .eqc .mods{margin-top:var(--gap-2xs)}
 .eqc .il,.vrow .il{grid-column:3;justify-self:end;text-align:right;font-size:12.5px;font-weight:750;color:var(--ink2)}
-.eqc .grd,.vrow .grd{grid-column:4;justify-self:end;text-align:right}
+.eqc .grd,.vrow .grd{min-width:var(--col-grd);grid-column:4;justify-self:end;text-align:right}
 .eqc .d,.vrow .d{grid-column:5;justify-self:end}
-.vrow .pick{grid-column:6;justify-self:end}
 
 @media (max-width:430px){
-  /* phones: grade word and the equipped 'base' pill drop (quality stays on the icon frame),
-     ilvl/delta keep auto columns; checkbox track stays for right-edge alignment */
-  .eqc,.vrow{--col-ic:30px;--col-pick:18px;
-    grid-template-columns:var(--col-ic) minmax(0,1fr) auto auto var(--col-pick);
+  /* phones: grade word and equipped base pill drop; selection stays on the button. */
+  .eqc,.vrow{--col-ic:30px;
+    grid-template-columns:var(--col-ic) minmax(0,1fr) auto auto;
     column-gap:var(--gap-xs);padding:var(--gap-sm) 9px}
   .eqc .grd,.vrow .grd{display:none}
   .eqc .d{display:none}
@@ -126,11 +134,12 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
 .enh-section[open]>summary{border-bottom:1px solid var(--line)}
 .enhancement-group{display:flex;flex-wrap:wrap;gap:var(--gap-sm);border:0;padding:12px 14px;margin:0}
 .choice-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line2);border-radius:99px;
-  background:var(--surface);padding:4px 11px;font-size:12.5px;color:var(--ink2);cursor:pointer}
-.choice-chip:has(input:checked){border-color:var(--acc);color:var(--acc-text);background:var(--acc-soft, var(--sunk))}
-.choice-chip input{accent-color:var(--acc);margin:0}
+  background:var(--surface);padding:4px 11px;font:inherit;font-size:12.5px;color:var(--ink2);cursor:pointer}
+.choice-chip.selected{border-color:var(--acc);color:var(--acc-text);background:var(--acc-soft, var(--sunk))}
+.choice-chip:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.choice-chip .enhancement-name-link{white-space:nowrap}
 .equipped-badge{font-size:10.5px;color:var(--gold);font-weight:700;letter-spacing:.03em;text-transform:uppercase}
-.enhancement-name-link{color:inherit;text-decoration:none}
+.enhancement-name-link{color:inherit;text-decoration:underline;text-underline-offset:2px}
 .enhancement-name-link:hover{color:var(--acc-text)}
 
 /* ---- RED-3 surviving controls, restyled in the v11 idiom (feature parity;
@@ -162,11 +171,12 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
 .enh-section[open]>summary{border-bottom:1px solid var(--line)}
 .enhancement-group{display:flex;flex-wrap:wrap;gap:var(--gap-sm);border:0;padding:12px 14px;margin:0}
 .choice-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line2);border-radius:99px;
-  background:var(--surface);padding:4px 11px;font-size:12.5px;color:var(--ink2);cursor:pointer}
-.choice-chip:has(input:checked){border-color:var(--acc);color:var(--acc-text);background:var(--acc-soft, var(--sunk))}
-.choice-chip input{accent-color:var(--acc);margin:0}
+  background:var(--surface);padding:4px 11px;font:inherit;font-size:12.5px;color:var(--ink2);cursor:pointer}
+.choice-chip.selected{border-color:var(--acc);color:var(--acc-text);background:var(--acc-soft, var(--sunk))}
+.choice-chip:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.choice-chip .enhancement-name-link{white-space:nowrap}
 .equipped-badge{font-size:10.5px;color:var(--gold);font-weight:700;letter-spacing:.03em;text-transform:uppercase}
-.enhancement-name-link{color:inherit;text-decoration:none}
+.enhancement-name-link{color:inherit;text-decoration:underline;text-underline-offset:2px}
 .enhancement-name-link:hover{color:var(--acc-text)}
 
 /* import card (surviving chrome in the design voice) */
@@ -184,6 +194,7 @@ html[data-pal=dark] .eqrow .eqc:hover{border-color:var(--gold-line);background:v
 .armory-controls{display:flex;gap:var(--gap-sm);margin:8px 0 10px;flex-wrap:wrap}
 .armory-field{min-width:160px;flex:1}
 .armory-divider{color:var(--ink3);font-size:12.5px;margin:10px 0 4px}
+.drafts-note{margin:10px 0 0;padding:8px 10px;border-radius:6px;background:var(--warn-soft);color:var(--ink);font-size:13px}
 .armory-hint{color:var(--ink3);font-size:12px;margin:0 0 10px}
 .rows>.fold{display:flex;justify-content:center;margin-top:4px;cursor:pointer}
 

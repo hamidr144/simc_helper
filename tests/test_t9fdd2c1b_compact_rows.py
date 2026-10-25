@@ -11,15 +11,40 @@ from static_assets import read_css, read_js, resp  # t_94a15fe3 split pins
 STATIC = Path(__file__).resolve().parents[1] / "src" / "web" / "static"
 CSS = read_css()
 APP_JS = read_js()
+ENHANCEMENTS_JS = (STATIC / "js/setup/enhancements.js").read_text()
 APP_HTML = (STATIC / "app.html").read_text()
+
+
+def test_setup_mobile_runbar_and_content_share_non_overlapping_viewport():
+    setup_css = (STATIC / "css" / "setup.css").read_text()
+    assert "@media (max-width:850px){" in setup_css
+    assert "body{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}" in setup_css
+    assert "main{flex:1 1 auto;min-height:0;overflow-y:auto" in setup_css
+    assert ".runbar{position:static" in setup_css
+    assert "--setup-runbar-height" not in setup_css
+
+
+def test_mobile_runbar_selects_get_full_width_without_changing_desktop():
+    setup_css = (STATIC / "css" / "setup.css").read_text()
+    assert ".runbar .fight-style-select{grid-column:1 / -1;" in setup_css
+    assert "grid-column" not in setup_css.split("@media (max-width:850px){", 1)[0]
+    for selector_id in ("fight-style", "compare-mode"):
+        selector = APP_HTML.split(f'id="{selector_id}"', 1)[1].split(">", 1)[0]
+        assert 'class="fight-style-select"' in selector
+    assert 'id="fight-style"' in APP_HTML
+    assert 'id="compare-mode"' in APP_HTML
+
+
+
+
 
 
 def test_gear_card_is_a_dense_grid_row():
     # RED-3 (v11 §M10): equipped card and candidate row are ONE shared grid —
-    # icon | name(minmax 0) | ilvl | grade | delta | pick; no overflow clipping
-    # (would cut the anchored upgrade popover / tooltip on a row).
+    # icon | name(minmax 0) | ilvl | grade | delta; selection is conveyed by
+    # the button's pressed state, not a decorative square.
     block = CSS.split(".eqc,.vrow{display:grid", 1)[1].split("}", 1)[0]
-    assert "grid-template-columns:var(--col-ic) minmax(0,1fr) var(--col-il) var(--col-grd) var(--col-d) var(--col-pick)" in block
+    assert "grid-template-columns:var(--col-ic) minmax(0,1fr) var(--col-il) var(--col-grd) var(--col-d)" in block
     assert "overflow: hidden" not in block and "overflow:hidden" not in block
     assert ".gear-card" not in CSS  # v11 retired the tile component
 
@@ -89,4 +114,21 @@ def test_group_chrome_gaps_match_contract():
     # extra sockets moved into the enhancements panel (decision D-6); the
     # per-slot group footer is gone with the tile era.
     assert ".slot-group" not in CSS
-    assert 'extra-socket' in APP_JS
+    assert 'extra socket' in ENHANCEMENTS_JS
+
+
+def test_history_filter_prompt_fits_control_and_keeps_full_accessible_label():
+    history_js = (STATIC / "js" / "pages" / "history.js").read_text()
+    assert 'placeholder="Filter runs…"' in history_js
+    assert 'for="history-filter">Filter runs by character or spec</label>' in history_js
+
+    # Browser canvas measurement at 13px Arial: 70.8px. The known desktop
+    # control content box is 172px minus 24px horizontal padding (148px).
+    prompt_width_px = 70.8
+    control_content_width_px = 172 - 2 * 12
+    assert prompt_width_px <= control_content_width_px
+
+
+def test_armory_placeholder_fits_mobile_with_full_accessible_label():
+    assert 'placeholder="Name-Realm or link"' in APP_HTML
+    assert 'Character name and realm, or a full Armory link' in APP_HTML

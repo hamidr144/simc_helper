@@ -76,6 +76,36 @@ export function inferMidnightUpgrade(slot, item, label) {
   return null;
 }
 
+/* t_4149ba6b (A4): a bare-id add has no bonus ids, and the tooltip preview
+   defaults to the item's BEST variant (elevated off-ladder 344 for a myth
+   6/6 piece), so inferMidnightUpgrade on the label alone yields null and the
+   added key — invisible to the pre-add, bonus-string-keyed hydration — never
+   resolves a grade: zero rank/VF rows. Resolve from data already in hand
+   (leader ruling t_4149ba6b: reuse a hydrated same-id string or the preview
+   payload — no new fetch pipeline): first a same-id item in the slot whose
+   grade is resolved (hydrated gearUpgrades entry, else ladder inference on
+   its bonus-string key), then the preview's own "Upgrade Level: Myth 6/6"
+   line when its default tooltip carries one. */
+export function resolveAddedGrade(slot, itemId, preview) {
+  for (const item of state.parsedData?.items_by_slot?.[slot] || []) {
+    if (item === `id=${itemId}` || parseItemParams(item).id !== String(itemId)) continue;
+    let info = state.gearUpgrades[slot]?.[item];
+    if (!info?.track) info = inferMidnightUpgrade(slot, item, state.parsedData?.item_names?.[item]);
+    const ladder = info?.track ? seasonTracks()[info.track] : null;
+    const rank = Number(info?.rank) || 0;
+    if (ladder && rank >= 1 && rank <= ladder.length) {
+      return { track: info.track, rank, item_level: Number(info.item_level) || ladder[rank - 1] };
+    }
+  }
+  const match = /^([A-Za-z]+)\s+(\d+)\/(\d+)$/.exec(String(preview?.upgrade_level || ''));
+  const ladder = match ? seasonTracks()[match[1].toLowerCase()] : null;
+  const rank = match ? Number(match[2]) : 0;
+  if (ladder && rank >= 1 && rank <= ladder.length) {
+    return { track: match[1].toLowerCase(), rank, item_level: Number(preview.ilvl) || ladder[rank - 1] };
+  }
+  return null;
+}
+
 /* Upgrade ranks straight from the export's own `# upgrade_levels=` comment
    (authoritative for this character), preferred over the static season
    ladders whenever present.  The addon lists only levels other than the
@@ -96,6 +126,66 @@ export function exportRanksFor(slot, item) {
       label: `Upgrade ${lvl.upgrade_level}`
     })),
   ];
+}
+/* CRIT t_632eeef0: real addon exports and Armory loads never carry
+   `# upgrade_levels=`, so exportRanksFor is null for every real character
+   and the rank/ascension affordance was unreachable in production (t_6b3f65d6).
+   Fallback: read the item's already-inferred grade — Wowhead hydration or
+   ilvl inference lands in state.gearUpgrades as {track, rank} — and walk the
+   season ladder from there. Flood guard (leader ruling comment 1885): only
+   equipped / selected / added items expand; every other candidate keeps its
+   single base row.
+   shortcut: crafted items skip this — they are off-track (ascension resolves
+   via crafted_results elsewhere) and the grade popover was deleted in the
+   redesign. */
+function seasonFallbackRanks(slot, item) {
+  if (isCraftedItem(item)) return null;
+  if (!normalizedEquippedItems(slot).includes(item)
+    && !state.selectedItems[slot]?.has(item)
+    && !state.addedItems.has(item)) return null;
+  // onRowClick drops the gearUpgrades entry on deselect AND writes a bare
+  // {source:'export',rank,item_level} on select — fall back to the same
+  // ilvl→ladder inference state.js seeds with so rows never vanish.
+  let info = state.gearUpgrades[slot]?.[item];
+  if (!info?.track) info = inferMidnightUpgrade(slot, item, state.parsedData?.item_names?.[item]);
+  const ladder = info?.track ? seasonTracks()[info.track] : null;
+  const rank = Number(info?.rank) || 0;
+  if (!ladder || !rank || rank > ladder.length) {
+    // t_910b4761: a raw-id add no ladder can place (elevated ilvl above the
+    // myth 6/6 + ascension top, or an off-ladder warforged level) still shows
+    // its current rank context — one 'Current' row at the item's own ilvl —
+    // instead of zero rank rows. The row click encodes item_level = that ilvl
+    // (source 'export' wins server-side), so no payload downgrade is possible.
+    // shortcut: presence only per the ruling; no track re-derivation for
+    // off-ladder added ilvls.
+    if (state.addedItems.has(item) && (!ladder || !rank)) {
+      const current = Number(parseItemParams(item).ilevel)
+        || itemLevelFromLabel(state.parsedData?.item_names?.[item]);
+      if (current) return [{ rank: 1, track: null, ilvl: current, voidforged: false, label: 'Current' }];
+    }
+    return null;
+  }
+  const crest = `${season().cost_per_rank} ${season().crest_name}`;
+  const trackName = info.track[0].toUpperCase() + info.track.slice(1);
+  const rows = [];
+  for (let r = rank + 1; r <= ladder.length; r++) {
+    rows.push({ rank: r, track: info.track, ilvl: ladder[r - 1], voidforged: false,
+      label: `${trackName} ${r}/${ladder.length} ×${crest}` });
+  }
+  const ascension = seasonAscension();
+  let current = Number(parseItemParams(item).ilevel)
+    || itemLevelFromLabel(state.parsedData?.item_names?.[item]) || null;
+  // t_4149ba6b: for a bare-id add the label ilvl is only the preview default
+  // (Wowhead's best variant — elevated 344 for a myth 6/6 piece); a resolved
+  // grade's own rung is the truth for the ascension/elevation gate below.
+  if (state.addedItems.has(item) && info?.item_level) current = Number(info.item_level) || current;
+  if (rank === ladder.length && ascension.results?.[info.track] != null
+    && isVoidforgeEligibleSlot(slot) && !isElevatedLevel(current)
+    && !isAlreadyVoidforgedItem(slot, item, state.parsedData?.item_names?.[item])) {
+    rows.push({ rank, track: info.track, ilvl: ascension.results[info.track], voidforged: true,
+      label: `${ascension.name || 'Ascendant'} ×${ascension.cost}` });
+  }
+  return rows;
 }
 export function isAlreadyVoidforgedItem(slot, item, label = '') {
   const ascendedName = String(seasonAscension().name || '').toLowerCase().replace('ascendant ', '');
@@ -148,17 +238,30 @@ export function qualityOf(quality) {
   return QUALITY[name] || { cls: 'common', word: name ? name[0].toUpperCase() + name.slice(1) : 'Common' };
 }
 
+/* t_e906dc02: the ONE row-grade resolver feeding qualityOf (§7 R-C3: class +
+   grade word resolve through qualityOf, never per item/slot).  Precedence
+   (leader ruling 3): Wowhead-hydration quality number
+   (state.wowheadQualities, conflict.js) ?? Armory payload grade word
+   (parsedData.item_qualities, /api/armory-load) ?? explicit quality= param.
+   qualityOf's COMMON stays the only true fallback.  Keyed by item string —
+   quality belongs to the item+bonus identity, not the slot. */
+export function resolveRowQuality(item) {
+  return state.wowheadQualities?.[item]
+    ?? state.parsedData?.item_qualities?.[item]
+    ?? parseItemParams(item).quality;
+}
+
 /* R-C3 rank/variant expansion (contract §3): base row per item, plus one row
-   per export-ladder upgrade rank (upgrade_levels comment, authoritative),
-   plus a Voidforged twin when the item sits at the top rank of an eligible
-   slot. Season-ladder items keep their single inferred row (the old grade
-   popover is deleted; expanding 6 ranks × every item would flood the list —
-   shortcut: ranks beyond the export ladder stay popover-free, add the rows
-   here when an engine field makes them real candidates). */
+   per export-ladder upgrade rank (upgrade_levels comment, authoritative and
+   still preferred), plus the season-ladder fallback rows for real (comment
+   -free) gear — see seasonFallbackRanks for that ladder, the flood guard and
+   the crafted shortcut. Items neither source can grade keep their single
+   inferred row (the old grade popover is deleted; expanding 6 ranks × every
+   item would flood the list). */
 export function ranksForItem(slot, item) {
   const rows = [{ rank: null, track: null, ilvl: null, voidforged: false }];
   const exportRanks = exportRanksFor(slot, item);
-  if (!exportRanks) return rows;
+  if (!exportRanks) return rows.concat(seasonFallbackRanks(slot, item) || []);
   for (const rank of exportRanks.slice(1)) {
     rows.push({ rank: rank.rank, track: null, ilvl: rank.level, voidforged: false, label: rank.label });
   }

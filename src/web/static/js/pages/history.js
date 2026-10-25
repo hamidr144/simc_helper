@@ -1,6 +1,5 @@
 // js/pages/history.js — run history page (t_d34ced81): lists the signed-in
-// user's stored runs and a per-run detail view (?run=<id>) with a working
-// link to the stored report. Ported from history.js by t_94a15fe3 (§3.1).
+// user's stored runs and a per-run detail view (?run=<id>).
 import { apiFetch } from '../core/api.js';
 import { escapeHtml } from '../core/dom.js';
 import { wireTheme } from '../core/theme.js';
@@ -36,11 +35,12 @@ function characterLabel(run) {
   return realm ? `${name} · ${realm}` : name;
 }
 
-function reportCell(run) {
+function resultsCell(run) {
   if (run.report_url) {
-    return `<a class="history-report" href="${escapeHtml(run.report_url)}" target="_blank" rel="noopener">Open report</a>`;
+    const taskId = String(run.report_url).split('/').slice(-2, -1)[0] || '';
+    return `<a class="history-results" href="results?task_id=${encodeURIComponent(taskId)}">View results</a>`;
   }
-  if (run.status === 'failed' || run.status === 'stopped') return '<span class="history-missing">no report</span>';
+  if (run.status === 'failed' || run.status === 'stopped') return '<span class="history-missing">no results</span>';
   return '<span class="history-missing" title="Old runs are pruned automatically">expired</span>';
 }
 
@@ -51,10 +51,10 @@ function statusBadge(status) {
 
 function renderList(runs) {
   subtitleEl.textContent = runs.length
-    ? `${runs.length} stored run${runs.length === 1 ? '' : 's'}. Reports are kept for your 50 most recent runs.`
+    ? `${runs.length} stored run${runs.length === 1 ? '' : 's'}. Showing your 50 most recent runs.`
     : 'No runs recorded yet. Finish a simulation with an account to build your history.';
   if (!runs.length) {
-    contentEl.innerHTML = '<section class="panel-card empty-results"><h2>Nothing here yet</h2><p>Run a comparison and it will show up here with its report link.</p></section>';
+    contentEl.innerHTML = '<section class="panel-card empty-results"><h2>Nothing here yet</h2><p>Run a comparison and it will show up here with its results.</p></section>';
     return;
   }
   const rows = runs.map(run => `<tr class="history-row" data-run="${escapeHtml(run.run_id)}" data-search="${escapeHtml(`${characterLabel(run)} ${run.spec || ''}`.toLowerCase())}">
@@ -64,15 +64,15 @@ function renderList(runs) {
     <td data-label="Fight">${escapeHtml(run.fighting_style || '—')}</td>
     <td data-label="Top DPS" class="history-dps">${escapeHtml(formatDps(run.top_dps))}</td>
     <td data-label="Status">${statusBadge(run.status)}</td>
-    <td data-label="Report">${reportCell(run)}</td>
+    <td data-label="Results">${resultsCell(run)}</td>
     <td data-label="Run"><span class="history-run-id">${escapeHtml(String(run.run_id).slice(0, 8))}</span> <button type="button" class="run-copy" data-copy="${escapeHtml(run.run_id)}" aria-label="Copy full run id">⧉</button></td>
   </tr>`).join('');
   contentEl.innerHTML = `<section class="panel-card full-width history-table-card">
     <label class="sr-only" for="history-filter">Filter runs by character or spec</label>
-    <input id="history-filter" class="history-filter" type="search" placeholder="Filter by character or spec…" autocomplete="off">
+    <input id="history-filter" class="history-filter" type="search" placeholder="Filter runs…" autocomplete="off">
     <table class="history-table">
       <caption class="sr-only">Your simulation runs, newest first</caption>
-      <thead><tr><th scope="col">When</th><th scope="col">Character</th><th scope="col">Spec</th><th scope="col">Fight</th><th scope="col">Top DPS</th><th scope="col">Status</th><th scope="col">Report</th><th scope="col">Run</th></tr></thead>
+      <thead><tr><th scope="col">When</th><th scope="col">Character</th><th scope="col">Spec</th><th scope="col">Fight</th><th scope="col">Top DPS</th><th scope="col">Status</th><th scope="col">Results</th><th scope="col">Run</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
   </section>`;
@@ -117,7 +117,7 @@ function renderDetail(run) {
   }</strong></div>`).join('');
   contentEl.innerHTML = `<section class="panel-card full-width history-detail">
     <div class="history-fields">${rows}</div>
-    <div class="history-detail-actions">${reportCell(run)}</div>
+    <div class="history-detail-actions">${resultsCell(run)}</div>
   </section>`;
 }
 

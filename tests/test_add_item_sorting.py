@@ -10,6 +10,7 @@ Covers:
 
 import json
 import os
+import re
 import sys
 
 import pytest
@@ -218,7 +219,12 @@ def test_app_js_wires_add_item():
     # Added items land in the same state generation reads from.
     assert "parsedData.items_by_slot[slot]" in js
     assert "selectedItems[slot].add(key)" in js
-    assert "row-x" in js
+    # t_77ea4b76: REAL interpolation + wiring, not a bare substring — the old
+    # "row-x" pin stayed green for three releases while addedBlock was computed
+    # but never interpolated (added items unremovable, removeAddedItem dead).
+    assert "${eqBlock}${addedBlock}" in js  # section template renders the added line
+    assert "querySelectorAll('.row-x[data-remove]')" in js
+    assert "removeAddedItem(slot, chip.dataset.remove)" in js
 
 
 def test_style_css_defines_step4_classes():
@@ -232,5 +238,17 @@ def test_style_css_defines_step4_classes():
 def test_app_html_cache_busted_step4():
     html = _static("app.html")
     # t_94a15fe3 (MGE2 split): cache-bust now rides the token sheet + boot entry.
-    assert "css/tokens.css?v=red3-2" in html
-    assert "js/pages/setup.js?v=red3-2" in html
+    assert "css/tokens.css?v=red3-3" in html
+    assert "js/pages/setup.js?v=red3-4" in html  # cache token matches the setup circular import
+
+
+def test_setup_circular_import_matches_entry_token():
+    # t_26c5ddef: paste.js's circular import must resolve to the SAME tokenized
+    # URL app.html loads, or the browser serves two pages/setup.js instances
+    # (double wire() -> double POST /api/parse-addon, draft-restore wipes).
+    # Re-pinning the app.html token must move the import too or CI fails.
+    match = re.search(r'static/js/pages/setup\.js\?v=([^"]+)"', _static("app.html"))
+    assert match, "app.html tokenized pages/setup.js entry missing"
+    assert f"import {{ renderWorkflow }} from '../pages/setup.js?v={match.group(1)}';" in _static(
+        os.path.join("js", "setup", "paste.js")
+    )

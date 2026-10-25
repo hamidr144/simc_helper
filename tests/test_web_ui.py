@@ -1,7 +1,9 @@
+import json
 import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -302,6 +304,25 @@ def test_crafted_items_do_not_auto_infer_midnight_grade_from_item_level_label():
     assert "Crafted · no grade" in js
 
 
+def test_candidate_controls_are_buttons_not_checkbox_mimics():
+    """Candidate selection remains a pressed button without a checkbox graphic."""
+    ui = Path(__file__).resolve().parent.parent / "src/web/static/js/core/ui.js"
+    setup_css = Path(__file__).resolve().parent.parent / "src/web/static/css/setup.css"
+    token_css = Path(__file__).resolve().parent.parent / "src/web/static/css/tokens.css"
+    enhancements = Path(__file__).resolve().parent.parent / "src/web/static/js/setup/enhancements.js"
+    ui = ui.read_text()
+    setup_css = setup_css.read_text()
+    token_css = token_css.read_text()
+    enhancements = enhancements.read_text()
+
+    row = ui.split("if (variant === 'vrow')", 1)[1].split("// results variants", 1)[0]
+    assert 'aria-pressed="${Boolean(d.sel)}"' in row
+    assert 'class="pick"' not in row
+    assert ".vrow.sel{" in setup_css
+    assert ".vrow .pick" not in setup_css
+    assert ".cand .pick" in token_css  # results-page atom is unrelated
+    assert 'type="checkbox"' in enhancements  # Extra test sockets stays a checkbox
+
 def test_voidforge_option_is_hidden_for_elevated_items():
     """t_60c19e5d: ilvl-344 Elevated Myth must not offer Ascendant ascension."""
     response = resp(read_js())
@@ -374,6 +395,209 @@ process.exit(fail);
     assert result.returncode == 0, result.stderr
 
 
+def test_gear_row_fold_budget_immune_to_selection():
+    # RED-S5F (t_45ab76c5, RED-S5 FAIL 2): foldChips's 3-row budget counts
+    # every row whatever its selection state — selecting a visible row must
+    # keep the identical visible set and +N count (contract §12 gate 4 "no
+    # layout jitter on selection change"), and selected/excluded rows past
+    # the fold stay visible (doc 4.2 parity). Real foldChips via node.
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    harness = os.path.join(os.path.dirname(__file__), "fixtures", "fold_chips_harness.mjs")
+    result = subprocess.run([node, harness], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, f"harness failed: {result.stderr[-2000:]}"
+    out = json.loads(result.stdout)
+    assert out["baseline6"] == {"vis": [0, 1, 2], "chip": "+3"}
+    # Pre-fix the two sel cases folded away 0/1 rows and revealed an extra
+    # one: sel1of6 was vis [0,1,2,3] chip "+2", sel1of4 vis [0,1,2,3] chip
+    # None — the +46px / +15px downstream shifts measured live.
+    assert out["sel1of6"] == out["baseline6"]
+    assert out["baseline4"] == {"vis": [0, 1, 2], "chip": "+1"}
+    assert out["sel1of4"] == out["baseline4"]
+    assert out["selLastVisible4"] == out["baseline4"]
+    assert out["selBeyondFold"] == {"vis": [0, 1, 2, 4], "chip": "+1"}
+    assert out["exBeyondFold"] == {"vis": [0, 1, 2, 5], "chip": "+2"}
+    assert out["allBeyondFoldSelected"] == {"vis": [0, 1, 2, 3], "chip": None}
+    assert out["expandRevealsAll"] == [0, 1, 2, 3, 4, 5]
+
+
+def test_row_quality_resolver_and_draft_orphan_drop_node_probe():
+    # t_e906dc02: gear-row grade resolves through ONE resolver feeding
+    # qualityOf — hydration > Armory payload > param > COMMON (ruling 3) —
+    # and draft/payload restore drops candidates absent from items_by_slot
+    # (ruling 4). Real modules via node, fold_chips_harness.mjs pattern.
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    harness = os.path.join(os.path.dirname(__file__), "fixtures", "row_quality_harness.mjs")
+    result = subprocess.run([node, harness], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, f"harness failed: {result.stderr[-2000:]}"
+    out = json.loads(result.stdout)
+    # Pre-fix: resolveRowQuality did not exist (harness import failed) and the
+    # orphan rows came back from stale localStorage (gear.js params.quality).
+    assert out["armoryGrade"] == "Epic"
+    assert out["hydrationWins"] == "Rare"
+    assert out["paramFallback"] == "Uncommon"
+    assert out["commonFallback"] == "Common"
+    assert out["draftSelected"] == ["id=268265,bonus_id=6652,ilevel=334"]
+    # t_65bd1b07 (leader ruling): addedItems keys are AUTHORITATIVE at restore
+    # and get re-inserted into items_by_slot/item_names; the orphan-drop stays
+    # for plain stale selection strings (ORPHAN is selected-only here).
+    assert out["draftAdded"] == ["id=268265,bonus_id=6652,ilevel=334", "id=271472"]
+    assert out["addedReinserted"] == [",id=271463,ilevel=330", "id=271472"]
+    assert out["addedName"] == "Blessed Batplate Spaulders (337)"
+    assert out["addedQuality"] == "Epic"
+    assert out["payloadSelected"] == []
+    # t_910b4761: committed add-by-id — the tooltip preview quality persists
+    # into parsedData.item_qualities (the draft-persisted resolver slot), and
+    # the ladder-unplaceable raw-id item still renders one Current rank row.
+    assert out["addedCommittedEpic"] == "Epic"
+    assert out["addedRows"] == ["null:base:false", "1:344:false"]
+
+
+def test_add_by_id_commit_persists_preview_quality():
+    # t_910b4761: commitAddedItem must persist the tooltip preview's Wowhead
+    # quality into parsedData.item_qualities (resolveRowQuality slot 2, which
+    # round-trips through the draft) so the committed card renders Epic
+    # instead of Common; a null quality writes nothing; removeAddedItem drops
+    # the entry again. Function-extraction node probe, slot-guard pattern.
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    assert node
+    js = resp(read_js()).text
+    commit = js[js.index("function commitAddedItem"):js.index("export function removeAddedItem")]
+    rem = js[js.index("export function removeAddedItem"):js.index("function renderSlotAddPreview")] \
+        .replace("export function", "function", 1)
+    script = """
+const state = { parsedData: { items_by_slot: {}, item_names: {} }, selectedItems: {},
+  gearUpgrades: {}, voidforgedItems: {}, statScores: {}, addedItems: new Map() };
+const inferMidnightUpgrade = () => null;
+const resolveAddedGrade = () => null;
+const renderGear = () => {}, renderCharChip = () => {}, updateSummary = () => {}, selectionChanged = () => {};
+""" + commit + "\n" + rem + """
+let fail = 0;
+commitAddedItem('neck', 268265, { name: 'Aqirbane Reliquary', ilvl: 344, quality: 4 });
+if (state.parsedData.item_qualities?.['id=268265'] !== 4) { console.error('preview quality not persisted: ' + JSON.stringify(state.parsedData.item_qualities)); fail = 1; }
+commitAddedItem('head', 111, { name: 'NoQuality', ilvl: 100 });
+if ('id=111' in (state.parsedData.item_qualities || {})) { console.error('absent quality wrote an entry'); fail = 1; }
+removeAddedItem('neck', 'id=268265');
+if ('id=268265' in state.parsedData.item_qualities) { console.error('quality not dropped on remove'); fail = 1; }
+process.exit(fail);
+"""
+    result = subprocess.run([node, "-e", script], capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_draft_added_items_survive_restore_node_probe():
+    # t_65bd1b07 (QA probe from t_43477503 reproduced red-then-green): an
+    # added-by-ID key never exists in a fresh export parse, so the old
+    # knownCandidate gate dropped every draft.addedItems entry at restore and
+    # persistDraft then overwrote the draft. Added keys are now re-inserted
+    # into the fresh parse and survive applyDraftToState AND the persistDraft
+    # round-trip onto a second fresh parse unchanged.
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    harness = os.path.join(os.path.dirname(__file__), "fixtures", "draft_added_restore_harness.mjs")
+    result = subprocess.run([node, harness], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, f"harness failed: {result.stderr[-2000:]}"
+    out = json.loads(result.stdout)
+    added = [["id=271472", "shoulder"], ["id=271444", "shoulder"]]
+    candidates = [",id=271463,ilevel=330", "id=271472", "id=271444"]
+    for hop in (out["restored"], out["roundTrip"]):
+        assert sorted(hop["added"]) == ["id=271444", "id=271472"]
+        assert sorted(hop["candidates"]) == sorted(candidates)
+        assert sorted(hop["selected"]) == ["id=271444", "id=271472"]
+    assert out["persistedAdded"] == added
+    assert sorted(out["persistedCandidates"]) == sorted(candidates)
+    assert out["roundTrip"]["qualities"] == [4, 3]
+    assert out["roundTrip"]["names"] == [
+        "Blessed Batplate Spaulders (337)", "Stonearrow Pauldrons (324)"]
+
+
+def test_added_grade_resolution_node_probe():
+    # t_1321a4a7 (A4/t_4149ba6b): a bare-id add resolves its grade from data
+    # already in hand (same-id sibling grade, else preview Upgrade Level) and
+    # the seeded grade drives the rank/VF row walk — pre-fix the harness import
+    # failed and the bare key produced zero rank rows (red -> green).
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    assert node
+    harness = os.path.join(os.path.dirname(__file__), "fixtures", "added_grade_harness.mjs")
+    result = subprocess.run([node, harness], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, f"harness failed: {result.stderr[-2000:]}"
+    out = json.loads(result.stdout)
+    assert out["reuse"] == {"track": "myth", "rank": 6, "item_level": 289}
+    assert out["rowsBeforeSeed"] == 0
+    assert out["currentRowBeforeSeed"] == "1:300:Current"
+    assert out["vfRow"] == ["6:298"]
+    assert out["previewOnly"] == {"track": "myth", "rank": 5, "item_level": 285}
+    assert out["nothing"] is None
+
+
+def test_add_by_id_slot_guard_node_probe():
+    # t_1699829f: the client-side inventorySlot->slot guard, evaluated in node
+    # (same harness pattern as test_crafted_badge_mapping_g4): a mismatch
+    # suppresses the Add button and names the item's real slot; a matching
+    # slot still adds; unknown ids and failed/absent invslot fail OPEN; gems
+    # (id 0) and other known non-equip ids never offer an equip slot.
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    js = resp(read_js()).text
+    start = js.index("const INV_SLOT_TABLE")
+    table = js[start:js.index("};", start) + 2]
+    fn_start = js.index("function slotAddDecision")
+    fn = js[fn_start:js.index("\n}", fn_start) + 2]
+    # The reject must happen before the Add button is ever rendered.
+    assert js.index("if (!decision.offer)") < js.index("slot-add-confirm")
+    script = table + "\n" + fn + """
+const cases = [
+  ["head", { name: "Warhelm", invslot: 1, invslot_name: "Head" }, true, ""],
+  ["chest", { name: "Warhelm", invslot: 1, invslot_name: "Head" }, false, "Warhelm fits Head, not chest."],
+  ["finger", { name: "Ring", invslot: 11, invslot_name: "Finger" }, true, ""],
+  ["trinket", { name: "Trink", invslot: 12, invslot_name: "Trinket" }, true, ""],
+  ["back", { name: "Cloak", invslot: 16, invslot_name: "Back" }, true, ""],
+  ["shoulder", { name: "Gibbets", invslot: 3, invslot_name: "Shoulder" }, true, ""],
+  ["off_hand", { name: "2H", invslot: 17, invslot_name: "Two-Hand" }, true, ""],
+  ["chest", { name: "2H", invslot: 17, invslot_name: "Two-Hand" }, false, "2H fits Two-Hand, not chest."],
+  ["chest", { name: "Gem", invslot: 0 }, false, "Gem fits no equip slot, not chest."],
+  ["chest", { name: "Tabard", invslot: 19, invslot_name: "Tabard" }, false, "Tabard fits Tabard, not chest."],
+  ["main_hand", { name: "OneHand", invslot: 13, invslot_name: "One-Hand" }, true, ""],
+  ["off_hand", { name: "Shield", invslot: 14, invslot_name: "Off Hand" }, true, ""],
+  ["head", { name: "NoSlotInfo" }, true, ""],
+  ["head", { name: "Null", invslot: null, invslot_name: null }, true, ""],
+  ["head", { name: "Future", invslot: 9042, invslot_name: "Future Slot" }, true, ""],
+];
+let fail = 0;
+for (const [slot, preview, wantOffer, wantMsg] of cases) {
+  const got = slotAddDecision(slot, preview);
+  if (got.offer !== wantOffer) { console.error(slot + " " + preview.name + " offer=" + got.offer + " want " + wantOffer); fail = 1; }
+  if (wantMsg && !(got.message || "").includes(wantMsg)) { console.error(slot + " " + preview.name + " msg=" + got.message + " want " + wantMsg); fail = 1; }
+}
+if (!slotAddDecision("head", { name: "Future", invslot: 9042, invslot_name: "Future Slot" }).showSlotName) { console.error("unknown id must name the returned slot in the meta line"); fail = 1; }
+if (slotAddDecision("head", { name: "Warhelm", invslot: 1, invslot_name: "Head" }).showSlotName) { console.error("a matched slot must not append a slot name"); fail = 1; }
+process.exit(fail);
+"""
+    result = subprocess.run([node, "-e", script], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_setup_boot_surfaces_saved_drafts_in_import_band():
+    # t_1699829f: after a session-expiry re-login the empty import band must
+    # not contradict the 401 banner — boot renders a persistent note listing
+    # every saved-draft character (newest first) with the re-load instruction.
+    # Draft lifecycle itself stays unchanged.
+    js = resp(read_js()).text
+    assert "load that character again (addon export or Armory) and your selections are restored" in js
+    assert "drafts-note" in js
+    assert "pendingBoot.drafts" in js
+    assert ".drafts-note" in read_css()
+
+
 def test_gear_selection_hydrates_exact_grades_from_wowhead():
     response = resp(read_js())
     assert response.status_code == 200
@@ -437,29 +661,57 @@ def test_gems_and_enchantments_use_default_wowhead_tooltips():
     assert "function createEnhancementWowheadLink(enhancement, name)" in js
     assert "enhancement.wowhead_url" in js
     assert "enhancement-name-link wowhead-item-link" in js
-    assert "createEnhancementWowheadLink(enchant, name)" in js
-    assert "createEnhancementWowheadLink(gem, name)" in js
+    assert "appendWowheadLink(group, enchant, name)" in js
+    assert "appendWowheadLink(group, gem, name)" in js
     assert js.count("refreshWowheadLinks();") >= 2
 
 
-def test_heliotrope_gems_are_not_rendered_as_selectable_gems():
-    response = resp(read_js())
-    assert response.status_code == 200
-    js = response.text
+def test_enhancements_use_gear_buttons_preserve_equipped_baseline_and_filter_green():
+    root = Path(__file__).resolve().parent.parent / "src" / "web" / "static" / "js"
+    state = (root / "core/state.js").read_text()
+    ui = (root / "core/ui.js").read_text()
+    enhancements = (root / "setup/enhancements.js").read_text()
+    payload = (root / "setup/payload.js").read_text()
+    css = (root.parent / "css/setup.css").read_text()
+    assert "state.selectedEnchants[slot] = new Set(state.equippedEnchants[slot])" in state
+    assert "state.selectedGems.add(gemId)" in state
+    assert "else state.selectedEnchants[slot].delete(id)" in enhancements
+    assert "else state.selectedGems.delete(id)" in enhancements
+    assert "state.equippedEnchants[slot].delete" not in enhancements
+    assert "state.equippedGems.delete" not in enhancements
+    assert "Array.from(state.selectedEnchants[slot] || [])" in payload
+    assert "Array.from(state.selectedGems)" in payload
+    assert "createElement(\'button\')" in enhancements
+    assert "aria-pressed" in enhancements
+    assert "visibleEnchants(enchants)" in enhancements
+    assert "search.type = \'search\'" in enhancements
+    assert "extraSockets" in enhancements
+    node = shutil.which("node") or str(Path.home() / ".hermes/tools/node-26.7.0-darwin-arm64/bin/node")
+    module = (Path(__file__).parent / "fixtures/enhancements.mjs").as_uri()
+    result = subprocess.run(
+        [node, "--input-type=module", "-e", (
+            f"import({module!r}).then(m => {{ const rows = m.visibleEnchants(["
+            "{id: 1, quality: 2}, {id: 2, quality: 3}, {id: 3}]); "
+            "if (rows.map(x => x.id).join(',') !== '2,3') process.exit(1); })"
+        )], capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "q-${q.cls}" in ui
+    assert "white-space:nowrap" in css
 
-    assert "gems?.standard" in js
 
+def test_wowhead_link_click_cannot_toggle_enhancement_selection():
+    root = Path(__file__).resolve().parent.parent / "src" / "web" / "static" / "js"
+    enhancements = (root / "setup/enhancements.js").read_text()
+    wowhead = (root / "core/wowhead.js").read_text()
 
-def test_current_gear_is_ready_to_run_and_selected_enhancements_are_checked():
-    response = resp(read_js())
-    assert response.status_code == 200
-    js = response.text
-
-    assert "let total = 1;" in js
-    assert "equippedEnchants[slot].has(id)" in js
-    assert "equippedGems.has(id)" in js
-    assert "void generateInput(true);" in js
-    assert "PVP_META_NAME_MATCH" in js
+    # The selection listener belongs only to the button; the anchor is appended
+    # directly to the group afterward, so its click cannot bubble through it.
+    assert "button.addEventListener('click', () => {" in enhancements
+    assert enhancements.count("group.appendChild(button);\n        appendWowheadLink(group,") == 3
+    assert "group.appendChild(wrapper.firstElementChild)" in enhancements
+    assert 'class="enhancement-name-link wowhead-item-link"' in wowhead
+    assert "button.innerHTML = createEnhancementWowheadLink" not in enhancements
 
 
 def test_report_gear_summary_shows_only_slot_and_item_link():
@@ -509,7 +761,7 @@ def test_results_subtitle_alternative_count_is_singular_correct():
     script = (
         "const mk = (n, isEquipped) => { const ranked = { length: n }; return "
         + template + "; };"
-        "const cases = [[1, '1 alternative ranked against the top candidate.'], "
+        "const cases = [[1, '1 alternative ranked against the top candidate (fallback baseline).'], "
         "[2, '2 alternatives ranked against your equipped gear.']];"
         "let fail = 0;"
         "for (const [n, want] of cases) {"
@@ -522,17 +774,15 @@ def test_results_subtitle_alternative_count_is_singular_correct():
     assert result.returncode == 0, result.stderr
 
 
-def test_successful_simulation_exposes_uploaded_report_link():
+def test_successful_simulation_opens_in_app_results():
     response = resp(read_js())
     assert response.status_code == 200
     js = response.text
 
     assert "message.report_file && message.task_id" in js
-    # t_c968bf8d: durable reports live under /reports/<user_id>/<task_id>/, so
-    # the frontend resolves the URL via /api/report-url instead of building it.
-    assert "api/report-url?task_id=" in js
-    assert "document.getElementById('btn-open-report')" in js  # MGE-2 A2 hero link (t_94a15fe3), RED-3 static anchor in results.html
-    assert "link.hidden = false;" in js
+    assert "window.location.href = `results?task_id=${encodeURIComponent(message.task_id)}" in js
+    assert "api/report-url?task_id=" not in js
+    assert "btn-open-report" not in js
 
 
 # ---------------------------------------------------------------------------
@@ -666,6 +916,17 @@ def test_css_comments_are_balanced():
         assert "/*" not in stripped and "*/" not in stripped, f"unbalanced CSS comment in {sheet.name}"
     tokens = (css_dir / "tokens.css").read_text(encoding="utf-8")
     assert ":root{" in re.sub(r"/\*.*?\*/", "", tokens, flags=re.S)
+
+
+def test_uncommon_item_name_matches_grade_color_token():
+    import re
+    from pathlib import Path
+    css = (Path(__file__).resolve().parents[1] / "src/web/static/css/tokens.css").read_text(encoding="utf-8")
+    assert re.search(r"\.q-uncommon\s*\{color:var\(--q-uncom\)\}", css)
+    assert re.search(r"\.grd\.uncommon\s*\{color:var\(--grd-uncom\)\}", css)
+    assert "--grd-uncom:var(--q-uncom)" in css
+    assert "--q-uncom:#2b7a3d" in css
+    assert "--q-uncom:#7cc986" in css
 
 
 def test_chip_render_degrades_on_malformed_tooltip():

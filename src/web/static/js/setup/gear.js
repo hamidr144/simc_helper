@@ -10,7 +10,7 @@ import { state } from '../core/state.js';
 
 import { escapeHtml as esc } from '../core/dom.js';
 
-import { SLOT_SECTIONS, craftedBadgeHtml, isCraftedItem, itemLevelFromLabel, normalizedEquippedItems, parseItemParams, ranksForItem } from '../core/items.js';
+import { SLOT_SECTIONS, craftedBadgeHtml, isCraftedItem, itemLevelFromLabel, normalizedEquippedItems, parseItemParams, ranksForItem, resolveRowQuality } from '../core/items.js';
 
 import { removeAddedItem, wireSlotAddForm } from './add-item.js';
 
@@ -89,7 +89,7 @@ export function renderGear() {
       const card = itemRow('eqc', {
         id: params.id,
         name: String(label).replace(/\s*\(\d+\)/, ''),
-        quality: params.quality,
+        quality: resolveRowQuality(item),  // t_e906dc02: one resolver, never params alone (armory strings carry no quality=)
         ilvl: Number(params.ilevel) || itemLevelFromLabel(label),
         slotLabel: section.label,
         slotTag: section.equipKeys.length > 1 ? `slot ${index + 1}` : '',
@@ -98,11 +98,16 @@ export function renderGear() {
       return `<div class="eqrow"><div class="eqtag"><span class="tag eq">equipped${section.equipKeys.length > 1 ? ` · slot ${index + 1}` : ''}</span></div>${card}</div>`;
     }).join('');
 
-    const rows = items.filter(item => !equippedSet.has(item)).flatMap(item => {
+    const rows = items.flatMap(item => {
       const params = parseItemParams(item);
       const cleanName = String(state.parsedData.item_names[item] || `item ${params.id || ''}`)
         .replace(/\s*\(\d+\)/, '');
-      return ranksForItem(slot, item).map(variant => {
+      const variants = ranksForItem(slot, item);
+      // CRIT t_632eeef0: real gear is equipped-only, and filtering equipped
+      // items out entirely made rank/VF rows unreachable. An equipped piece
+      // now renders its upgrade rows; the eqc card above stays its base row.
+      const visible = equippedSet.has(item) ? variants.filter(v => v.rank !== null) : variants;
+      return visible.map(variant => {
         const level = variant.ilvl
           ?? (Number(params.ilevel) || itemLevelFromLabel(state.parsedData.item_names[item]) || null);
         const suffix = variant.rank
@@ -115,7 +120,7 @@ export function renderGear() {
         return itemRow('vrow', {
           id: params.id,
           name: cleanName + suffix,
-          quality: variant.voidforged ? 'epic' : params.quality,
+          quality: variant.voidforged ? 'epic' : resolveRowQuality(item),
           ilvl: level,
           sel: variantMatches(slot, item, variant.rank, variant.voidforged),
           disabled: locked,
@@ -156,7 +161,7 @@ export function renderGear() {
           aria-label="Wowhead item id to add to ${esc(section.label)}">
         <button type="button" class="slot-add-button">Preview</button></div>
       <div class="slot-add-preview" hidden></div>
-      ${eqBlock}
+      ${eqBlock}${addedBlock}
       <div class="rows">${rows}</div></section>`;
   }).join('');
   if (window.scrollTo) window.scrollTo(0, y);
@@ -166,8 +171,10 @@ export function renderGear() {
 }
 
 function wireSections(list) {
-  // doc 4.2 collapse parity on v11 rows: top 3 unselected visible, rest fold
-  // behind a +N chip (foldChips keeps selected/excluded always visible).
+  // doc 4.2 collapse parity on v11 rows: first 3 rows visible whatever their
+  // selection state, the rest fold behind a +N chip (foldChips keeps
+  // selected/excluded rows past the fold visible; RED-S5F budget fix means
+  // selecting a visible row no longer reveals another one).
   for (const rows of list.querySelectorAll('.rows')) foldChips(rows, 3);
   for (const section of list.querySelectorAll('.slotsec')) {
     const slot = section.dataset.slot;
@@ -195,6 +202,16 @@ function wireSections(list) {
       if (open) addForm.querySelector('.slot-add-input').focus();
     });
     wireSlotAddForm(section, slot);
+
+    // t_77ea4b76 (BUG-2): the added-line × is the ONLY removal affordance for
+    // add-by-ID items — the dead template that never interpolated addedBlock
+    // made added items permanently unremovable.
+    for (const chip of section.querySelectorAll('.row-x[data-remove]')) {
+      chip.addEventListener('click', () => {
+        removeAddedItem(slot, chip.dataset.remove);
+        persistDraft();
+      });
+    }
 
     toggleAll.addEventListener('click', () => {
       const selectAll = toggleAll.textContent === 'Select all';

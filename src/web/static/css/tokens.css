@@ -29,7 +29,7 @@
   --lh:1.45;
   /* RED-2M10 · shared row/card grid (gear eqc + vrow; results candup mirrors it):
      icon | name | ilvl | grade | delta pill | checkbox — fixed right-aligned cluster. */
-  --col-ic:42px; --col-il:40px; --col-grd:52px; --col-d:68px; --col-pick:20px;
+  --col-ic:42px; --col-il:40px; --col-grd:68px; --col-d:68px; --col-pick:20px;
   /* RED-3 · contextual tokens — hoists the zip's component-level hexes so every
      color lives in a palette block (gate 10). Values identical to RED-2M12 v11. */
   --gold:#846500; --eq-bg:#ffffff;                                   /* C-2 (was #a67c00, style.css L42) */
@@ -39,8 +39,8 @@
   --ic-bg:#eef0f4;          /* icon frame ground (style.css L18 dark: canvas) */
   --ic-epic-fg:#5c3a92; --ic-rare-fg:#245a94;        /* .ic.epic/.rare monogram ink */
   --ic-bg-epic:#f4eefa; --ic-bg-rare:#eef4fb;        /* .ic.big.epic/.rare ground */
-  --q-epic:#6b41b8; --q-rare:#2a65a8;                /* quality-colored names/grade words */
-  --grd-uncom:#2b7a3d;                               /* .grd.uncommon (light = r-uncom) */
+  --q-epic:#6b41b8; --q-rare:#2a65a8; --q-uncom:#2b7a3d; /* quality-colored names/grade words */
+  --grd-uncom:var(--q-uncom);                        /* .grd.uncommon */
   --mod-ench-fg:#6b41b8; --mod-ench-bd:#ddcfee; --mod-ench-bg:#f4eefa;
   --mod-gem-fg:#2a65a8; --mod-gem-bd:#c9dbef; --mod-gem-bg:#eef4fb;
   --ok-bd:#bfe0cb;          /* .chip.ok border */
@@ -146,8 +146,8 @@ main{max-width:1240px;margin:0 auto;padding:16px 20px 96px}
 /* quality grade word (WOW-tooltip style), quality-colored */
 .grd{font-size:10px;font-weight:750;letter-spacing:.03em;text-transform:uppercase}
 .grd.epic{color:var(--q-epic)} .grd.rare{color:var(--q-rare)} .grd.uncommon{color:var(--grd-uncom)}
-/* quality-colored names (zip scoped .q-epic/.q-rare on eqc/cchip/cdet/setcard → one pair) */
-.q-epic{color:var(--q-epic)} .q-rare{color:var(--q-rare)}
+/* quality-colored names (zip scoped .q-epic/.q-rare/.q-uncommon on eqc/cchip/cdet/setcard → one pair) */
+.q-epic{color:var(--q-epic)} .q-rare{color:var(--q-rare)} .q-uncommon{color:var(--q-uncom)}
 .modi{color:var(--acc-text);font-size:11px;padding-left:2px}
 .doll{position:relative;display:grid;place-items:center;padding:12px 0}
 .doll svg{width:100%;max-width:215px;height:auto;display:block}
@@ -373,8 +373,8 @@ html[data-pal=dark]{
   --ic-bg:#26282d;
   --ic-epic-fg:#c39af0; --ic-rare-fg:#8dbcec;
   --ic-bg-epic:#221b2c; --ic-bg-rare:#1a2330;
-  --q-epic:#c39af0; --q-rare:#8dbcec;
-  --grd-uncom:#7cc986;
+  --q-epic:#c39af0; --q-rare:#8dbcec; --q-uncom:#7cc986;
+  --grd-uncom:var(--q-uncom);
   --mod-ench-fg:#4fd6c3; --mod-ench-bd:#27514b; --mod-ench-bg:#122a26;
   --mod-gem-fg:#8ed06a; --mod-gem-bd:#3c5a2c; --mod-gem-bg:#1b2a14;
   --gain-bd:#27513a;                              /* results.css L31 */
@@ -493,4 +493,13 @@ html[data-pal=light]{--gold:#846500;--eq-bg:var(--surface)}          /* C-2 (was
 .fight-style-select{background:var(--sunk);border:1px solid var(--line2);border-radius:var(--r-ctl);
   color:var(--ink);padding:6px 8px;font:inherit;font-size:12.5px;max-width:260px}
 .fight-style-select:hover{border-color:var(--acc)}
+@media(max-width:480px){
+  .history-table,.history-table tbody,.history-table tr,.history-table td{display:block;width:auto}
+  .history-table thead{display:none}
+  .history-table tr{border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--surface);margin-bottom:10px;padding:6px 12px}
+  .history-table td{display:flex;align-items:center;justify-content:space-between;gap:12px;border:0;padding:5px 0}
+  .history-table td::before{content:attr(data-label);color:var(--ink3);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  .history-table-card{min-width:0;overflow-x:hidden}
+}
+@media(min-width:481px){.history-table-card{overflow-x:visible}}
 .gear-conflict{margin:2px 20px 0}

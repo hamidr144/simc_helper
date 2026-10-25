@@ -25,6 +25,7 @@ the SSE done event that fires the ``run_history`` insert hook, and the
 
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -56,6 +57,18 @@ BASELINE_ONLY_REPORT = os.path.join(FIXTURES, "simc_nightly_report_baseline_only
 def _fixture_bytes(path: str) -> bytes:
     with open(path, "rb") as f:
         return f.read()
+
+
+def _served_report_bytes(path: str) -> bytes:
+    content = _fixture_bytes(path)
+    if b'name="viewport"' not in content.lower():
+        head = re.search(br"<head(?:\s[^>]*)?>", content, re.IGNORECASE)
+        meta = b'<meta name="viewport" content="width=device-width, initial-scale=1">'
+        if head:
+            return content[:head.end()] + meta + content[head.end():]
+        return b"<head>" + meta + b"</head>" + content
+    return content
+
 
 
 def _make_user(prefix: str = "acc") -> str:
@@ -115,6 +128,19 @@ def _read_until_terminal(stream, timeout: float = 20.0) -> str:
     raise AssertionError("SSE stream closed without a terminal event")
 
 
+def _history_row_by_id(client, run_id: str, timeout: float = 5.0) -> dict:
+    """Poll for one exact history row, never an unrelated concurrent run."""
+    deadline = time.time() + timeout
+    while True:
+        runs = client.get("/api/history").json()["runs"]
+        matches = [r for r in runs if r["run_id"] == run_id]
+        if matches or time.time() >= deadline:
+            break
+        time.sleep(0.2)
+    assert matches, f"no history row {run_id} in {runs} (waited {timeout}s)"
+    return matches[0]
+
+
 def _history_row(client: TestClient, task_id: str, timeout: float = 5.0) -> dict:
     """The history row whose report lives under ``<user>/<task_id>/``.
 
@@ -171,7 +197,7 @@ def test_e2e_run_records_history_row_with_real_nightly_report(history_user, work
     assert row["report_url"] == f"reports/{user_dir}/{task_id}/report_1.html"
     served = TestClient(app).get("/" + row["report_url"])
     assert served.status_code == 200
-    assert served.content == _fixture_bytes(MULTICOPY_REPORT)
+    assert served.content == _served_report_bytes(MULTICOPY_REPORT)
 
 
 def test_e2e_zero_combo_baseline_run_reaches_history(history_user, worker_ws):
@@ -188,18 +214,44 @@ def test_e2e_zero_combo_baseline_run_reaches_history(history_user, worker_ws):
     assert row["top_dps"] == 7877
     served = TestClient(app).get("/" + row["report_url"])
     assert served.status_code == 200
-    assert served.content == _fixture_bytes(BASELINE_ONLY_REPORT)
+    assert served.content == _served_report_bytes(BASELINE_ONLY_REPORT)
 
 
-def test_e2e_failed_run_records_failed_row_without_link(history_user, worker_ws):
-    """A non-zero exit still lands a row (status=failed) and no dead link."""
+def test_e2e_failed_run_records_failed_row_without_link(history_user, worker_ws, monkeypatch):
+    """A non-zero exit still lands its own row (status=failed) and no dead link."""
     client = _authed_client(history_user)
-    task_id, _ = _drive_run(client, worker_ws, code=1)
+    inserted_run_ids = []
+    insert = master.run_history_insert
 
-    runs = client.get("/api/history").json()["runs"]
-    assert any(r["status"] == "failed" for r in runs), runs
-    failed = [r for r in runs if r["status"] == "failed"][-1]
-    assert failed["report_url"] is None
+    def capture_insert(record):
+        inserted_run_ids.append(record["run_id"])
+        return insert(record)
+
+    monkeypatch.setattr(master, "run_history_insert", capture_insert)
+    task_id, _ = _drive_run(client, worker_ws, code=1)
+    assert len(inserted_run_ids) == 1
+    row = _history_row_by_id(client, inserted_run_ids[0])
+    assert row["status"] == "failed", f"task {task_id} recorded unexpected row {row}"
+    assert row["report_url"] is None
+
+
+def test_failed_history_poll_ignores_unrelated_failed_row():
+    """An unrelated failed run cannot satisfy polling for the target run."""
+    unrelated = {"run_id": "other", "status": "failed", "report_url": None}
+    target = {"run_id": "target", "status": "failed", "report_url": None}
+
+    class Client:
+        polls = 0
+
+        def get(self, path):
+            assert path == "/api/history"
+            self.polls += 1
+            runs = [unrelated] if self.polls == 1 else [unrelated, target]
+            return type("Response", (), {"json": lambda self: {"runs": runs}})()
+
+    client = Client()
+    assert _history_row_by_id(client, "target", timeout=1) is target
+    assert client.polls == 2
 
 
 # ---------------------------------------------------------------------------
@@ -226,7 +278,7 @@ def test_restart_in_memory_loss_keeps_history_link_serving(history_user, worker_
 
         served = TestClient(app).get("/" + after["report_url"])
         assert served.status_code == 200
-        assert served.content == _fixture_bytes(MULTICOPY_REPORT)
+        assert served.content == _served_report_bytes(MULTICOPY_REPORT)
 
         # get-results' sibling lookup must also survive the lost map.
         resolved = TestClient(app).get(f"/api/report-url?task_id={task_id}")
@@ -386,7 +438,7 @@ def test_restart_persistence_two_process_history_link_serves_report(tmp_path):
         assert len(runs) == 1
         assert runs[0]["top_dps"] == 7887
         report_url = runs[0]["report_url"]
-        assert client.get("/" + report_url).content == report
+        assert client.get("/" + report_url).content == _served_report_bytes(MULTICOPY_REPORT)
 
         # ---- restart the process (same BASE_DIR volume) ----
         _stop_master(proc)
@@ -401,7 +453,7 @@ def test_restart_persistence_two_process_history_link_serves_report(tmp_path):
         # the /history link still serves the exact report bytes
         served = client.get("/" + report_url)
         assert served.status_code == 200
-        assert served.content == report
+        assert served.content == _served_report_bytes(MULTICOPY_REPORT)
 
         # report-url resolves with an EMPTY task map (glob fallback)
         resolved = client.get(f"/api/report-url?task_id={task_id}")

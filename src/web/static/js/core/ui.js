@@ -74,36 +74,43 @@ export function itemRow(variant, d) {
       title="${esc(d.title ?? d.name)}"
       data-item="${esc(d.item ?? '')}"${d.rank ? ` data-rank="${esc(String(d.rank))}"` : ''}${d.voidforged ? ' data-vf="1"' : ''}>
       ${icon}
-      <span class="name">${stateTag(d)}${esc(d.name)}${d.ench ? '<span class="modi" title="enchant / modifier">⚡</span>' : ''}</span>
+      <span class="name q-${q.cls}" title="${esc(d.name)}">${stateTag(d)}${esc(d.name)}${d.ench ? '<span class="modi" title="enchant / modifier">⚡</span>' : ''}</span>
       <span class="il num">${d.ilvl ?? '—'}</span>
       <span class="grd ${q.cls}">${q.word}</span>${delta}
-      <span class="pick" aria-hidden="true"></span></button>`;
+    </button>`;
   }
   // results variants: the caller wraps (button/rowfoot state lives there)
   return `${icon}
-    <span class="name${d.sel ? '' : ''}" title="${esc(d.name)}">${stateTag(d)}${esc(d.name)}${d.ench ? '<span class="modi" title="enchant / modifier">⚡</span>' : ''}</span>
+    <span class="name q-${q.cls}" title="${esc(d.name)}">${stateTag(d)}${esc(d.name)}${d.ench ? '<span class="modi" title="enchant / modifier">⚡</span>' : ''}</span>
     <span class="il num">${d.ilvl ?? '—'}</span>
     <span class="grd ${q.cls}">${q.word}</span>${delta}`;
 }
 
 /* chip/row overflow folds to +N (zip foldChips port; DOM post-pass).
-   RED-3 doc 4.2 parity: selected/excluded rows never fold away. */
+   RED-3 doc 4.2 parity: selected/excluded rows never fold away.
+   RED-S5F (contract §12 gate 4, RED-S5 FAIL 2): the fold budget counts every
+   row, selected or not — a selection must never reveal an extra row, so the
+   section geometry stays fixed when a visible row is toggled. */
 export function foldChips(host, max) {
-  const kids = [...host.children].filter(el =>
-    !el.classList.contains('fold') && !el.classList.contains('sel') && !el.classList.contains('ex'));
+  const kids = [...host.children].filter(el => !el.classList.contains('fold'));
   if (kids.length <= max) return;
-  kids.slice(max).forEach(el => { el.hidden = true; });
+  const fold = kids.slice(max).filter(el => !el.classList.contains('sel') && !el.classList.contains('ex'));
+  fold.forEach(el => { el.hidden = true; });
+  if (!fold.length) return;
   const more = document.createElement('button');
   more.type = 'button';
   more.className = 'fold chip';
-  more.textContent = `+${kids.length - max}`;
+  more.textContent = `+${fold.length}`;
   more.setAttribute('aria-expanded', 'false');
   more.addEventListener('click', () => {
-    kids.slice(max).forEach(el => { el.hidden = false; });
+    fold.forEach(el => { el.hidden = false; });
     more.remove();
   });
   host.appendChild(more);
 }
+// shortcut: rows that fold away on DE-select (a parity-selected row beyond the
+// budget) or re-fold after a +N expand still move layout; upgrade only if that
+// flow ever persists the expanded state across renders.
 
 export { esc };
 

@@ -14,7 +14,7 @@ Three surfaces, one PR:
 
 import json
 import os
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -106,11 +106,16 @@ def test_api_config_serves_only_gear_slot_keys(monkeypatch, tmp_path):
                     "gems": {"standard": [{"id": 241142}], "meta": [{"id": 240983}]}}),
         encoding="utf-8")
     monkeypatch.chdir(tmp_path)
-    body = client.get("/api/config").json()
+    # t_a856571d: /api/config now warms record quality via the cached Wowhead
+    # XML path; patch the fetch boundary to stay offline (repo convention).
+    with patch("src.web.main.fetch_wowhead_upgrade", new=AsyncMock(return_value=None)):
+        body = client.get("/api/config").json()
     assert set(body["enchantments"]) <= GEAR_SLOTS          # G8.5
     assert "profession_tool" not in body["enchantments"]    # G8.5
     assert {"standard", "meta"} <= set(body["gems"])        # G8.5
-    assert body["enchantments"] == MAPPED
+    # t_a856571d: records gained an additive `quality` key; compare the shape without it.
+    assert {slot: [{k: v for k, v in entry.items() if k != "quality"} for entry in entries]
+            for slot, entries in body["enchantments"].items()} == MAPPED
 
 
 # --- 2. rule R: stage plan ----------------------------------------------------

@@ -98,6 +98,18 @@ git fetch origin prod && git tag vX.Y.Z refs/remotes/origin/prod && git push ori
 
 Every merged milestone bumps the prod version (MINOR for features, MAJOR for breaking, PATCH for prod hotfixes — hotfixes are also cherry-picked back to `dev` through a normal PR). A prod deploy is a deliberate, user-approved event — never merge-and-ship on autopilot.
 
+## Secure agent QA login
+
+Use a dedicated, least-privilege account for dev/test QA only. Do not reuse a production or personal account. An operator must approve the account and store its credentials in the centrally approved password manager, configured for each agent profile that needs access; vault availability and saved items are profile/environment-specific and are not assumed to synchronize automatically.
+
+On the test service's exact login origin, use the installed `browser_vault` flow: call `list` first to find a saved login (and whether a supported manager is locked), ask the user to unlock the manager with `unlock` if needed, then use `fill` with the listed handle. `fill` is restricted to a matching page origin. Never copy or type the password yourself. If the approved login is absent or inaccessible to your profile, stop and request that an operator configure approved vault access; do not ask for credentials in chat or work around authentication.
+
+Never put passwords, one-time codes, authenticator secrets, session cookies/tokens, or screenshots/artifacts containing them in Discord, Kanban, source code, logs, or other deliverables. Do not bypass or disable authentication for convenience. Use only the approved vault flow; do not create or register accounts as part of QA without explicit authorization.
+
+### Browser tools for web-view QA
+
+For every agent doing SimC Helper web-view QA, use Hermes core browser (`browser.backend=off`): navigate to the intended dev page with `browser_navigate`, then use `browser_snapshot`, `browser_click`, and `browser_type` on that same page; reserve `browser_type` for ordinary non-credential fields. For authentication, credentials must be filled only through `browser_vault`, never copied or typed. This tool is deferred; if it is not listed, discover it with `hermes_tool_search` for `browser_vault`, load its schema with `tool_describe`, then call `action=list`; unlock only if needed, and use `fill` with the listed saved-login handle on the exact matching origin. Preserve the same-origin and private-address safeguards; do not bypass authentication or create accounts. Never expose credentials, tokens, codes, or artifacts containing them. Keep page interaction in this core-browser/Vault context—do not substitute `computer_use`, Playwright, or another context. `computer_use` is only for native desktop/browser chrome, never app page content; a Chrome window on another macOS Space is not a reason to switch contexts or foreground-escalate. Verify `/api/state` returns HTTP 200 before protected QA. If a fresh task session lacks required browser tools, stop and report the exact missing capability for leader provisioning; do not improvise or weaken safeguards.
+
 ## The two systems
 
 | | Prod system | Dev system |
@@ -130,6 +142,10 @@ curl -s http://127.0.0.1:8000/health
 ```
 
 Rollback: `git checkout <last-good-tag>` in the prod worktree, rebuild, `docker compose -p simc_helper up -d --force-recreate`. `git checkout <tag>` detaches HEAD, so re-attach before the next deploy: `git checkout prod && git pull`. Data lives in named volumes and survives either way.
+
+## Inspecting a page
+
+For all SimC Helper web-view QA, follow **Secure agent QA login** above: use the Hermes core browser and same-page Vault context for page content and interaction. Do not use `browser_exec`, Playwright, `computer_use`, or another browser context for this work. Inspect with `browser_snapshot`, prefer accessible structure over screenshots, and record the URL/environment and what you actually observed. Do not infer authenticated or populated-state behavior from an empty/unauthenticated page; report an unreachable origin as a limitation rather than claiming success.
 
 ## Quick rules
 

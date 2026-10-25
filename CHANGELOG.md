@@ -10,6 +10,61 @@ new version is prepared and reviewer-approved as a mandatory step (see WORKFLOW.
 "Milestone: dev → prod"); the `CHANGELOG.md` update ships in the same merge commit
 that bumps the version and tag.
 
+## [1.3.0] — 2026-10-25
+
+MINOR milestone from the `1.1.1-dev.N` line (dev at tag `v1.1.1-dev.32`,
+124 commits ahead of `v1.2.0`). Entries regenerated from
+`git log prod..dev`; version number leader-ruled at merge time.
+
+### Features
+
+- Gear items and candidate rows are colorized by item quality (uncommon
+  names included), with fixed grade/item-level spacing and the color kept
+  for excluded candidates (t_acc7227a, t_99474dca, t_b045e938, t_b849ad8e,
+  t_b9684671, t_67759d7c).
+- Gear-row item quality is resolved from the Armory payload with Wowhead
+  hydration; Add-by-ID tooltip-preview quality carries into the committed
+  row, with a Current rank row for un-placeable raw-id adds (t_e906dc02,
+  t_910b4761).
+- Season-ladder fallback so real gear shows its rank rows, including
+  Ascendant-tier rows (t_632eeef0).
+- Add-by-ID slot guard via item-XML inventorySlot, with visible
+  draft-restoration (t_1699829f).
+- Results and history links open in-app results views instead of raw
+  SimC report files (#72).
+- `/api/config` exposes WoW quality on enchant/gem records (t_a856571d).
+
+### Improvements
+
+- Results: content clears from the fixed action bar; fallback baseline
+  labels clarified (t_c484d759, t_14093b36).
+- Mobile: runbar selector labels show completely, and the Armory
+  placeholder, history filter prompt and selects fit narrow viewports
+  (t_d521fc17).
+- Enhancement selection is separated from the Wowhead link; the gear
+  candidate checkbox marker is removed (t_b0bfedf8, t_57c540b4).
+- `/api/wowhead-upgrades` trusts the item-string Blizzard upgrade bonus
+  for track/rank (t_9b710d75).
+- Generated SimC reports render with a mobile viewport (t_86cf1b9b).
+
+### Bug fixes
+
+- Layout on mobile and desktop: setup/dashboard runbars no longer overlap
+  content (Neck controls, scroller, history rows), the setup page is
+  scroll-reachable at the bottom, mobile history rows no longer stack
+  broken, gear selection no longer shifts the layout, and mobile wheel
+  scrolling is stable (t_0d22936e, t_45ab76c5, t_9ab1e247, t_187de960,
+  t_5a74d15e, t_7c473885, t_c5dca18c, t_4900f771, t_57c540b4, #68).
+- Per-slot recommendation rank label position fixed (t_9648f5e8).
+- Enhancement selection and quality presentation corrected (t_b0bfedf8).
+- Paste-path item names are no longer misattributed (block-comment parser
+  guard + Wowhead name hydration) (t_5fe563ac).
+- Draft restore treats added-item keys as authoritative; added-item grade
+  hydrates at commit and addedBlock removal is wired (t_65bd1b07,
+  t_1321a4a7).
+- `paste.js` tokenizes to match the app.html entry so `pages/setup.js`
+  loads as a single module instance (no split state) (t_26c5ddef).
+
 ## [1.2.0] — 2026-10-21
 
 MINOR milestone carrying the full UI redesign epic from the `1.1.1-dev.N`

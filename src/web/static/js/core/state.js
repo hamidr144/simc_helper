@@ -16,6 +16,7 @@ export const state = {
   slotLocks: {},            // RED-3 §3: client-only section locks; survives re-init, persists with draft
   addedItems: new Map(),
   twoHandedItems: new Set(),
+  wowheadQualities: {},       // t_e906dc02: item string -> Wowhead quality number (conflict.js hydration)
   generatedInput: null,
   generationTimer: null,
   runTimer: null,
@@ -32,6 +33,7 @@ export const state = {
 export function initializeSelections() {
   state.selectedItems = {};
   state.twoHandedItems = new Set();
+  state.wowheadQualities = {};
   state.selectedEnchants = {};
   state.selectedGems = new Set();
   state.equippedEnchants = {};
@@ -79,7 +81,6 @@ export function initializeSelections() {
     }
   }
   for (const slot of Object.keys(state.appConfig.enchantments || {})) {
-    state.selectedEnchants[slot] = new Set();
     state.equippedEnchants[slot] = new Set();
     const configuredIds = new Set((state.appConfig.enchantments[slot] || []).map(enchant =>
       String(typeof enchant === 'object' ? enchant.id : enchant)
@@ -90,6 +91,7 @@ export function initializeSelections() {
         state.equippedEnchants[slot].add(String(enchantId));
       }
     }
+    state.selectedEnchants[slot] = new Set(state.equippedEnchants[slot]);
   }
 
   const configuredGemIds = new Set((state.appConfig.gems?.standard || []).map(gem =>
@@ -97,7 +99,10 @@ export function initializeSelections() {
   ));
   for (const item of Object.values(state.parsedData.equipped_gear || {})) {
     for (const gemId of String(parseItemParams(item).gem_id || '').split('/')) {
-      if (configuredGemIds.has(gemId)) state.equippedGems.add(gemId);
+      if (configuredGemIds.has(gemId)) {
+        state.equippedGems.add(gemId);
+        state.selectedGems.add(gemId);
+      }
     }
   }
 
