@@ -104,6 +104,10 @@ Use a dedicated, least-privilege account for dev/test QA only. Do not reuse a pr
 
 On the test service's exact login origin, use the installed `browser_vault` flow: call `list` first to find a saved login (and whether a supported manager is locked), ask the user to unlock the manager with `unlock` if needed, then use `fill` with the listed handle. `fill` is restricted to a matching page origin. Never copy or type the password yourself. If the approved login is absent or inaccessible to your profile, stop and request that an operator configure approved vault access; do not ask for credentials in chat or work around authentication.
 
+### SimC Helper web-view QA browser tools (all agents)
+
+For all agents doing SimC Helper web-view QA, use Hermes core `browser_navigate`, `browser_snapshot`, `browser_click`, and `browser_type` for web-page navigation/content, and `browser_vault` for same-page authentication (only use Vault on the exact same origin as the login page). Navigate only to the approved QA service; never navigate to an unapproved private or otherwise disallowed address; require `/api/state` to return HTTP 200 before protected QA. `computer_use` is only for native desktop/browser chrome: a Chrome window on another macOS Space is not a reason to use it or foreground-escalate. If a required browser tool is unavailable, stop and report the exact capability blocker; do not switch tools or bypass these safeguards.
+
 Never put passwords, one-time codes, authenticator secrets, session cookies/tokens, or screenshots/artifacts containing them in Discord, Kanban, source code, logs, or other deliverables. Do not bypass or disable authentication for convenience. Use only the approved vault flow; do not create or register accounts as part of QA without explicit authorization.
 
 ## The two systems
