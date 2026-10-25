@@ -185,11 +185,11 @@ export function renderResults(results, mode, els) {
   const sidegrades = band === null ? 0 : ranked.filter((r, i) => i > 0 && r.dps >= band).length;
 
   subtitle.textContent = ranked.length
-    ? `${ranked.length} alternative${ranked.length === 1 ? '' : 's'} ranked against ${isEquipped ? 'your equipped gear' : 'the top candidate'}.`
+    ? `${ranked.length} alternative${ranked.length === 1 ? '' : 's'} ranked against ${isEquipped ? 'your equipped gear' : 'the top candidate (fallback baseline)'}.`
     : (isEquipped ? 'Only your equipped baseline was simulated.' : 'No equipped baseline run was found in the report.');
   if (sidegrades > 0) subtitle.textContent += ` ${sidegrades} sidegrades within 2× error of best.`;
 
-  const baseLabel = isEquipped ? 'equipped gear' : 'top candidate';
+  const baseLabel = isEquipped ? 'your equipped gear' : 'the top candidate (fallback baseline)';
   const modeChip = MODE_LABELS[mode]
     ? `<span class="chip">${MODE_LABELS[mode]}</span>` : '';
   if (slots.modeNote) slots.modeNote.textContent = MODE_HINTS[mode] ||
@@ -241,7 +241,7 @@ export function renderResults(results, mode, els) {
   if (bySlot.size) {
     slots.recos.hidden = false;
     slots.recos.querySelector('.panelh .sub').textContent =
-      'best ranked candidate per slot · deltas vs your baseline';
+      `best ranked candidate per slot · deltas vs ${baseLabel}`;
     const total = bySlot.size;
     slots.recos.querySelector('.upgrid').innerHTML = [...bySlot.entries()].map(([slot, { result, change, index }]) => {
       const info = infoFor(change.id);
