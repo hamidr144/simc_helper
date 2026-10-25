@@ -88,9 +88,9 @@ def test_apply_gear_upgrade_uses_midnight_track_rank_instead_of_manual_item_leve
     assert apply_gear_upgrade("id=123,bonus_id=456", {"track": "myth", "rank": 6}, season=s1) == ",id=123,ilevel=289,bonus_id=456"
     assert apply_gear_upgrade("id=123,ilevel=263", {"track": "hero", "rank": 6}, season=s1) == ",id=123,ilevel=276"
     assert apply_gear_upgrade("id=123,ilevel=276", {"track": "myth", "rank": 6}, slot="trinket", voidforged=True, season=s1) == ",id=123,ilevel=298"
-    # Season 2: Venomforged resolves to absolute ascended ilvls (hero 328 / myth 340).
+    # Season 2: Venomforged resolves to absolute ascended ilvls (hero 328 / myth 341).
     assert apply_gear_upgrade("id=123,bonus_id=456", {"track": "myth", "rank": 6}) == ",id=123,ilevel=334,bonus_id=456"
-    assert apply_gear_upgrade("id=123,ilevel=334", {"track": "myth", "rank": 6}, slot="trinket", voidforged=True) == ",id=123,ilevel=340"
+    assert apply_gear_upgrade("id=123,ilevel=334", {"track": "myth", "rank": 6}, slot="trinket", voidforged=True) == ",id=123,ilevel=341"
     assert apply_gear_upgrade("id=123,ilevel=321", {"track": "hero", "rank": 6}, slot="main_hand", voidforged=True) == ",id=123,ilevel=328"
     # Non-eligible slots never ascend.
     assert apply_gear_upgrade("id=123,ilevel=334", {"track": "myth", "rank": 6}, slot="head", voidforged=True) == ",id=123,ilevel=334"
@@ -105,7 +105,7 @@ def test_apply_gear_upgrade_prefers_export_provided_item_level():
     # A garbage item_level falls back to the track/rank ladder.
     assert apply_gear_upgrade("id=123,ilevel=327", {"source": "export", "track": "myth", "rank": 6, "item_level": "nope"}) == ",id=123,ilevel=334"
     # Ascension (Venomforged) still overrides export ranks when a track is known.
-    assert apply_gear_upgrade("id=123,ilevel=327", {"source": "export", "track": "myth", "rank": 1, "item_level": 331}, slot="trinket", voidforged=True) == ",id=123,ilevel=340"
+    assert apply_gear_upgrade("id=123,ilevel=327", {"source": "export", "track": "myth", "rank": 1, "item_level": 331}, slot="trinket", voidforged=True) == ",id=123,ilevel=341"
     # Non-export entries (e.g. Wowhead hydration) keep using track/rank even
     # though they carry item_level (which there is the item's *current* level).
     assert apply_gear_upgrade("id=123,ilevel=327", {"track": "myth", "rank": 6, "item_level": 327}) == ",id=123,ilevel=334"
@@ -115,13 +115,13 @@ def test_apply_gear_upgrade_crafted_base_uses_crafted_ascension_ilvl():
     """C1: a max-quality crafted base ascends to the season's crafted_results
     ilvl (lower than the track results value); non-crafted lines are unchanged."""
     s1 = get_season("midnight-s1")
-    # S2 crafted Venomforged: myth 338 / hero 325 (not the track 340 / 328).
-    assert apply_gear_upgrade("id=1,ilevel=331,crafted_stats=1/2", {"track": "myth", "rank": 6}, slot="trinket", voidforged=True) == ",id=1,ilevel=338,crafted_stats=1/2"
-    assert apply_gear_upgrade("id=1,ilevel=331,crafted_stats=1/2", {"track": "hero", "rank": 6}, slot="main_hand", voidforged=True) == ",id=1,ilevel=325,crafted_stats=1/2"
+    # S2 crafted Venomforged: myth 337 / hero 324 (not the track 341 / 328).
+    assert apply_gear_upgrade("id=1,ilevel=331,crafted_stats=1/2", {"track": "myth", "rank": 6}, slot="trinket", voidforged=True) == ",id=1,ilevel=337,crafted_stats=1/2"
+    assert apply_gear_upgrade("id=1,ilevel=331,crafted_stats=1/2", {"track": "hero", "rank": 6}, slot="main_hand", voidforged=True) == ",id=1,ilevel=324,crafted_stats=1/2"
     # Same line WITHOUT a crafted marker keeps the track ascended ilvl.
-    assert apply_gear_upgrade("id=1,ilevel=331", {"track": "myth", "rank": 6}, slot="trinket", voidforged=True) == ",id=1,ilevel=340"
+    assert apply_gear_upgrade("id=1,ilevel=331", {"track": "myth", "rank": 6}, slot="trinket", voidforged=True) == ",id=1,ilevel=341"
     # crafting_quality= is the other crafted marker (app.js isCraftedItem parity).
-    assert apply_gear_upgrade("id=1,ilevel=331,crafting_quality=4", {"track": "myth", "rank": 6}, slot="trinket", voidforged=True) == ",id=1,ilevel=338,crafting_quality=4"
+    assert apply_gear_upgrade("id=1,ilevel=331,crafting_quality=4", {"track": "myth", "rank": 6}, slot="trinket", voidforged=True) == ",id=1,ilevel=337,crafting_quality=4"
     # S1 crafted myth Voidforged: 295 (not the track 298).
     assert apply_gear_upgrade("id=1,ilevel=283,crafted_stats=1/2", {"track": "myth", "rank": 6}, slot="trinket", voidforged=True, season=s1) == ",id=1,ilevel=295,crafted_stats=1/2"
     # Ineligible slot never ascends, crafted or not (stays at the track level).
@@ -170,7 +170,7 @@ def test_upgrade_seasons_data_matches_live_midnight_values():
     # Ascended ilvls (track + crafted) stay within the known live tiers.
     s2_asc = set(s2["ascension"]["results"].values()) | set(s2["ascension"]["crafted_results"].values())
     s1_asc = set(s1["ascension"]["results"].values()) | set(s1["ascension"]["crafted_results"].values())
-    assert s2_asc <= {325, 328, 338, 340}
+    assert s2_asc <= {324, 328, 337, 341}
     assert s1_asc <= {282, 285, 295, 298}
 
 
