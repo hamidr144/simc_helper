@@ -13,9 +13,9 @@
   document.documentElement.dataset.pal=window.__pref==='system'
     ?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):window.__pref;})();
   </script>
-  <link rel="stylesheet" href="static/css/tokens.css?v=red3-3">
-  <link rel="stylesheet" href="static/css/setup.css?v=red3-14">
-  <link rel="stylesheet" href="static/css/run.css?v=red3-2">
+  <link rel="stylesheet" href="static/css/tokens.css?v=red3-4">
+  <link rel="stylesheet" href="static/css/setup.css?v=red3-15">
+  <link rel="stylesheet" href="static/css/run.css?v=red3-3">
 </head>
 <body>
 <a class="skip skip-link" href="#gear-grid">Skip to gear</a>
@@ -64,7 +64,7 @@
         </div>
       </div>
       <textarea id="addon-input" placeholder="Paste addon export or full SimC profile here" aria-label="Addon export text"></textarea>
-      <div class="run-actions" style="margin-top:8px">
+      <div class="run-actions">
         <button id="btn-parse-addon" class="btn">Load export</button>
         <button id="btn-new-export" class="btn-ghost">New export</button>
         <span class="char-count" id="addon-char-count"></span>

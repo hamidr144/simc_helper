@@ -10,7 +10,7 @@
 .runbar .progwrap[hidden]{display:none}
 @media (max-width:430px){.runbar .progwrap{padding:var(--gap-sm) 12px var(--gap-md)}}
 
-.run-actions{display:flex;gap:var(--gap-sm);flex-wrap:wrap;align-items:center}
+.run-actions{display:flex;gap:var(--gap-sm);flex-wrap:wrap;align-items:center;margin-top:var(--gap-sm)}
 .run-actions .runbtn{min-height:44px}
 
 .progress-card{display:flex;flex-direction:column;gap:10px;
@@ -30,7 +30,7 @@
 .log-follow{display:inline-flex;gap:7px;align-items:center;font-size:12px;color:var(--ink2);cursor:pointer}
 
 /* add-by-ID tooltip preview: inline panel under the Add-by-ID form */
-.slot-add-preview{display:block;margin:8px 20px 0;max-width:560px;padding:var(--gap-sm) var(--gap-md);
+.slot-add-preview{display:block;margin:var(--gap-sm) 20px 0;max-width:560px;padding:var(--gap-sm) var(--gap-md);
   border:1px solid var(--line2);border-radius:var(--r-ctl);background:var(--sunk);font-size:12.5px;color:var(--ink)}
 .slot-add-preview[hidden]{display:none}
 .slot-add-preview.is-error{border-color:var(--dn);color:var(--dn)}
