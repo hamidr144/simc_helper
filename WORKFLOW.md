@@ -1,16 +1,19 @@
 # simc_helper — Development Workflow
 
-Two long-lived branches, two systems, one rule: **nothing reaches `prod` without a leader-approved milestone.** This is the accepted GitHub workflow model (GHWR-1, leader-accepted 2026-10-18); it supersedes the PR #4/#6-era text outright.
+Two branch roles, two systems, one rule: **nothing reaches `prod` without a leader-approved milestone.** This is the accepted GitHub workflow model (GHWR-1, leader-accepted 2026-10-18); it supersedes the PR #4/#6-era text outright.
 
 ## Branches
 
 | Branch | Deploys to | Version scheme |
 |--------|-----------|----------------|
-| `dev`  | Dev/test system (http://127.0.0.1:8001) | `vMAJOR.MINOR.PATCH-dev.N` (e.g. `v1.2.0-dev.3`), tag each test deploy |
+| `dev`  | Dev/test system (http://127.0.0.1:8001); rotated to a fresh branch after each dev → prod milestone | `vMAJOR.MINOR.PATCH-dev.N` (e.g. `v1.2.0-dev.3`), tag each test deploy |
 | `prod` | Production system (http://127.0.0.1:8000; external TLS front is host infra, not in this repo) | `vMAJOR.MINOR.PATCH` (e.g. `v1.1.0`), tagged on every merged milestone PR |
+| `milestone/<version>` | — (cut from `dev`; short-lived release candidate; PR base `prod`) | — |
 | `feature/<kanban-id>-<slug>` | — (cut from `dev`, short-lived) | — |
 
-`prod` is the repository default branch (stable releases); it is NOT the PR base — always pass `--base dev` explicitly on every `gh pr create`.
+`prod` is the repository default branch (stable releases); it is NOT the PR base for ordinary work — always pass `--base dev` explicitly on every `gh pr create`. Milestone PRs are the exception and target `prod`.
+
+After each shipped dev → prod milestone, retire the old `dev` branch and create a fresh `dev` at the exact shipped `prod` merge commit (the tagged commit). Prefer renaming the old branch to preserve its history; deletion is acceptable when rename is unavailable. This branch rotation is a protected-ref operation and requires the authorized owner/admin operation. Never simulate it by merging prod into the old dev, cherry-picking, force-pushing, or weakening/bypassing the ruleset. Continue ordinary feature work from the fresh `dev` only after rotation is complete.
 
 `main` is a CI-sandbox island with no role in this flow; it goes away once its CI test-fix is merged into `dev`. After the `v1.0.0` milestone the team moves to trunk-based development (E2): `dev` becomes the trunk, prod becomes a tag + deploy, and the `prod` branch is retired. Until then, keep the two-line flow below.
 
@@ -96,7 +99,7 @@ git fetch origin prod && git tag vX.Y.Z refs/remotes/origin/prod && git push ori
 # deploy prod system (see below) and verify /health
 ```
 
-Every merged milestone bumps the prod version (MINOR for features, MAJOR for breaking, PATCH for prod hotfixes — hotfixes are also cherry-picked back to `dev` through a normal PR). A prod deploy is a deliberate, user-approved event — never merge-and-ship on autopilot.
+Every merged milestone bumps the prod version (MINOR for features, MAJOR for breaking, PATCH for prod hotfixes). A prod deploy is a deliberate, user-approved event — never merge-and-ship on autopilot. After a shipped milestone, rotate `dev` as described above; do not back-merge prod or separately backport a prod hotfix into the retired dev line.
 
 ## Secure agent QA login
 
@@ -149,7 +152,7 @@ For all SimC Helper web-view QA, follow **Secure agent QA login** above: use the
 
 ## Quick rules
 
-- Branch from `dev`, open PRs back to `dev` — direct push to `dev`/`prod` is blocked server-side for every push class, PR-head shas included (`GH013`/`GH006`); hotfixes reach prod through a PR too (then cherry-pick back to `dev` through a PR).
+- Branch from `dev`, open ordinary PRs back to `dev`; milestone PRs target `prod` from `milestone/<version>`. Direct push to `dev`/`prod` is blocked server-side for every push class, PR-head shas included (`GH013`/`GH006`). Prod hotfixes go through a PR; after a milestone the fresh `dev` starts at the shipped prod merge/tag commit, so do not cherry-pick or merge the old dev line back.
 - **The leader merges (MERGE identity, 1 approving review required server-side); the author never merges their own work; workers never merge and never touch branch protection or rulesets** (only leader-authorized protection cards do, via the Leader app token; the user via browser remains ultimate authority).
 - CI runs on every PR (dev and prod bases included); no checks ≠ passing checks.
 - Prod is never used for testing, and no prod ship without explicit approval. Dev system data is disposable; prod data is not.
