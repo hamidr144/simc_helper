@@ -761,7 +761,7 @@ def test_results_subtitle_alternative_count_is_singular_correct():
     script = (
         "const mk = (n, isEquipped) => { const ranked = { length: n }; return "
         + template + "; };"
-        "const cases = [[1, '1 alternative ranked against the top candidate.'], "
+        "const cases = [[1, '1 alternative ranked against the top candidate (fallback baseline).'], "
         "[2, '2 alternatives ranked against your equipped gear.']];"
         "let fail = 0;"
         "for (const [n, want] of cases) {"
