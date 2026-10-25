@@ -230,7 +230,8 @@ const QUALITY = {
   uncommon: { cls: 'uncommon', word: 'Uncommon' },
   rare: { cls: 'rare', word: 'Rare' },
   epic: { cls: 'epic', word: 'Epic' },
-  legendary: { cls: 'epic', word: 'Legendary' },
+  legendary: { cls: 'legendary', word: 'Legendary' },
+  artifact: { cls: 'artifact', word: 'Artifact' },
 };
 const QUALITY_BY_NUMBER = { 0: 'common', 1: 'common', 2: 'uncommon', 3: 'rare', 4: 'epic', 5: 'legendary', 6: 'epic', 7: 'artifact' };
 export function qualityOf(quality) {

@@ -223,3 +223,21 @@ def test_populated_desktop_setup_rows_clear_runbar_initial_and_running(app_url):
             assert not overlaps, {"running": running, "overlapping_rows": overlaps}
             assert page.locator(".runbar").bounding_box()["y"] >= page.locator("main").bounding_box()["y"]
         browser.close()
+
+
+@pytest.mark.parametrize("width", [430, 850])
+def test_runbar_selectors_have_tokenized_vertical_clearance(app_url, width):
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": width, "height": 477}, device_scale_factor=1)
+        page.goto(app_url, wait_until="networkidle")
+        assert page.evaluate("innerWidth") == width
+        fight = page.locator("#fight-style").bounding_box()
+        compare = page.locator("#compare-mode").bounding_box()
+        assert fight and compare
+        gap = compare["y"] - (fight["y"] + fight["height"])
+        token_gap = page.locator("html").evaluate(
+            "el => parseFloat(getComputedStyle(el).getPropertyValue('--gap-xs'))"
+        )
+        assert gap >= token_gap, {"width": width, "gap": gap, "required": token_gap}
+        browser.close()

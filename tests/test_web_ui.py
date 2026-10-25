@@ -440,6 +440,10 @@ def test_row_quality_resolver_and_draft_orphan_drop_node_probe():
     assert out["hydrationWins"] == "Rare"
     assert out["paramFallback"] == "Uncommon"
     assert out["commonFallback"] == "Common"
+    # t_c0c0b245: every grade resolves to its OWN class (legendary is no longer
+    # a piggyback epic; artifact is no longer the common fallback).
+    assert out["gradeCls"] == "uncommon,rare,epic,legendary,epic,artifact"
+    assert out["gradeWords"] == "Uncommon,Rare,Epic,Legendary,Epic,Artifact"
     assert out["draftSelected"] == ["id=268265,bonus_id=6652,ilevel=334"]
     # t_65bd1b07 (leader ruling): addedItems keys are AUTHORITATIVE at restore
     # and get re-inserted into items_by_slot/item_names; the orphan-drop stays
@@ -922,11 +926,37 @@ def test_uncommon_item_name_matches_grade_color_token():
     import re
     from pathlib import Path
     css = (Path(__file__).resolve().parents[1] / "src/web/static/css/tokens.css").read_text(encoding="utf-8")
-    assert re.search(r"\.q-uncommon\s*\{color:var\(--q-uncom\)\}", css)
+    assert re.search(r"\.q-uncommon,\.nm\.q-uncommon\{color:var\(--q-uncom\)\}", css)
     assert re.search(r"\.grd\.uncommon\s*\{color:var\(--grd-uncom\)\}", css)
     assert "--grd-uncom:var(--q-uncom)" in css
     assert "--q-uncom:#2b7a3d" in css
-    assert "--q-uncom:#7cc986" in css
+    assert "--q-uncom:#1eff00" in css
+
+
+def test_quality_palette_wowhead_all_grades_both_themes():
+    # t_c0c0b245 (user: equipped item name rides its grade color, Wowhead-style).
+    # Dark theme carries Wowhead's canonical .q* values (verified from their own
+    # global.css: .q0 #9d9d9d, .q2 #1eff00, .q3 #0070dd, .q4 #a335ee,
+    # .q5 #ff8000, .q6 #e5cc80); light theme keeps same-hue WCAG-safe variants.
+    # Contract: all six --q-* tokens defined in :root AND the dark override
+    # block; every .q-<cls> has the .nm.q-<cls> twin that beats .st .nm{color};
+    # the old dark gold .nm override must stay deleted.
+    import re
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1] / "src/web/static/css/tokens.css"
+    css = root.read_text(encoding="utf-8")
+    dark = css[css.index("html[data-pal=dark]{"):]
+    canonical = {"common": ("common", "#9d9d9d"), "uncom": ("uncommon", "#1eff00"),
+                 "rare": ("rare", "#0070dd"), "epic": ("epic", "#a335ee"),
+                 "legendary": ("legendary", "#ff8000"), "artifact": ("artifact", "#e6cc80")}
+    for tok, (cls, hexv) in canonical.items():
+        assert f"--q-{tok}:" in css, f"light token --q-{tok} missing"
+        assert f"--q-{tok}:{hexv}" in dark, f"dark token --q-{tok} must be Wowhead {hexv}"
+        assert re.search(rf"\.nm\.q-{cls}\{{color:var\(--q-{tok}\)\}}", css), \
+            f".nm.q-{cls} twin missing (beats .st .nm color on source order)"
+        assert re.search(rf"\.grd\.{cls}\{{color:var\(--q-{tok}\)\}}", css) or \
+            (tok == "uncom" and re.search(r"\.grd\.uncommon\{color:var\(--grd-uncom\)\}", css))
+    assert "html[data-pal=dark] .eqc .nm{color" not in css, "gold .nm override must stay removed"
 
 
 def test_chip_render_degrades_on_malformed_tooltip():

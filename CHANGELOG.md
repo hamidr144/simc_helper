@@ -10,6 +10,27 @@ new version is prepared and reviewer-approved as a mandatory step (see WORKFLOW.
 "Milestone: dev → prod"); the `CHANGELOG.md` update ships in the same merge commit
 that bumps the version and tag.
 
+## [1.4.0] — 2026-10-25
+
+MINOR milestone from the `1.1.1-dev.N` line, prepared from the pinned
+`origin/prod..origin/dev` history (dev source `2d435816`).
+
+### Features
+
+- Equipped item names now use their item-quality colors across all six
+  grades and both light and dark themes (t_c0c0b245).
+
+### Improvements
+
+- Gear setup panels use consistent spacing tokens, clearer disclosure
+  padding, and deduplicated layout styles (t_d86c148d).
+
+### Bug fixes
+
+- Mobile run-bar selectors are separated at narrow widths, and setup/run
+  panels no longer allow content or borders to collide (t_d6070122,
+  t_d86c148d).
+
 ## [1.3.0] — 2026-10-25
 
 MINOR milestone from the `1.1.1-dev.N` line (dev at tag `v1.1.1-dev.32`,

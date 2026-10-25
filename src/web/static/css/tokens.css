@@ -39,7 +39,8 @@
   --ic-bg:#eef0f4;          /* icon frame ground (style.css L18 dark: canvas) */
   --ic-epic-fg:#5c3a92; --ic-rare-fg:#245a94;        /* .ic.epic/.rare monogram ink */
   --ic-bg-epic:#f4eefa; --ic-bg-rare:#eef4fb;        /* .ic.big.epic/.rare ground */
-  --q-epic:#6b41b8; --q-rare:#2a65a8; --q-uncom:#2b7a3d; /* quality-colored names/grade words */
+  --q-epic:#6b41b8; --q-rare:#2a65a8; --q-uncom:#2b7a3d; /* quality names/words — Wowhead .q2/.q3/.q4 hue family, light-adjusted for C-2 ≥4.5 (dark keeps Wowhead canonical, see dark block) */
+  --q-common:#6e6e6e; --q-legendary:#b45309; --q-artifact:#7a5c12; /* light-adjusted (Wowhead #9d9d9d/#ff8000/#e6cc80 fail on white) */
   --grd-uncom:var(--q-uncom);                        /* .grd.uncommon */
   --mod-ench-fg:#6b41b8; --mod-ench-bd:#ddcfee; --mod-ench-bg:#f4eefa;
   --mod-gem-fg:#2a65a8; --mod-gem-bd:#c9dbef; --mod-gem-bg:#eef4fb;
@@ -146,8 +147,12 @@ main{max-width:1240px;margin:0 auto;padding:16px 20px 96px}
 /* quality grade word (WOW-tooltip style), quality-colored */
 .grd{font-size:10px;font-weight:750;letter-spacing:.03em;text-transform:uppercase}
 .grd.epic{color:var(--q-epic)} .grd.rare{color:var(--q-rare)} .grd.uncommon{color:var(--grd-uncom)}
-/* quality-colored names (zip scoped .q-epic/.q-rare/.q-uncommon on eqc/cchip/cdet/setcard → one pair) */
-.q-epic{color:var(--q-epic)} .q-rare{color:var(--q-rare)} .q-uncommon{color:var(--q-uncom)}
+.grd.common{color:var(--q-common)} .grd.legendary{color:var(--q-legendary)} .grd.artifact{color:var(--q-artifact)}
+/* quality-colored names (zip scoped .q-epic/.q-rare/.q-uncommon on eqc/cchip/cdet/setcard → one pair);
+   the .nm.q-* twin ties .st .nm{color} on specificity and wins on source order
+   (qualification precedent setup.css:46) so eqc names ride their grade color */
+.q-epic,.nm.q-epic{color:var(--q-epic)} .q-rare,.nm.q-rare{color:var(--q-rare)} .q-uncommon,.nm.q-uncommon{color:var(--q-uncom)}
+.q-common,.nm.q-common{color:var(--q-common)} .q-legendary,.nm.q-legendary{color:var(--q-legendary)} .q-artifact,.nm.q-artifact{color:var(--q-artifact)}
 .modi{color:var(--acc-text);font-size:11px;padding-left:2px}
 .doll{position:relative;display:grid;place-items:center;padding:12px 0}
 .doll svg{width:100%;max-width:215px;height:auto;display:block}
@@ -299,26 +304,6 @@ button.slot-add-confirm{border-color:var(--acc);color:var(--acc-text)}
 .back-link{color:var(--acc-text);text-decoration:none;font-size:12.5px;font-weight:600}
 .back-link:hover{text-decoration:underline}
 .eyebrow{font-size:10.5px;font-weight:750;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
-/* parse/run error + warning panels (text ≥4.5 on its soft ground, both palettes) */
-.error-panel{margin-top:var(--gap-sm);padding:var(--gap-sm) var(--gap-md);border:1px solid var(--dn);
-  border-radius:var(--r-ctl);background:var(--dn-soft);color:var(--dn);font-size:13px;font-weight:600}
-.warning-panel{margin-top:var(--gap-sm);padding:var(--gap-sm) var(--gap-md);border:1px solid var(--warn);
-  border-radius:var(--r-ctl);background:var(--warn-soft);color:var(--warn);font-size:13px;font-weight:600}
-/* small nav links (topline/back) + eyebrow label */
-.back-link{color:var(--acc-text);text-decoration:none;font-size:12.5px;font-weight:600}
-.back-link:hover{text-decoration:underline}
-.eyebrow{font-size:10.5px;font-weight:750;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
-/* import + enhancements <details> panels (D-4/D-6) */
-details.importpanel{margin-top:var(--gap-sm)}
-details.importpanel>summary, details.enhpanel>summary{cursor:pointer;display:inline-flex;align-items:center;gap:var(--gap-sm);
-  border:1px solid var(--line2);background:var(--surface);color:var(--ink2);border-radius:var(--r-ctl);
-  padding:6px 14px;font-weight:650;font-size:12.5px;list-style:none}
-details.importpanel>summary::-webkit-details-marker{display:none}
-details.enhpanel>summary::-webkit-details-marker{display:none}
-details.importpanel>summary:hover, details.enhpanel>summary:hover{border-color:var(--acc);color:var(--acc-text)}
-details.importpanel[open]>summary{margin-bottom:var(--gap-sm)}
-details.enhpanel{margin-top:var(--gap-lg)}
-details.enhpanel[open]>summary{margin-bottom:var(--gap-sm)}
 .importgrid{display:grid;gap:var(--gap-md);grid-template-columns:minmax(0,1fr)}
 @media(min-width:900px){.importgrid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
 .formrow{display:flex;gap:var(--gap-sm);flex-wrap:wrap;align-items:center;margin-top:var(--gap-sm)}
@@ -373,7 +358,7 @@ html[data-pal=dark]{
   --ic-bg:#26282d;
   --ic-epic-fg:#c39af0; --ic-rare-fg:#8dbcec;
   --ic-bg-epic:#221b2c; --ic-bg-rare:#1a2330;
-  --q-epic:#c39af0; --q-rare:#8dbcec; --q-uncom:#7cc986;
+  --q-epic:#a335ee; --q-rare:#0070dd; --q-uncom:#1eff00; --q-common:#9d9d9d; --q-legendary:#ff8000; --q-artifact:#e6cc80; /* Wowhead global.css .q4/.q3/.q2/.q0/.q5/.q6 canonical */
   --grd-uncom:var(--q-uncom);
   --mod-ench-fg:#4fd6c3; --mod-ench-bd:#27514b; --mod-ench-bg:#122a26;
   --mod-gem-fg:#8ed06a; --mod-gem-bd:#3c5a2c; --mod-gem-bg:#1b2a14;
@@ -382,7 +367,7 @@ html[data-pal=dark]{
   --toast-bg:#e8eaec; --toast-fg:#17181c;         /* results.css L130 */
 }
 html[data-pal=dark] .eqc{background:var(--eq-bg);border-color:var(--gold-line)}
-html[data-pal=dark] .eqc .nm{color:var(--gold)}   /* equipped card: gold name register */
+/* gold .nm register removed (user request): equipped names ride their grade color via .nm.q-* */
 html[data-pal=dark] .qj a:hover{border-color:var(--gold);color:var(--gold)}
 /* dark kept contrast (measured 3.22:1 ink3-on-sunk fails AA): names/headers go to
    ink2 (5.46:1), the base pill sits on a surface chip so it stays visible on sunk. */
@@ -408,49 +393,6 @@ html[data-pal=light]{--gold:#846500;--eq-bg:var(--surface)}          /* C-2 (was
 .diff-table th{text-align:left;color:var(--ink3);font-weight:600;font-size:11px;text-transform:uppercase;
   letter-spacing:.04em;padding:4px 10px 6px 0;border-bottom:1px solid var(--line)}
 .diff-table td{padding:5px 10px 5px 0;border-bottom:1px solid var(--line);vertical-align:top}
-
-/* ---- RED-3 shared app atoms (surviving chrome, design voice; gate-10 clean) */
-.status-unknown{color:var(--ink3)}
-.char-count{font-size:12px;color:var(--ink3)}
-.char-class-dot{width:9px;height:9px;border-radius:50%;display:inline-block;box-shadow:0 0 0 2px var(--sunk)}
-.workflow-status{font-size:13px;color:var(--ink2);overflow-wrap:anywhere}
-.workflow-status.error{color:var(--dn)}
-.workflow-status.ready{color:var(--up)}
-.item-icon-link,.wowhead-item-link{color:inherit;text-decoration:none}
-.item-icon-link:hover,.wowhead-item-link:hover{color:var(--acc-text)}
-.popover-host{position:relative;display:inline-flex}
-.popover{position:absolute;bottom:calc(100% + 8px);left:0;z-index:60;min-width:min(420px,92vw);max-height:60vh;
-  overflow:auto;border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--surface);
-  box-shadow:var(--shadow);padding:12px 14px;color:var(--ink)}
-.popover[hidden]{display:none}
-.diff-table{width:100%;border-collapse:collapse;font-size:12.5px}
-.diff-table th{text-align:left;color:var(--ink3);font-weight:600;font-size:11px;text-transform:uppercase;
-  letter-spacing:.04em;padding:4px 10px 6px 0;border-bottom:1px solid var(--line)}
-.diff-table td{padding:5px 10px 5px 0;border-bottom:1px solid var(--line);vertical-align:top}
-
-/* ---- RED-3 run history (structure kept per D-10; restyled in the design voice) ---- */
-.panel-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);padding:16px;margin-top:var(--gap-md)}
-.full-width{display:block}
-.history-table{width:100%;border-collapse:collapse;font-size:13px}
-.history-table th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink3);padding:8px 10px;border-bottom:1px solid var(--line2)}
-.history-table td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
-.history-row{cursor:pointer}
-.history-row:hover td{background:var(--sunk)}
-.history-filter{max-width:340px;margin:0 0 12px;font-size:13px;padding:7px 12px}
-.history-status{border-radius:99px;padding:2px 10px;font-size:11px;font-weight:700;text-transform:uppercase}
-.history-status-ok{background:var(--up-soft);color:var(--up)}
-.history-status-failed{background:var(--dn-soft);color:var(--dn)}
-.history-dps{font-variant-numeric:tabular-nums;font-weight:700}
-.history-report{color:var(--acc-text)}
-.history-missing{color:var(--ink3)}
-.history-run-id{font-family:var(--mono);font-size:12px}
-.history-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--gap-sm) var(--gap-lg)}
-.history-field{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line);padding:8px 0;font-size:13px}
-.history-field span{color:var(--ink3)}
-.history-detail-actions{margin-top:var(--gap-md)}
-.empty-results h2{margin:0 0 6px}
-.run-copy{border:1px solid var(--line2);border-radius:6px;background:none;color:var(--ink3);font-size:11px;line-height:1;padding:3px 6px;cursor:pointer}
-.run-copy:hover{color:var(--acc-text);border-color:var(--acc)}
 
 /* ---- RED-3 run history (structure kept per D-10; restyled in the design voice) ---- */
 .panel-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);padding:16px;margin-top:var(--gap-md)}
@@ -480,7 +422,6 @@ html[data-pal=light]{--gold:#846500;--eq-bg:var(--surface)}          /* C-2 (was
 
 /* RED-3 import-surface controls (armory + runbar selects live in the v11 top
    bar: keep v11 control language — pill select, ghost button, field row) */
-.armory-controls{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .armory-field{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}
 .armory-field .armory-input{background:var(--sunk);border:1px solid var(--line2);border-radius:var(--r-ctl);
   color:var(--ink);padding:7px 10px;font:inherit;font-size:12.5px;min-width:0}
@@ -502,4 +443,3 @@ html[data-pal=light]{--gold:#846500;--eq-bg:var(--surface)}          /* C-2 (was
   .history-table-card{min-width:0;overflow-x:hidden}
 }
 @media(min-width:481px){.history-table-card{overflow-x:visible}}
-.gear-conflict{margin:2px 20px 0}
