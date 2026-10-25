@@ -106,7 +106,7 @@ On the test service's exact login origin, use the installed `browser_vault` flow
 
 ### SimC Helper web-view QA browser tools (all agents)
 
-For all agents doing SimC Helper web-view QA, use Hermes core `browser_navigate`, `browser_snapshot`, `browser_click`, and `browser_type` for web-page navigation/content, and `browser_vault` for same-page authentication (only use Vault on the exact same origin as the login page). Navigate only to the approved QA service; never navigate to an unapproved private or otherwise disallowed address; require `/api/state` to return HTTP 200 before protected QA. `computer_use` is only for native desktop/browser chrome: a Chrome window on another macOS Space is not a reason to use it or foreground-escalate. If a required browser tool is unavailable, stop and report the exact capability blocker; do not switch tools or bypass these safeguards.
+For all agents doing SimC Helper web-view QA, select the Hermes core browser (`browser.backend=off`) and use `browser_navigate`, `browser_snapshot`, `browser_click`, and `browser_type` on that same page for navigation and non-credential content only; never enter credentials with `browser_type`. For Vault auth, use `browser_vault` on the exact login origin: if it is not listed, discover it with `hermes_tool_search` (`browser_vault`), load its schema with `tool_describe`, then call `action=list` before using the matching saved item; unlock only through the approved flow and fill the listed handle on that same page. Preserve same-origin and private-address safeguards; navigate only to the approved QA service and require `/api/state` HTTP 200 before protected QA. Never bypass auth, create/register accounts without explicit authorization, or put credentials, tokens, or sensitive artifacts in logs or deliverables. `computer_use` is only for native desktop/browser chrome, not app page content; a Chrome window on another macOS Space is no reason to use it or foreground-escalate. If required browser tools are missing or unavailable, stop and report the exact capability blocker for provisioning; do not switch contexts or weaken safeguards.
 
 Never put passwords, one-time codes, authenticator secrets, session cookies/tokens, or screenshots/artifacts containing them in Discord, Kanban, source code, logs, or other deliverables. Do not bypass or disable authentication for convenience. Use only the approved vault flow; do not create or register accounts as part of QA without explicit authorization.
 
@@ -145,20 +145,11 @@ Rollback: `git checkout <last-good-tag>` in the prod worktree, rebuild, `docker 
 
 ## Inspecting a page with isolated browser sessions
 
-For focused live-page diagnosis, use `functions.browser_exec` with a distinct named `session` for every concurrent agent/task. Reuse that same name across calls made by one agent so its tab and browser state persist. Calls using the same name share state: never use one session name concurrently for different agents/tasks. Example:
+For focused live-page diagnosis outside SimC Helper web-view QA, use `functions.browser_exec` with a distinct named `session` for every concurrent agent/task; reuse that name for calls by the same agent. Sessions with the same name share state, so never use one concurrently across agents/tasks. The `mcp__playwright__browser_*` tools are a separate singleton session and are not an alternate for SimC Helper web-view QA. For SimC Helper web-view QA, follow the core-browser/Vault procedure above; do not use `browser_exec`, Playwright, `computer_use`, or another browser context for app-page content.
 
-```python
-functions.browser_exec({"code": "# Inspect the current page\nprint(page_info())", "session": "agent-a-task-123"})
-```
+For other environments, navigate to the intended test instance first, inspect accessible names/roles or DOM facts, check only necessary console/network details, and use screenshots only as supplementary evidence. Record the URL/environment and what you actually observed; do not infer authenticated or populated-state behavior from an empty/unauthenticated page. An unreachable origin is a limitation to report, not a reason to claim a successful inspection.
 
-Use a different session name for another concurrent agent/task (for example, `agent-b-task-456`). `mcp__playwright__browser_*` tools are a separate singleton browser session, not isolated per-agent sessions; use them only when singleton access is suitable, not for simultaneous independent inspections. No project dependency or repo-specific harness is needed. Navigate to the intended environment first (use dev at `http://127.0.0.1:8001`, never prod for testing), then:
 
-1. Inspect accessible names/roles and element bounds with `page_info()` or read the page DOM via `js(...)`; prefer actionable structural/DOM evidence over screenshots.
-2. Use `js(...)` for a specific DOM fact, e.g. `js('({title: document.title, viewport: [innerWidth, innerHeight], document: [document.documentElement.scrollWidth, document.documentElement.scrollHeight], headings: [...document.querySelectorAll("h1,h2")].map(e => e.innerText)})')`.
-3. Check the browser console for runtime failures and network requests/responses for relevant request details; inspect only what is necessary because headers or bodies may contain sensitive data.
-4. Use a screenshot only as supplementary visual evidence; use DOM/accessibility information for actionable structure and targets.
-
-Record the URL/environment and what was actually observed; do not infer authenticated or populated-state behavior from an empty/unauthenticated page. An unreachable origin is a limitation to report, not a reason to claim a successful inspection.
 
 ## Quick rules
 
