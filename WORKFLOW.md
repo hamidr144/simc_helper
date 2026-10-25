@@ -106,6 +106,10 @@ On the test service's exact login origin, use the installed `browser_vault` flow
 
 Never put passwords, one-time codes, authenticator secrets, session cookies/tokens, or screenshots/artifacts containing them in Discord, Kanban, source code, logs, or other deliverables. Do not bypass or disable authentication for convenience. Use only the approved vault flow; do not create or register accounts as part of QA without explicit authorization.
 
+### Browser tools for web-view QA
+
+For every agent doing SimC Helper web-view QA, use Hermes core browser (`browser.backend=off`): navigate to the intended dev page with `browser_navigate`, then use `browser_snapshot`, `browser_click`, and `browser_type` on that same page. `browser_vault` is deferred; if it is not listed, discover it with `hermes_tool_search` for `browser_vault`, load its schema with `tool_describe`, then call `action=list` before using a saved login on the exact same origin. Keep page interaction in this core-browser/Vault context—do not substitute `computer_use`, Playwright, or another context. `computer_use` is only for native desktop/browser chrome, never app page content; a Chrome window on another macOS Space is not a reason to switch contexts or foreground-escalate. Keep the same-origin Vault and private-address safeguards, and verify `/api/state` returns HTTP 200 before protected QA. If a fresh task session lacks the core browser tools, stop and report the exact missing capability for leader provisioning; do not improvise or weaken safeguards.
+
 ## The two systems
 
 | | Prod system | Dev system |
