@@ -85,10 +85,10 @@ def test_cache_bust_token_everywhere():
     # to 20261018-chip-worn-1, t_4d8563f2 merge sweep to 20261018-merge-1, t_9fdd2c1b
     # TG3-D compact-rows sweep to 20261018-tg3d-1, TG3-D2 sweep to 20261018-d2-1,
     # TG3-G results-polish sweep to 20261018-tg3g-1, t_79a87102 F2 batch sweep
-    # older sweeps; t_94a15fe3 swept all pages to the single MGE-2 token).
+    # older sweeps; t_94a15fe3 swept all pages to the single MGE-2 token;
+    # t_c0c0b245 quality-palette sweep to red3-4).
     for page in PAGES:
         html = Path(f"src/web/static/{page}").read_text()
-        # RB1 (t_754e1374) bumped only app.html to rb1-1; other pages stay guir-3.
-        token = "red3-2"
+        token = "red3-4"
         assert token in html, page
         assert "20261017-enh-chips" not in html, page

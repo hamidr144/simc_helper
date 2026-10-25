@@ -31,6 +31,11 @@ delete state.parsedData.item_qualities[KNOWN];
 out.paramFallback = qualityOf(resolveRowQuality('id=1,quality=2')).word; // Uncommon
 out.commonFallback = qualityOf(resolveRowQuality('id=1')).word;        // Common (only true fallback)
 
+// --- t_c0c0b245: every grade has its OWN class (legendary no longer piggybacks
+// epic, artifact no longer falls through to common) so CSS can color it.
+out.gradeCls = [2, 3, 4, 5, 6, 7].map((n) => qualityOf(n).cls).join(',');
+out.gradeWords = [2, 3, 4, 5, 6, 7].map((n) => qualityOf(n).word).join(',');
+
 // --- draft restore --------------------------------------------------------------
 // Stale SELECTED-only strings are still orphan-dropped (ruling 4), but
 // addedItems keys are authoritative and get re-inserted (t_65bd1b07 ruling).
