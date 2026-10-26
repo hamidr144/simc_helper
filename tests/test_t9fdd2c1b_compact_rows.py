@@ -20,7 +20,11 @@ def test_setup_mobile_runbar_and_content_share_non_overlapping_viewport():
     assert "@media (max-width:850px){" in setup_css
     assert "body{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}" in setup_css
     assert "main{flex:1 1 auto;min-height:0;min-width:0;width:100%;box-sizing:border-box;overflow-y:auto" in setup_css
-    assert ".runbar{position:static" in setup_css
+    # t_d671cd7c directive 5: the run bar is the top-of-page card — static on
+    # desktop (tokens.css), sticky to main's top edge on mobile (setup.css).
+    tokens_css = (STATIC / "css" / "tokens.css").read_text()
+    assert ".runbar-top{position:static" in tokens_css
+    assert "main>.runbar-top{position:sticky;top:0" in setup_css
     assert "--setup-runbar-height" not in setup_css
 
 

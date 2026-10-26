@@ -96,6 +96,7 @@ def test_directives_4_12_spacing_and_button_dimensions_use_shared_tokens():
 def test_directive_11_enhancements_get_gear_pattern_tooltip_links():
     assert 'data-wowhead="iconsize=large"' in WOWHEAD_JS
     assert "api/item-icon/" in WOWHEAD_JS
-    assert "appendWowheadLink(group, enchant, name)" in ENH_JS
-    assert "appendWowheadLink(group, gem, name)" in ENH_JS
-    assert "appendWowheadLink(group, entry, name)" in ENH_JS
+    # t_d671cd7c: the per-loop calls collapsed into one entry builder.
+    assert "appendWowheadLink(row, entry, name)" in ENH_JS
+    assert "enhancementEntry(group, enchant, name," in ENH_JS
+    assert "enhancementEntry(group, gem, name," in ENH_JS

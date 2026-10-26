@@ -292,193 +292,225 @@
         "id": 240912,
         "name": "Flawless Versatile Lapis",
         "stats": "Increased Versatility",
-        "wowhead_url": "https://www.wowhead.com/item=240912"
+        "wowhead_url": "https://www.wowhead.com/item=240912",
+        "stat": "versatility"
       },
       {
         "id": 240916,
         "name": "Flawless Quick Lapis",
         "stats": "Increased Versatility and Haste",
-        "wowhead_url": "https://www.wowhead.com/item=240916"
+        "wowhead_url": "https://www.wowhead.com/item=240916",
+        "stat": "versatility"
       },
       {
         "id": 240914,
         "name": "Flawless Deadly Lapis",
         "stats": "Increased Versatility and Critical Strike",
-        "wowhead_url": "https://www.wowhead.com/item=240914"
+        "wowhead_url": "https://www.wowhead.com/item=240914",
+        "stat": "versatility"
       },
       {
         "id": 240918,
         "name": "Flawless Masterful Lapis",
         "stats": "Increased Versatility and Mastery",
-        "wowhead_url": "https://www.wowhead.com/item=240918"
+        "wowhead_url": "https://www.wowhead.com/item=240918",
+        "stat": "versatility"
       },
       {
         "id": 240880,
         "name": "Versatile Lapis",
         "stats": "Increased Versatility",
-        "wowhead_url": "https://www.wowhead.com/item=240880"
+        "wowhead_url": "https://www.wowhead.com/item=240880",
+        "stat": "versatility"
       },
       {
         "id": 240884,
         "name": "Quick Lapis",
         "stats": "Increased Versatility and Haste",
-        "wowhead_url": "https://www.wowhead.com/item=240884"
+        "wowhead_url": "https://www.wowhead.com/item=240884",
+        "stat": "versatility"
       },
       {
         "id": 240882,
         "name": "Deadly Lapis",
         "stats": "Increased Versatility and Critical Strike",
-        "wowhead_url": "https://www.wowhead.com/item=240882"
+        "wowhead_url": "https://www.wowhead.com/item=240882",
+        "stat": "versatility"
       },
       {
         "id": 240886,
         "name": "Masterful Lapis",
         "stats": "Increased Versatility and Mastery",
-        "wowhead_url": "https://www.wowhead.com/item=240886"
+        "wowhead_url": "https://www.wowhead.com/item=240886",
+        "stat": "versatility"
       },
       {
         "id": 240888,
         "name": "Flawless Quick Peridot",
         "stats": "Increased Haste",
-        "wowhead_url": "https://www.wowhead.com/item=240888"
+        "wowhead_url": "https://www.wowhead.com/item=240888",
+        "stat": "haste"
       },
       {
         "id": 240894,
         "name": "Flawless Versatile Peridot",
         "stats": "Increased Haste and Versatility",
-        "wowhead_url": "https://www.wowhead.com/item=240894"
+        "wowhead_url": "https://www.wowhead.com/item=240894",
+        "stat": "haste"
       },
       {
         "id": 240890,
         "name": "Flawless Deadly Peridot",
         "stats": "Increased Haste and Critical Strike",
-        "wowhead_url": "https://www.wowhead.com/item=240890"
+        "wowhead_url": "https://www.wowhead.com/item=240890",
+        "stat": "haste"
       },
       {
         "id": 240892,
         "name": "Flawless Masterful Peridot",
         "stats": "Increased Haste and Mastery",
-        "wowhead_url": "https://www.wowhead.com/item=240892"
+        "wowhead_url": "https://www.wowhead.com/item=240892",
+        "stat": "haste"
       },
       {
         "id": 240856,
         "name": "Quick Peridot",
         "stats": "Increased Haste",
-        "wowhead_url": "https://www.wowhead.com/item=240856"
+        "wowhead_url": "https://www.wowhead.com/item=240856",
+        "stat": "haste"
       },
       {
         "id": 240862,
         "name": "Versatile Peridot",
         "stats": "Increased Haste and Versatility",
-        "wowhead_url": "https://www.wowhead.com/item=240862"
+        "wowhead_url": "https://www.wowhead.com/item=240862",
+        "stat": "haste"
       },
       {
         "id": 240858,
         "name": "Deadly Peridot",
         "stats": "Increased Haste and Critical Strike",
-        "wowhead_url": "https://www.wowhead.com/item=240858"
+        "wowhead_url": "https://www.wowhead.com/item=240858",
+        "stat": "haste"
       },
       {
         "id": 240860,
         "name": "Masterful Peridot",
         "stats": "Increased Haste and Mastery",
-        "wowhead_url": "https://www.wowhead.com/item=240860"
+        "wowhead_url": "https://www.wowhead.com/item=240860",
+        "stat": "haste"
       },
       {
         "id": 240904,
         "name": "Flawless Deadly Garnet",
         "stats": "Increased Critical Strike",
-        "wowhead_url": "https://www.wowhead.com/item=240904"
+        "wowhead_url": "https://www.wowhead.com/item=240904",
+        "stat": "crit"
       },
       {
         "id": 240910,
         "name": "Flawless Versatile Garnet",
         "stats": "Increased Critical Strike and Versatility",
-        "wowhead_url": "https://www.wowhead.com/item=240910"
+        "wowhead_url": "https://www.wowhead.com/item=240910",
+        "stat": "crit"
       },
       {
         "id": 240906,
         "name": "Flawless Quick Garnet",
         "stats": "Increased Critical Strike and Haste",
-        "wowhead_url": "https://www.wowhead.com/item=240906"
+        "wowhead_url": "https://www.wowhead.com/item=240906",
+        "stat": "crit"
       },
       {
         "id": 240908,
         "name": "Flawless Masterful Garnet",
         "stats": "Increased Critical Strike and Mastery",
-        "wowhead_url": "https://www.wowhead.com/item=240908"
+        "wowhead_url": "https://www.wowhead.com/item=240908",
+        "stat": "crit"
       },
       {
         "id": 240872,
         "name": "Deadly Garnet",
         "stats": "Increased Critical Strike",
-        "wowhead_url": "https://www.wowhead.com/item=240872"
+        "wowhead_url": "https://www.wowhead.com/item=240872",
+        "stat": "crit"
       },
       {
         "id": 240878,
         "name": "Versatile Garnet",
         "stats": "Increased Critical Strike and Versatility",
-        "wowhead_url": "https://www.wowhead.com/item=240878"
+        "wowhead_url": "https://www.wowhead.com/item=240878",
+        "stat": "crit"
       },
       {
         "id": 240874,
         "name": "Quick Garnet",
         "stats": "Increased Critical Strike and Haste",
-        "wowhead_url": "https://www.wowhead.com/item=240874"
+        "wowhead_url": "https://www.wowhead.com/item=240874",
+        "stat": "crit"
       },
       {
         "id": 240876,
         "name": "Masterful Garnet",
         "stats": "Increased Critical Strike and Mastery",
-        "wowhead_url": "https://www.wowhead.com/item=240876"
+        "wowhead_url": "https://www.wowhead.com/item=240876",
+        "stat": "crit"
       },
       {
         "id": 240896,
         "name": "Flawless Masterful Amethyst",
         "stats": "Increased Mastery",
-        "wowhead_url": "https://www.wowhead.com/item=240896"
+        "wowhead_url": "https://www.wowhead.com/item=240896",
+        "stat": "mastery"
       },
       {
         "id": 240902,
         "name": "Flawless Versatile Amethyst",
         "stats": "Increased Mastery and Versatility",
-        "wowhead_url": "https://www.wowhead.com/item=240902"
+        "wowhead_url": "https://www.wowhead.com/item=240902",
+        "stat": "mastery"
       },
       {
         "id": 240900,
         "name": "Flawless Quick Amethyst",
         "stats": "Increased Mastery and Haste",
-        "wowhead_url": "https://www.wowhead.com/item=240900"
+        "wowhead_url": "https://www.wowhead.com/item=240900",
+        "stat": "mastery"
       },
       {
         "id": 240898,
         "name": "Flawless Deadly Amethyst",
         "stats": "Increased Mastery and Critical Strike",
-        "wowhead_url": "https://www.wowhead.com/item=240898"
+        "wowhead_url": "https://www.wowhead.com/item=240898",
+        "stat": "mastery"
       },
       {
         "id": 240864,
         "name": "Masterful Amethyst",
         "stats": "Increased Mastery",
-        "wowhead_url": "https://www.wowhead.com/item=240864"
+        "wowhead_url": "https://www.wowhead.com/item=240864",
+        "stat": "mastery"
       },
       {
         "id": 240870,
         "name": "Versatile Amethyst",
         "stats": "Increased Mastery and Versatility",
-        "wowhead_url": "https://www.wowhead.com/item=240870"
+        "wowhead_url": "https://www.wowhead.com/item=240870",
+        "stat": "mastery"
       },
       {
         "id": 240868,
         "name": "Quick Amethyst",
         "stats": "Increased Mastery and Haste",
-        "wowhead_url": "https://www.wowhead.com/item=240868"
+        "wowhead_url": "https://www.wowhead.com/item=240868",
+        "stat": "mastery"
       },
       {
         "id": 240866,
         "name": "Deadly Amethyst",
         "stats": "Increased Mastery and Critical Strike",
-        "wowhead_url": "https://www.wowhead.com/item=240866"
+        "wowhead_url": "https://www.wowhead.com/item=240866",
+        "stat": "mastery"
       }
     ],
     "meta": [

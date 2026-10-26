@@ -25,7 +25,7 @@ def test_uncommon_grade_and_item_level_do_not_overlap(app_url):
         )
         page.locator("#btn-parse-addon").click()
         page.locator("#gear-grid .slotsec").first.wait_for()
-        assert page.locator('link[href*="tokens.css"]').get_attribute("href").endswith("tokens.css?v=red3-3")
+        assert page.locator('link[href*="tokens.css"]').get_attribute("href").endswith("tokens.css?v=red3-5")
         assert page.locator(":root").evaluate("el => getComputedStyle(el).getPropertyValue('--q-uncom').trim()")
         section = page.locator('#gear-grid .slotsec[data-slot="main_hand"]')
         section.locator('.fold').click()

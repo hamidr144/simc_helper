@@ -87,8 +87,36 @@ export function renderWorkflow() {
   persistDraft();
 }
 
+/* t_d671cd7c directive 6: header profile dropdown — native button trigger
+   (Enter/Space), ArrowDown into the menu, Escape closes and restores focus,
+   outside click closes. aria-expanded tracks the open state. */
+function wireProfileMenu() {
+  const trigger = document.getElementById('btn-profile-menu');
+  const panel = document.getElementById('profile-menu-panel');
+  const setMenu = open => {
+    panel.hidden = !open;
+    trigger.setAttribute('aria-expanded', String(open));
+  };
+  setMenu(false);
+  trigger.addEventListener('click', () => setMenu(panel.hidden));
+  trigger.addEventListener('keydown', event => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setMenu(true);
+      panel.querySelector('a')?.focus();
+    }
+  });
+  panel.addEventListener('keydown', event => {
+    if (event.key === 'Escape') { setMenu(false); trigger.focus(); }
+  });
+  document.addEventListener('click', event => {
+    if (!panel.hidden && !event.target.closest('.profile-menu')) setMenu(false);
+  });
+}
+
 export function wire() {
   wireTheme(document.querySelector('.pal .seg'));
+  wireProfileMenu();
   updateCharCount();
   // t_94a15fe3 split dropped these module wires (t_f9a0df27, QA t_23879205):
   // paste/armory listener attach and the realms dropdown fetch.
