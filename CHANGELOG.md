@@ -10,6 +10,49 @@ new version is prepared and reviewer-approved as a mandatory step (see WORKFLOW.
 "Milestone: dev → prod"); the `CHANGELOG.md` update ships in the same merge commit
 that bumps the version and tag.
 
+## [1.4.2] — 2026-10-26
+
+PATCH release from the Gear-page round 3, its QA bugfixes and an
+item-data fix merged to dev (source `1478052`).
+
+### Features
+
+- Gems and enchantments render like gear rows — Wowhead icon plus
+  quality-colored name — in the enhancements card (t_d671cd7c).
+- Gems are split into one column per secondary stat (Mastery, Crit,
+  Versatility, Haste); Meta and Extra-socket gems keep their own groups
+  (t_d671cd7c).
+- Enchantments are laid out in one column per slot (helm, shoulders,
+  chest, legs, boots, rings, weapon), stacking on mobile (t_d671cd7c).
+- The run bar — Run button, run options, combo/item counters and status —
+  moves to the top of the page: sticky on desktop, first card on phones,
+  with counters updating live (t_d671cd7c).
+- Run history and My runs move into a new top-right profile menu (keyboard
+  accessible, Sign out included); the footer buttons are gone and the
+  footer keeps only version/draft metadata (t_d671cd7c).
+
+### Improvements
+
+- The Armory import form gets its own band above the gear grid
+  (t_d671cd7c).
+- "New export" is renamed "Start over", hidden on a fresh page and shown
+  only once an export has loaded (t_d671cd7c).
+- Select dropdown chevrons are normalized across the whole app, with
+  aligned entry icon/name columns (t_d671cd7c).
+
+### Bug fixes
+
+- "Start over" fully clears gear selections, enhancement choices and the
+  run-bar counters, so a re-import starts from a clean 0/0 state
+  (t_ca74bb9c).
+- The sticky top bar no longer hides section headings while scrolling or
+  jumping to anchors (t_6732b9de).
+- Slot-sort dropdowns keep their chevron (a CSS shorthand had clobbered
+  the global styling) (t_66acf0b2).
+- Ascendant Venomforged ascension item levels updated to Blizzard's
+  Oct 23 2026 hotfix: Myth 341, Heroic-crafted 324, Mythic-crafted 337
+  (t_9d2feeae).
+
 ## [1.4.1] — 2026-10-25
 
 PATCH release from the Gear-page rework merged to dev (source `5c3659a9`).
