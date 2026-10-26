@@ -31,7 +31,11 @@ export const state = {
   gearTouchedByUser: new Map(),
 };
 
-export function initializeSelections() {
+// t_9040b457 (t_ca74bb9c): every per-character selection layer in one place.
+// initializeSelections rebuilds on import; Start over must CLEAR, so the
+// reset lives apart from the parse loops. slotLocks deliberately survives
+// (RED-3 §3), drafts clear separately via clearDraftKeys.
+export function resetCharacterState() {
   state.selectedItems = {};
   state.twoHandedItems = new Set();
   state.wowheadQualities = {};
@@ -47,7 +51,12 @@ export function initializeSelections() {
   state.slotSorts = {};
   state.statScores = {};
   state.addedItems = new Map();
+  state.gearTouchedByUser = new Map();
   state.generatedInput = null;
+}
+
+export function initializeSelections() {
+  resetCharacterState();
 
   for (const [slot, items] of Object.entries(state.parsedData.items_by_slot)) {
     const equipped = new Set(normalizedEquippedItems(slot));
