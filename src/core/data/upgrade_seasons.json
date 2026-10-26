@@ -69,8 +69,8 @@
         "cost": 10,
         "bonus_ids": ["12856"],
         "eligible_slots": ["neck", "main_hand", "off_hand", "trinket", "trinket1", "trinket2"],
-        "results": { "hero": 328, "myth": 340 },
-        "crafted_results": { "hero": 325, "myth": 338 }
+        "results": { "hero": 328, "myth": 341 },
+        "crafted_results": { "hero": 324, "myth": 337 }
       }
     }
   ]
