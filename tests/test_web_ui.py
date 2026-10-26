@@ -40,7 +40,7 @@ def test_web_ui_uses_dashboard_layout():
     assert 'class="top"' in html_content
     assert 'class="qj"' in html_content
     assert 'id="gear-grid"' in html_content
-    assert 'class="runbar"' in html_content
+    assert 'class="runbar runbar-top"' in html_content  # t_d671cd7c: top-of-page run bar
 
 
 def test_web_ui_removes_marketing_copy():
@@ -260,7 +260,7 @@ def test_upgrade_data_endpoint_serves_season_ladders():
     assert "midnight-s1" in season_ids and "midnight-s2" in season_ids
     s2 = next(season for season in data["seasons"] if season["id"] == "midnight-s2")
     assert s2["tracks"]["myth"] == [318, 321, 324, 328, 331, 334]
-    assert s2["ascension"]["results"] == {"hero": 328, "myth": 340}
+    assert s2["ascension"]["results"] == {"hero": 328, "myth": 341}
     assert 344 in s2["elevated_ilvls"]
 
 
@@ -339,7 +339,7 @@ def test_voidforge_option_is_hidden_for_elevated_items():
 def test_crafted_ascension_reveals_ascended_grade_selector():
     """t_98470ac5: ticking Ascendant on a crafted base needs an explicit
     hero/myth grade; the picked track hydrates the gearUpgrades entry the
-    backend resolves crafted_results (325/338) from."""
+    backend resolves crafted_results (324/337) from."""
     response = resp(read_js())
     assert response.status_code == 200
     js = response.text
@@ -662,8 +662,8 @@ def test_gems_and_enchantments_use_default_wowhead_tooltips():
     assert "function createEnhancementWowheadLink(enhancement, name)" in js
     assert "enhancement.wowhead_url" in js
     assert "enhancement-name-link wowhead-item-link" in js
-    assert "appendWowheadLink(group, enchant, name)" in js
-    assert "appendWowheadLink(group, gem, name)" in js
+    assert "appendWowheadLink(row, entry, name)" in js  # t_d671cd7c: one entry builder
+    assert "enhancementEntry(group, enchant, name," in js and "enhancementEntry(group, gem, name," in js
     assert js.count("refreshWowheadLinks();") >= 2
 
 
@@ -707,9 +707,10 @@ def test_wowhead_link_click_cannot_toggle_enhancement_selection():
     wowhead = (root / "core/wowhead.js").read_text()
 
     # The selection listener belongs only to the button; the anchor is appended
-    # directly to the group afterward, so its click cannot bubble through it.
+    # to the entry row AFTER the button, so its click cannot bubble through it.
     assert "button.addEventListener('click', () => {" in enhancements
-    assert enhancements.count("appendWowheadLink(group,") == 5
+    assert enhancements.count("appendWowheadLink(group,") == 1  # the definition only
+    assert enhancements.count("appendWowheadLink(row, entry, name)") == 1
     assert "group.appendChild(wrapper.firstElementChild)" in enhancements
     assert 'class="enhancement-name-link wowhead-item-link"' in wowhead
     assert "button.innerHTML = createEnhancementWowheadLink" not in enhancements
@@ -898,7 +899,7 @@ def test_enhancement_trio_sections_open_by_default_with_count_labels():
     for group in ("Gems", "Enchantments", "Augurnium"):
         assert f'data-enh-group="{group}" open' in html, f"{group} section must ship open"
     assert "section.dataset.enhGroup" in js
-    assert "'Flawless gems'" in js
+    assert "GEM_STAT_ORDER" in js  # t_d671cd7c: stat columns replaced 'Flawless gems'
     assert "${chips} selected" in js
     assert "'.choice-chip'" in js
     assert "chip.hidden = !hit" in js

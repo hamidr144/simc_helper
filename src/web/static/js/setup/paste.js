@@ -1,11 +1,11 @@
 // js module — mechanical port of app.js regions by t_94a15fe3 (gui-rewrite-contract §3.1: setup/paste)
 
-import { initializeSelections, state } from '../core/state.js';
+import { initializeSelections, resetCharacterState, state } from '../core/state.js';
 
 import { detectSeasonFromExport, loadUpgradeData, renderSeasonChip, upgradeData } from '../core/season.js';
 
 // t_26c5ddef: token must equal the app.html entry ?v= token or the browser loads a second pages/setup.js instance (pinned by tests/test_add_item_sorting.py)
-import { renderWorkflow } from '../pages/setup.js?v=red3-5';
+import { renderWorkflow } from '../pages/setup.js?v=red3-7';
 
 import { updateArmoryState } from './armory.js';
 
@@ -128,6 +128,11 @@ document.getElementById('btn-new-export').addEventListener('click', () => {
   state.parsedData = null;
   state.generatedInput = null;
   state.simulationDone = false;
+  // t_9040b457 (t_ca74bb9c): the rendered layers went, the selections must
+  // go with them — counters/highlights counted the previous character
+  // through to the next import. resetCharacterState covers gem/enchant/
+  // augurnium/item layers; updateSummary's parsedData guard shows 0/0.
+  resetCharacterState();
   clearDraftKeys();
   document.getElementById('gear-grid').innerHTML = '';
   document.getElementById('qj').innerHTML = '';

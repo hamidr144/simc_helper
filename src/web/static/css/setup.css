@@ -5,8 +5,12 @@
 /* ---- vertical page-length list ---- */
 body{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
 .top,.qj,.runbar{flex:none}
-main{max-width:880px;padding-bottom:24px;flex:1 1 auto;min-height:0;overflow-y:auto}
-body>.runbar{position:static;inset:auto}
+main{max-width:880px;padding-bottom:24px;flex:1 1 auto;min-height:0;overflow-y:auto;scroll-padding-top:12px}
+/* t_9040b457 (t_6732b9de): scroll-padding floor for no-JS anchor jumps;
+   runbar.js overwrites it inline with the sticky bar's measured height. */
+/* t_d671cd7c directive 5: top-of-page run bar card; .runbar-top{position:static}
+   (tokens.css) overrides the shared fixed-bottom .runbar rule. */
+main>.runbar-top{margin-top:var(--gap-sm)}
 .qj{position:sticky;top:0;z-index:40;background:var(--canvas);border-bottom:1px solid var(--line)}
 .qjin{max-width:880px;margin:0 auto;display:flex;align-items:center;flex-wrap:wrap;gap:var(--gap-sm);overflow-x:auto;padding:8px 20px;scrollbar-width:thin}
 .qj a{flex:none;border:1px solid var(--line2);background:var(--surface);color:var(--ink2);
@@ -47,14 +51,20 @@ body>.runbar{position:static;inset:auto}
 .pal .seg button[aria-checked=true]{background:var(--acc);color:var(--acc-ink)}
 
 @media (max-width:850px){
-  main{flex:1 1 auto;min-height:0;min-width:0;width:100%;box-sizing:border-box;overflow-y:auto;padding:8px 10px}
+  main{flex:1 1 auto;min-height:0;min-width:0;width:100%;box-sizing:border-box;overflow-y:auto;padding:8px 10px calc(8px + var(--safe-bottom))}
   .topin{padding:6px 10px;gap:8px}
   #worker-status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-  .runbar{padding-bottom:max(env(safe-area-inset-bottom), 8px)}
+  /* t_d671cd7c directive 5 + t_76a0ceb9 geometry: on phones the bar is a
+     static first card in the document flow — a ~200px sticky overlay would
+     hide sampled controls mid-scroll; safe-area padding rides main's bottom. */
+  main>.runbar-top{border-radius:var(--r-ctl)}
+  /* the bar sits at main's top edge: the review popover opens downward, and
+     main's overflow would clip an upward panel (directives 5+7). */
+  .runbar-top .popover{top:calc(100% + 8px);bottom:auto;right:0;left:auto}
   .runbar > :is(.in){display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr);gap:0 8px;padding:0 10px}
   .runbar .est{grid-column:2 / -1;min-width:0}
   .runbar .bud{margin:0;text-align:left;width:auto;order:initial}
-  .runbar .fight-style-select{grid-column:1 / -1;min-width:0;max-width:100%;width:100%;padding:4px;font-size:11px}
+  .runbar .fight-style-select{grid-column:1 / -1;min-width:0;max-width:100%;width:100%;padding:4px 26px 4px 8px;font-size:11px}
   .runbar #compare-mode{margin-block-start:var(--gap-xs)}
   .runbar .popover-host{min-width:0}
   .runbar > :is(.in) > :is(.workflow-status){grid-column:1 / -1}
@@ -116,7 +126,10 @@ main button.row-x{min-height:28px;padding:3px 7px}
    the mock had no add/sort/enhancements UI, so these keep the design voice) */
 .headtools{margin-left:auto;display:inline-flex;align-items:center;gap:var(--gap-sm);flex-wrap:wrap}
 .slot-sort-select,.slot-toggle-all,.slot-add-toggle{border:1px solid var(--line2);border-radius:6px;
-  background:var(--surface);color:var(--ink2);font-size:12px;padding:4px 10px;cursor:pointer}
+  background-color:var(--surface);color:var(--ink2);font-size:12px;padding:4px 10px;cursor:pointer}
+/* t_9040b457 (t_66acf0b2): background-color, not the background: shorthand —
+   the shorthand reset the global select chevron's background-image. */
+.slot-sort-select{padding-right:26px}  /* t_d671cd7c directive 7: chevron room */
 .slot-sort-select:hover,.slot-toggle-all:hover,.slot-add-toggle:hover{border-color:var(--acc);color:var(--acc-text)}
 .slot-sort-select.is-scoring{opacity:.55;pointer-events:none}
 .slot-add-form{display:flex;gap:var(--gap-sm);padding:8px 20px 0;max-width:560px}
@@ -144,6 +157,17 @@ main button.row-x{min-height:28px;padding:3px 7px}
 .enh-section[open]>summary::before{content:"▾ "}
 .enh-section[open]>summary{border-bottom:1px solid var(--line)}
 .enhancement-group{display:flex;flex-wrap:wrap;gap:var(--gap-sm);align-items:center;border:1px solid var(--line);border-radius:var(--r-ctl);padding:12px 14px;margin:0;min-width:0;max-width:100%;box-sizing:border-box}
+/* t_d671cd7c directives 2-4: gems (one column per secondary stat) and
+   enchantments (one column per slot) render as responsive CSS grid columns;
+   every entry is a gear-like row: icon | grade-colored name | equipped tag,
+   columns aligned across the rows of a column. Stacks on mobile (auto-fit). */
+.enh-columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:var(--gap-sm);align-items:start}
+.enh-columns>.enhancement-group{display:flex;flex-direction:column;align-items:stretch;gap:var(--gap-2xs)}
+.enh-rows{display:flex;flex-direction:column;align-items:stretch;gap:var(--gap-2xs)}
+.enh-entry{display:grid;grid-template-columns:26px minmax(0,1fr);align-items:center;gap:var(--gap-xs)}
+.enh-entry .choice-chip {grid-column:2;grid-row:1;border-radius:var(--r-ctl);justify-content:flex-start}
+.enh-entry .enhancement-name-link{grid-column:1;grid-row:1}
+.enh-entry .name{display:block;overflow:hidden;text-overflow:ellipsis;font-size:12.5px;font-weight:600;white-space:nowrap}
 .enhancement-group legend{font-size:12px;font-weight:650;color:var(--ink2);padding:0 6px}
 .enhancement-name-link img{width:26px;height:26px;border-radius:6px;display:block}
 .choice-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line2);border-radius:99px;
@@ -168,9 +192,17 @@ main button.row-x{min-height:28px;padding:3px 7px}
 
 .num-badge-sm{width:16px;height:16px;font-size:9.5px}
 .armory-controls{display:flex;gap:var(--gap-sm);margin:8px 0 10px;flex-wrap:wrap}
+/* t_d671cd7c addendum 4: the Armory form is its own band above the gear grid
+   (paste.js hides #armory-import while a character is loaded). */
+.armory-import-band{margin-top:var(--gap-lg);padding:0 2px}
+.armory-import-band .armory-divider{margin:0 0 var(--gap-xs)}
 .armory-field{min-width:160px;flex:1}
 .armory-divider{color:var(--ink3);font-size:12.5px;margin:var(--gap-sm) 0 var(--gap-xs)}
 .drafts-note{margin-top:var(--gap-sm);padding:8px 10px;border-radius:6px;background:var(--warn-soft);color:var(--ink);font-size:13px}
 .rows>.fold{display:flex;justify-content:center;margin-top:4px;cursor:pointer}
 
+@media (min-width:851px){main>.runbar-top{position:sticky;top:0;z-index:6}
+/* the bar rides main's top edge: the review popover opens downward so main's
+   overflow can't clip it (t_d86c148d pattern; directive 5+7). */
+.runbar-top .popover{top:calc(100% + 8px);bottom:auto;right:0;left:auto}}
 .enh-section:not([open]) .enhancement-group{display:none}

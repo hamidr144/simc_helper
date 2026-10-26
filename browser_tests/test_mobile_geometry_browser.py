@@ -122,8 +122,16 @@ def test_populated_mobile_setup_geometry_and_safe_area(app_url, width):
             "() => new Promise(resolve => requestAnimationFrame(() => "
             "requestAnimationFrame(resolve)))"
         )
-        padding = page.locator(".runbar").evaluate("el => getComputedStyle(el).paddingBottom")
-        assert padding == "34px"
+        # t_d671cd7c directive 5: the fixed bottom run bar is gone; the setup
+        # bar is a static first card (mobile) so scrolling never hides controls
+        # under a tall sticky overlay.
+        assert page.locator(".runbar").evaluate("el => getComputedStyle(el).position") == "static"
+        # directive 5: bar first, gear below it; footer metadata last in document order.
+        runbar_box = page.locator(".runbar").bounding_box()
+        gear_box = page.locator("#gear-step").bounding_box()
+        footmeta_box = page.locator(".footmeta").bounding_box()
+        assert runbar_box and gear_box and runbar_box["y"] < gear_box["y"], (runbar_box, gear_box)
+        assert footmeta_box and runbar_box and footmeta_box["y"] > runbar_box["y"]
 
         main = page.locator("main")
         assert main.evaluate("el => el.scrollHeight > el.clientHeight")
@@ -166,9 +174,6 @@ def test_populated_mobile_setup_geometry_and_safe_area(app_url, width):
             if metrics[0] + metrics[1] >= metrics[2] - 1:
                 break
         assert metrics[0] + metrics[1] >= metrics[2] - 1, metrics
-        last_content = page.locator(".footmeta").bounding_box()
-        runbar = page.locator(".runbar").bounding_box()
-        assert last_content and runbar and last_content["y"] + last_content["height"] <= runbar["y"]
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         browser.close()
 
@@ -224,7 +229,8 @@ def test_populated_desktop_setup_rows_clear_runbar_initial_and_running(app_url):
             if running:
                 page.locator("#run-progress").evaluate("el => el.hidden = false")
             assert page.locator("#btn-run").is_visible()
-            assert page.locator(".runbar").evaluate("el => getComputedStyle(el).position") == "static"
+            # t_d671cd7c directive 5: desktop bar is main's sticky top card.
+            assert page.locator(".runbar").evaluate("el => getComputedStyle(el).position") == "sticky"
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             overlaps = page.evaluate("""() => {
               const bar = document.querySelector('.runbar').getBoundingClientRect();
@@ -257,4 +263,152 @@ def test_runbar_selectors_have_tokenized_vertical_clearance(app_url, width):
             "el => parseFloat(getComputedStyle(el).getPropertyValue('--gap-xs'))"
         )
         assert gap >= token_gap, {"width": width, "gap": gap, "required": token_gap}
+        browser.close()
+
+
+@pytest.fixture(scope="module")
+def config_app_url(tmp_path_factory):
+    """t_d671cd7c: a server whose config.json is the shipped example, so the
+    gem/enchant columns render real entries in geometry checks."""
+    import json
+    base_dir = tmp_path_factory.mktemp("config-browser-app")
+    # The app serves static assets and loads config.json relative to its CWD
+    # (= ROOT), so the season config rides a gitignored ROOT/config.json that
+    # this fixture owns for its lifetime (worktrees carry no user config.json).
+    config_path = ROOT / "config.json"
+    created = not config_path.exists()
+    config = json.loads((ROOT / "examples" / "config.example.json").read_text(encoding="utf-8"))
+    if created:
+        config_path.write_text(json.dumps(config), encoding="utf-8")
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    env = os.environ.copy()
+    env.update(
+        BASE_DIR=str(base_dir),
+        REPORTS_DIR=str(base_dir / "reports"),
+        AUTHENTICATION_ENABLED="false",
+        PYTHONPATH=os.pathsep.join((str(ROOT), str(ROOT / "src"), env.get("PYTHONPATH", ""))),
+    )
+    log = (base_dir / "uvicorn.log").open("w")
+    process = subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "src.web.main:app",
+         "--host", "127.0.0.1", "--port", str(port)],
+        cwd=str(ROOT), env=env, stdout=log, stderr=subprocess.STDOUT,
+    )
+    try:
+        for _ in range(80):
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+                    break
+            except OSError:
+                time.sleep(0.25)
+        else:
+            process.terminate()
+            pytest.fail("uvicorn did not start: " + (base_dir / "uvicorn.log").read_text()[-2000:])
+        yield f"http://127.0.0.1:{port}/"
+    finally:
+        process.terminate()
+        process.wait(timeout=10)
+        if created:
+            config_path.unlink(missing_ok=True)
+
+
+@pytest.mark.parametrize("width, height", [(320, 660), (430, 844), (1440, 900)])
+def test_top_runbar_gem_enchant_columns_and_chevron_fit(config_app_url, width, height):
+    """t_d671cd7c directives 3/4/5/7: top run bar above the gear grid, gem
+    stat columns + enchant slot columns, normalized chevron inside the
+    selects, and no horizontal overflow at phone/tablet/desktop widths."""
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": width, "height": height}, device_scale_factor=1)
+        page.goto(config_app_url, wait_until="networkidle")
+        page.locator("#addon-input").evaluate(
+            "(el, value) => { el.value = value; "
+            "el.dispatchEvent(new Event('input', {bubbles:true})); }",
+            FIXTURE.read_text(),
+        )
+        page.locator("#btn-parse-addon").click()
+        page.locator("#gear-grid .slotsec").first.wait_for(state="visible", timeout=15000)
+        page.locator('#enh-card .enh-columns .enh-entry').first.wait_for(
+            state="visible", timeout=15000)
+
+        # directive 5: run bar under the header, above the gear grid.
+        # (the parse transition smooth-scrolls main; wait it out, then pin
+        # instant scrollTop=0 — document order is only meaningful from there)
+        page.wait_for_timeout(600)
+        page.evaluate("() => { const m = document.querySelector('main');"
+                      " m.style.scrollBehavior = 'auto'; m.scrollTop = 0 }")
+        page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
+        assert page.evaluate("document.querySelector('main').scrollTop") == 0
+        runbar = page.locator(".runbar").bounding_box()
+        gear = page.locator("#gear-step").bounding_box()
+        assert runbar and gear and runbar["y"] + runbar["height"] <= gear["y"] + 1, (runbar, gear)
+
+        # directive 7: chevron INSIDE the control; selects share height, in-bar.
+        for sel in ("#fight-style", "#compare-mode"):
+            box = page.locator(sel).bounding_box()
+            style = page.locator(sel).evaluate(
+                "el => { const s = getComputedStyle(el); return [s.appearance,"
+                " parseFloat(s.paddingRight), s.backgroundImage.slice(0, 4)]; }"
+            )
+            assert box and box["width"] > 0, sel
+            assert style[0] == "none", (sel, style)
+            assert float(style[1]) >= 20.0, (sel, style)
+            assert style[2] == "url(", (sel, style)
+            assert box["x"] + box["width"] <= runbar["x"] + runbar["width"] + 1, (sel, box, runbar)
+        heights = page.locator("#fight-style, #compare-mode").evaluate_all(
+            "els => els.map(el => el.getBoundingClientRect().height)")
+        assert abs(heights[0] - heights[1]) <= 1, heights
+
+        # directive 3: gems split into one column per secondary stat.
+        gem_legends = page.locator('[data-enh-group="Gems"] .enh-columns legend') \
+            .evaluate_all("els => els.map(el => el.textContent)")
+        for needed in ("Mastery", "Critical Strike", "Versatility", "Haste"):
+            assert needed in gem_legends, gem_legends
+        # directive 2: grade-colored names on every entry; the Wowhead icon
+        # anchor exists in the DOM (the img itself self-removes when the icon
+        # proxy is offline, so the anchor is the network-independent fact).
+        names = page.evaluate(
+            "() => [...document.querySelectorAll('#enh-card .enh-entry .name')]"
+            ".map(n => n.className)")
+        assert names and all(" q-" in cls for cls in names), names[:6]
+        assert page.locator("#enh-card a.enhancement-name-link").count() > 0
+        # directive 4: enchantment columns headed by slot names.
+        enchant_legends = page.locator('[data-enh-group="Enchantments"] .enh-columns legend') \
+            .evaluate_all("els => els.map(el => el.textContent)")
+        needed_slots = {"Legs", "Boots", "Chest", "Helm", "Rings", "Shoulders", "Weapon"}
+        assert needed_slots <= set(enchant_legends), enchant_legends
+        # directive 7: icon/name columns aligned across the rows of a column.
+        misaligned = page.evaluate("""() => {
+          const grids = [...document.querySelectorAll('#enh-card .enh-columns')];
+          let off = 0;
+          for (const grid of grids) for (const col of grid.children) {
+            const rows = [...col.querySelectorAll('.enh-entry')];
+            if (rows.length < 2) continue;
+            const base = rows[0].getBoundingClientRect();
+            for (const row of rows) {
+              const r = row.getBoundingClientRect();
+              const icon = row.querySelector('a') ?? row.querySelector('img');
+              const chip = row.querySelector('.choice-chip');
+              if (icon && Math.abs(icon.getBoundingClientRect().x - base.x) > 1) off++;
+              /* 26px icon column + 4px --gap-xs */
+              if (Math.abs(chip.getBoundingClientRect().x - (base.x + 30)) > 1) off++;
+              if (Math.abs(r.x - base.x) > 1) off++;
+            }
+          }
+          return off;
+        }""")
+        assert misaligned == 0, misaligned
+
+        # responsive columns + no horizontal overflow.
+        layout = page.evaluate("""() => {
+          const grid = document.querySelector('#enh-card .enh-columns');
+          return [getComputedStyle(grid).gridTemplateColumns.split(' ').length, grid.clientWidth];
+        }""")
+        if width <= 430:
+            assert layout[0] == 1, (width, layout)
+        else:
+            assert layout[0] >= 2, (width, layout)
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), width
         browser.close()

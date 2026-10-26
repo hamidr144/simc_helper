@@ -203,10 +203,13 @@ def test_app_js_wires_sorting():
     assert "slotSorts[slot] = sortSelect.value;" in js
     assert "async function ensureStatScores(slot, items, selectEl)" in js
     assert "api/wowhead/tooltips/batch" in js
-    # Sort state resets with a fresh export (initializeSelections clears all three).
+    # Sort state resets with a fresh export (t_9040b457: initializeSelections
+    # delegates to resetCharacterState, which Start over also calls).
     init = js.split("function initializeSelections()")[1]
-    for reset in ("slotSorts = {}", "statScores = {}", "addedItems = new Map()"):
-        assert reset in init.split("\n\n")[0], reset
+    assert "resetCharacterState();" in init.split("\n\n")[0]
+    reset = js.split("function resetCharacterState()")[1]
+    for reset_line in ("slotSorts = {}", "statScores = {}", "addedItems = new Map()"):
+        assert reset_line in reset.split("\n\n")[0], reset_line
 
 
 def test_app_js_wires_add_item():
@@ -238,8 +241,8 @@ def test_style_css_defines_step4_classes():
 def test_app_html_cache_busted_step4():
     html = _static("app.html")
     # t_94a15fe3 (MGE2 split): cache-bust now rides the token sheet + boot entry.
-    assert "css/tokens.css?v=red3-4" in html
-    assert "js/pages/setup.js?v=red3-5" in html  # cache token matches the setup circular import
+    assert "css/tokens.css?v=red3-5" in html
+    assert "js/pages/setup.js?v=red3-7" in html  # cache token matches the setup circular import
 
 
 def test_setup_circular_import_matches_entry_token():

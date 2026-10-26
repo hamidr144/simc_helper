@@ -13,9 +13,9 @@
   document.documentElement.dataset.pal=window.__pref==='system'
     ?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):window.__pref;})();
   </script>
-  <link rel="stylesheet" href="static/css/tokens.css?v=red3-4">
-  <link rel="stylesheet" href="static/css/setup.css?v=red3-17">
-  <link rel="stylesheet" href="static/css/run.css?v=red3-4">
+  <link rel="stylesheet" href="static/css/tokens.css?v=red3-5">
+  <link rel="stylesheet" href="static/css/setup.css?v=red3-19">
+  <link rel="stylesheet" href="static/css/run.css?v=red3-5">
 </head>
 <body>
 <a class="skip skip-link" href="#gear-grid">Skip to gear</a>
@@ -35,6 +35,19 @@
       type="button" role="radio" data-th="dark" aria-checked="false">Dark</button>
     </span>
   </span>
+  <!-- t_d671cd7c directive 6: the footer nav links became a standard
+       top-right profile dropdown (replaces 'Run history'/'My runs' footer
+       links; hrefs unchanged). 'Sign out' rides the existing GET /logout
+       surface; no account-management route exists, so none is invented. -->
+  <div class="profile-menu">
+    <button id="btn-profile-menu" class="profile-menu-btn" type="button"
+      aria-haspopup="true" aria-expanded="false" aria-controls="profile-menu-panel">Menu ▾</button>
+    <div id="profile-menu-panel" class="profile-menu-panel" hidden>
+      <a href="history">Run history</a>
+      <a href="./">My runs</a>
+      <a href="logout">Sign out</a>
+    </div>
+  </div>
 </div></header>
 
 <nav class="qj" aria-label="Jump to slot"><div class="qjin" id="qj"></div></nav>
@@ -42,39 +55,79 @@
 <main>
   <div class="phead"><h1>Gear</h1></div>
 
+  <!-- t_d671cd7c directive 5: run options moved to the top of the page (under
+       the header, above the gear grid). The element itself moved; all ids,
+       wiring and the renderWorkflow behavior are untouched. -->
+  <div class="runbar runbar-top">
+    <div class="in">
+      <button id="btn-run" class="runbtn">Run comparison</button>
+      <button id="btn-open-run" class="btn-ghost" hidden aria-label="Open the run progress view">run progress</button>
+      <span class="est"><b class="num" id="combo-count">0</b> <span id="combo-word">combinations</span><span id="work-estimate" class="est" role="status"></span></span>
+      <span class="bud num"><b id="selected-item-count">0</b> <span id="item-word">items</span></span>
+      <label class="sr-only" for="fight-style">Fighting style</label>
+      <select id="fight-style" class="fight-style-select" title="How the fight is simulated">
+        <option value="single_boss" selected>Single boss (5 min)</option>
+        <option value="dungeon_slice">Dungeon slice</option>
+      </select>
+      <label class="sr-only" for="compare-mode">Compare</label>
+      <!-- TG3-D §3.2 (leader ruling Q2): helper lives in the title attr;
+           selection state, counts and cost stay ink-visible in the runbar. -->
+      <select id="compare-mode" aria-describedby="compare-mode-help" class="fight-style-select" title="Which gear changes are simulated. Combination mode simulates every selected item of every slot together, like Raidbots Top Gear.">
+        <option value="single_swap" selected>one swap at a time</option>
+        <option value="combinations">all combinations (Top Gear)</option>
+      </select>
+      <span id="compare-mode-help" class="sr-only">Combination mode simulates every selected item of every slot together, like Raidbots Top Gear.</span>
+      <span class="popover-host">
+        <button id="btn-review" class="btn-ghost">Review changes</button>
+        <div id="review-popover" class="popover" role="dialog" aria-label="Current gear changes" hidden></div>
+      </span>
+      <div id="workflow-status" class="workflow-status" role="status" aria-live="polite"></div>
+    </div>
+  </div>
+
   <details class="card import" id="import-details" open>
     <summary>Import character</summary>
     <div class="cardbody">
       <textarea id="addon-input" placeholder="Paste addon export or full SimC profile here" aria-label="Addon export text"></textarea>
       <div class="run-actions">
         <button id="btn-parse-addon" class="btn">Load export</button>
-        <button id="btn-new-export" class="btn-ghost">New export</button>
+        <!-- t_d671cd7c addendum 3: visible only in the collapsed post-import
+             state (paste.js collapse/reset toggles it; hidden at rest in
+             markup); label renamed to the plain one-word form per the
+             clear-names rule. -->
+        <button id="btn-new-export" class="btn-ghost" hidden>Start over</button>
         <span class="char-count" id="addon-char-count"></span>
-      </div>
-      <p class="armory-divider">Armory character</p>
-      <div class="armory-controls">
-        <div class="armory-field">
-          <label class="sr-only" for="armory-input">Character name and realm, or a full Armory link</label>
-          <input id="armory-input" class="armory-input" type="text" autocomplete="off" spellcheck="false"
-            placeholder="Name-Realm or link">
-          <label class="sr-only" for="armory-realm">Realm (pick from list instead of typing it)</label>
-          <select id="armory-realm" class="armory-realm-select" title="Realm" disabled hidden>
-            <option value="" selected>Select realm…</option>
-          </select>
-          <label class="sr-only" for="armory-region">Armory region</label>
-          <select id="armory-region" class="armory-region-select" title="Armory region">
-            <option value="eu" selected>EU</option>
-            <option value="us">US</option>
-            <option value="kr">KR</option>
-            <option value="tw">TW</option>
-          </select>
-          <button id="btn-armory-load" class="btn">Load character</button>
-        </div>
       </div>
       <div id="parse-error" class="error-panel" role="alert" hidden></div>
       <div id="parse-warning" class="warning-panel" role="status" aria-live="polite" hidden></div>
     </div>
   </details>
+
+  <!-- t_d671cd7c addendum 4: the Armory form sits above the gear grid as its
+       own band (paste.js hides #armory-import while a character is loaded
+       and restores it on Start over). -->
+  <div class="armory-import-band" id="armory-import">
+    <p class="armory-divider">Armory character</p>
+    <div class="armory-controls">
+      <div class="armory-field">
+        <label class="sr-only" for="armory-input">Character name and realm, or a full Armory link</label>
+        <input id="armory-input" class="armory-input" type="text" autocomplete="off" spellcheck="false"
+          placeholder="Name-Realm or link">
+        <label class="sr-only" for="armory-realm">Realm (pick from list instead of typing it)</label>
+        <select id="armory-realm" class="armory-realm-select" title="Realm" disabled hidden>
+          <option value="" selected>Select realm…</option>
+        </select>
+        <label class="sr-only" for="armory-region">Armory region</label>
+        <select id="armory-region" class="armory-region-select" title="Armory region">
+          <option value="eu" selected>EU</option>
+          <option value="us">US</option>
+          <option value="kr">KR</option>
+          <option value="tw">TW</option>
+        </select>
+        <button id="btn-armory-load" class="btn">Load character</button>
+      </div>
+    </div>
+  </div>
 
   <section class="workflow-step" id="gear-step" hidden>
     <div id="gear-grid"></div>
@@ -104,9 +157,9 @@
     </div>
   </section>
 
+  <!-- t_d671cd7c directive 6: nav links live in the header profile dropdown
+       now; the footer keeps the non-button metadata only. -->
   <div class="footmeta">
-    <a href="history">Run history</a>
-    <a href="./">My runs</a>
     <span id="app-version"></span>
     <span id="draft-note" role="status"></span>
   </div>
@@ -135,34 +188,7 @@
   </div>
 </div>
 
-<div class="runbar">
-  <div class="in">
-    <button id="btn-run" class="runbtn">Run comparison</button>
-    <button id="btn-open-run" class="btn-ghost" hidden aria-label="Open the run progress view">run progress</button>
-    <span class="est"><b class="num" id="combo-count">0</b> <span id="combo-word">combinations</span><span id="work-estimate" class="est" role="status"></span></span>
-    <span class="bud num"><b id="selected-item-count">0</b> <span id="item-word">items</span></span>
-    <label class="sr-only" for="fight-style">Fighting style</label>
-    <select id="fight-style" class="fight-style-select" title="How the fight is simulated">
-      <option value="single_boss" selected>Single boss (5 min)</option>
-      <option value="dungeon_slice">Dungeon slice</option>
-    </select>
-    <label class="sr-only" for="compare-mode">Compare</label>
-    <!-- TG3-D §3.2 (leader ruling Q2): helper lives in the title attr;
-         selection state, counts and cost stay ink-visible in the runbar. -->
-    <select id="compare-mode" aria-describedby="compare-mode-help" class="fight-style-select" title="Which gear changes are simulated. Combination mode simulates every selected item of every slot together, like Raidbots Top Gear.">
-      <option value="single_swap" selected>one swap at a time</option>
-      <option value="combinations">all combinations (Top Gear)</option>
-    </select>
-    <span id="compare-mode-help" class="sr-only">Combination mode simulates every selected item of every slot together, like Raidbots Top Gear.</span>
-    <span class="popover-host">
-      <button id="btn-review" class="btn-ghost">Review changes</button>
-      <div id="review-popover" class="popover" role="dialog" aria-label="Current gear changes" hidden></div>
-    </span>
-    <div id="workflow-status" class="workflow-status" role="status" aria-live="polite"></div>
-  </div>
-</div>
-
-<script type="module" src="static/js/pages/setup.js?v=red3-5"></script>
+<script type="module" src="static/js/pages/setup.js?v=red3-7"></script>
 <noscript>
   <p class="noscript-warning">This application requires JavaScript to function.</p>
 </noscript>

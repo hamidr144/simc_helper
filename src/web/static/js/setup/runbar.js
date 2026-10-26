@@ -70,7 +70,9 @@ export function updateSummary() {
   // show '…' until the first generate-simc response replaces the estimate.
   const combosMode = document.getElementById('compare-mode')?.value === 'combinations';
   const server = combosMode && state.generatedInput?.mode === 'combinations' ? state.generatedInput : null;
-  const count = combosMode && !server ? null : (server ? server.combinations : estimateCombinations());
+  // t_9040b457 (t_ca74bb9c): no character loaded — the estimate's baseline
+  // combo of 1 must not outlive Start over; the bar shows the empty state.
+  const count = !state.parsedData ? 0 : (combosMode && !server ? null : (server ? server.combinations : estimateCombinations()));
   const countEl = document.getElementById('combo-count');
   const itemCountEl = document.getElementById('selected-item-count');
   const runButton = document.getElementById('btn-run');
@@ -116,4 +118,34 @@ export function renderReviewPopover() {
   pop.innerHTML = rows.length
     ? `<table class="diff-table"><thead><tr><th scope="col">Slot</th><th scope="col">Item</th><th scope="col">Grade</th></tr></thead><tbody>${rows.join('')}</tbody></table>`
     : '<small>No items selected yet.</small>';
+}
+
+// t_9040b457 (t_6732b9de): main is the overflow scroller, and scroll-padding
+// is per-scroll-container — html{scroll-padding-top} never reaches it. Keep
+// main's scroll-padding synced with the sticky runbar's fluid height (it
+// wraps on resize/status changes) so scrollIntoView/anchor targets land below
+// the bar; the 12px floor clears the sticky #qj flush line at the widths
+// where the bar is static and scrolls away.
+// shortcut: node smoke harnesses and old browsers lack ResizeObserver/DOM —
+// the CSS 12px floor is the graceful fallback; no re-polyfill needed until a
+// supported browser lacks RO.
+if (typeof document !== 'undefined' && typeof ResizeObserver !== 'undefined') {
+  const mainScroller = document.querySelector('main');
+  const stickyRunbar = mainScroller && mainScroller.querySelector('.runbar-top');
+  if (mainScroller && stickyRunbar) {
+    const syncScrollPadding = () => {
+      const sticky = getComputedStyle(stickyRunbar).position === 'sticky';
+      // measure the whole overlay stack (bar margin + fluid height) from
+      // main's scrollport top; offsetHeight alone misses the sticky margin
+      const stack = sticky
+        ? stickyRunbar.getBoundingClientRect().bottom - mainScroller.getBoundingClientRect().top
+        : 0;
+      mainScroller.style.scrollPaddingTop = `${Math.ceil(stack) + 12}px`;
+    };
+    const ro = new ResizeObserver(syncScrollPadding);
+    ro.observe(stickyRunbar);
+    const qjStrip = document.querySelector('.qj');   // wraps -> main's top moves
+    if (qjStrip) ro.observe(qjStrip);
+    syncScrollPadding();
+  }
 }

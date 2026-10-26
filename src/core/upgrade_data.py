@@ -8,12 +8,15 @@ change.  The SimC engine resolves item stats from its own game data via
 ``ilevel=`` overrides we inject into generated profiles.
 
 Sources (verified 2026-10-13):
-- S2 ladders + above-6/6 ilvls (337/340/344): live game DB configs embedded
+- S2 ladders + above-6/6 ilvls (337/341/344): live game DB configs embedded
   in SimC (engine/dbc/generated/item_scaling.inc, build 12.1.0.69933) and
   https://www.wowhead.com/guide/midnight/item-level-gear-upgrades-dawncrests
-- Ascendant Venomforged results (Hero 328 / Myth 340, crafted 325/338,
-  Venomstone item 280562, cost 10, necklaces added):
-  https://www.wowhead.com/guide/midnight/bonus-rolls-item-upgrades
+- Ascendant Venomforged results (Hero 328 / Myth 341, crafted 324/337,
+  Venomstone item 280562, cost 10, necklaces added) — live values per
+  Blizzard's retroactive 2026-10-23 hotfix (myth 340->341, crafted 325/338
+  ->324/337; hero track unchanged):
+  https://worldofwarcraft.blizzard.com/en-us/news/24307310/hotfixes-october-20-2026
+  https://www.wowhead.com/news/item-level-changes-for-ascended-venomforged-gear-383552
 - Crest currency ids: https://github.com/simulationcraft/simc-addon extras.lua
 - S2 upgrade bonus ids (``upgrade_bonuses``; 12846 = Myth 2/6 ruling): bonus_list
   of real Armory imports (t_58a8fcd8 leader ruling 1916; 328/334 anchors from
