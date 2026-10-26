@@ -5,7 +5,9 @@
 /* ---- vertical page-length list ---- */
 body{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
 .top,.qj,.runbar{flex:none}
-main{max-width:880px;padding-bottom:24px;flex:1 1 auto;min-height:0;overflow-y:auto}
+main{max-width:880px;padding-bottom:24px;flex:1 1 auto;min-height:0;overflow-y:auto;scroll-padding-top:12px}
+/* t_9040b457 (t_6732b9de): scroll-padding floor for no-JS anchor jumps;
+   runbar.js overwrites it inline with the sticky bar's measured height. */
 /* t_d671cd7c directive 5: top-of-page run bar card; .runbar-top{position:static}
    (tokens.css) overrides the shared fixed-bottom .runbar rule. */
 main>.runbar-top{margin-top:var(--gap-sm)}
@@ -124,7 +126,9 @@ main button.row-x{min-height:28px;padding:3px 7px}
    the mock had no add/sort/enhancements UI, so these keep the design voice) */
 .headtools{margin-left:auto;display:inline-flex;align-items:center;gap:var(--gap-sm);flex-wrap:wrap}
 .slot-sort-select,.slot-toggle-all,.slot-add-toggle{border:1px solid var(--line2);border-radius:6px;
-  background:var(--surface);color:var(--ink2);font-size:12px;padding:4px 10px;cursor:pointer}
+  background-color:var(--surface);color:var(--ink2);font-size:12px;padding:4px 10px;cursor:pointer}
+/* t_9040b457 (t_66acf0b2): background-color, not the background: shorthand —
+   the shorthand reset the global select chevron's background-image. */
 .slot-sort-select{padding-right:26px}  /* t_d671cd7c directive 7: chevron room */
 .slot-sort-select:hover,.slot-toggle-all:hover,.slot-add-toggle:hover{border-color:var(--acc);color:var(--acc-text)}
 .slot-sort-select.is-scoring{opacity:.55;pointer-events:none}
