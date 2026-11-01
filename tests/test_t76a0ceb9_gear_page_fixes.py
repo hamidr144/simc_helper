@@ -69,7 +69,9 @@ def test_directives_7_8_no_oversized_equipped_card():
     assert "itemRow('eqc'" not in _read("js/core/ui.js")
     assert ".eqc{" not in SETUP_CSS and ".eqc,.vrow{" not in SETUP_CSS
     # equipped items are ordinary rows with the equipped tag, selected state
-    assert "eq: !variant.rank && !variant.voidforged && equippedSet.has(item)" in SETUP_JS
+    # (t_38a21c87: the flag moved to a const so equipped rows can carry the
+    # 'base' label — same expression, same semantics)
+    assert "const eq = !variant.rank && !variant.voidforged && equippedSet.has(item);" in SETUP_JS
     assert "if (d.eq) return '<span class=\"tag eq\">equipped</span> '" in _read("js/core/ui.js")
     # seeds selections from equipped only (directive 7 first render)
     state = _read("js/core/state.js")
