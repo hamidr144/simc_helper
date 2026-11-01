@@ -702,7 +702,9 @@ def test_user_chosen_upgrades_are_marked_user_selected():
     # RED-3: a row click writes the user_selected entry; clicking the
     # selected row again reverts to the equipped baseline (variantMatches).
     assert "user_selected: true," in js
-    assert "if (variantMatches(slot, item, rank, vf)) {" in js
+    # t_6b1cd58a: toggle truth recomputes pickedRowRendered so a click
+    # matches the keyed render truth (invisible picks toggle off cleanly).
+    assert "if (variantMatches(slot, item, rank, vf,\n      pickedRowRendered(slot, item, ranksForItem(slot, item)))) {" in js
     assert "delete state.gearUpgrades[slot]?.[item];" in js
     # Wowhead hydration must not clobber a pick the user already made.
     assert "if (state.gearUpgrades[slot]?.[item]?.user_selected) continue;" in js
