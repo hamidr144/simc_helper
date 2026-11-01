@@ -366,11 +366,19 @@ def test_top_runbar_gem_enchant_columns_and_chevron_fit(config_app_url, width, h
             "els => els.map(el => el.getBoundingClientRect().height)")
         assert abs(heights[0] - heights[1]) <= 1, heights
 
-        # directive 3: gems split into one column per secondary stat.
-        gem_legends = page.locator('[data-enh-group="Gems"] .enh-columns legend') \
+        # t_f9c2ead6 supersedes t_d671cd7c directive 3's per-stat legend
+        # columns: gems (meta gems included) render as ONE dense gem-grid
+        # whose stat groups + Meta gems are full-row .enh-group-head labels.
+        gem_heads = page.locator('[data-enh-group="Gems"] .gem-grid .enh-group-head') \
             .evaluate_all("els => els.map(el => el.textContent)")
-        for needed in ("Mastery", "Critical Strike", "Versatility", "Haste"):
-            assert needed in gem_legends, gem_legends
+        for needed in ("Mastery", "Critical Strike", "Versatility", "Haste", "Meta gems"):
+            assert needed in gem_heads, gem_heads
+        # the reported defect: 'Other'-only configs stacked one tall column
+        # with free space right; chips must pack across every grid column.
+        chip_cols = page.evaluate(
+            "() => new Set([...document.querySelectorAll("
+            "'[data-enh-group=\"Gems\"] .gem-grid .enh-entry')]"
+            ".map(e => Math.round(e.getBoundingClientRect().x))).size")
         # directive 2: grade-colored names on every entry; the Wowhead icon
         # anchor exists in the DOM (the img itself self-removes when the icon
         # proxy is offline, so the anchor is the network-independent fact).
@@ -385,8 +393,12 @@ def test_top_runbar_gem_enchant_columns_and_chevron_fit(config_app_url, width, h
         needed_slots = {"Legs", "Boots", "Chest", "Helm", "Rings", "Shoulders", "Weapon"}
         assert needed_slots <= set(enchant_legends), enchant_legends
         # directive 7: icon/name columns aligned across the rows of a column.
+        # (gem-grid excluded: its chips pack across 5 columns, so cross-row x
+        # alignment is meaningless there; alignment inside each chip row holds
+        # via the untouched .enh-entry grid.)
         misaligned = page.evaluate("""() => {
-          const grids = [...document.querySelectorAll('#enh-card .enh-columns')];
+          const grids = [...document.querySelectorAll('#enh-card .enh-columns')]
+            .filter(g => !g.classList.contains('gem-grid'));
           let off = 0;
           for (const grid of grids) for (const col of grid.children) {
             const rows = [...col.querySelectorAll('.enh-entry')];
@@ -406,14 +418,14 @@ def test_top_runbar_gem_enchant_columns_and_chevron_fit(config_app_url, width, h
         }""")
         assert misaligned == 0, misaligned
 
-        # responsive columns + no horizontal overflow.
+        # t_f9c2ead6: the first grid is now the gem grid — dense 5 columns on
+        # desktop, collapsing 3/2/1 at 850/430/320 (was auto-fit 1-col phones).
         layout = page.evaluate("""() => {
-          const grid = document.querySelector('#enh-card .enh-columns');
+          const grid = document.querySelector('#enh-card .gem-grid');
           return [getComputedStyle(grid).gridTemplateColumns.split(' ').length, grid.clientWidth];
         }""")
-        if width <= 430:
-            assert layout[0] == 1, (width, layout)
-        else:
-            assert layout[0] >= 2, (width, layout)
+        expected_cols = 1 if width <= 320 else (2 if width <= 430 else (3 if width <= 850 else 5))
+        assert layout[0] == expected_cols, (width, layout)
+        assert chip_cols == expected_cols, (width, chip_cols)
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), width
         browser.close()
