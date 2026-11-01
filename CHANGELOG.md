@@ -12,6 +12,33 @@ that bumps the version and tag.
 
 ## [Unreleased]
 
+## [1.4.4] — 2026-11-01
+
+PATCH release from the post-1.4.3 gear-panel fixes merged to dev
+(source `f78f325`, 7 commits over `v1.4.3`, incl. the post-release
+dev rotation PR #110 `5753dc3` and version bumps `e31ec84`).
+
+### Improvements
+
+- Equipped gear rows are labelled `base`: with two equipment slots
+  the stronger equipped piece is now measured against the weakest
+  equipped item, so it no longer shows a "+N ilvl" delta on its own
+  row (t_38a21c87).
+
+### Bug fixes
+
+- Every configured standard gem renders: the gem panel's name-substring
+  filter silently dropped the deployed config's Heliotrope gems
+  (23 configured, 20 rendered) (t_38a21c87).
+- Armory-imported crafted items now carry a crafted marker, so crafted
+  pieces no longer expand crest rank ladder rows (305/318/331) that the
+  game never honors for crafts — crafts are recrafted at the artisan,
+  not upgraded on the Cuzolth rank ladder. A max-quality craft in a
+  Venomforged-eligible slot keeps only its Venomforged endpoint rows
+  (337/324) (t_5b5e8ed9).
+  Limit: the crafted marker keys on the locale-pinned en-gb "Crafted"
+  source tag; items sourced from other locales are not marked.
+
 ## [1.4.3] — 2026-11-01
 
 PATCH release from the Armory-fidelity, gear-ranking, gem-grid,
