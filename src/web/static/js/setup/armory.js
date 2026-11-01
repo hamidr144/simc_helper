@@ -17,6 +17,12 @@ function buildArmoryPayload(value) {
   // A pasted Armory link wins over the selectors (the link carries its own
   // region/realm); plain Name-Realm / Name text uses them.
   if (/^https?:\/\//i.test(value)) return { url: value };
+  // t_696e30aa: users copy the browser-bar form, which has no scheme
+  // ("worldofwarcraft.com/en-gb/character/eu/draenor/Name"). Name-Realm text
+  // never contains a slash, so the Armory "character/" path segment marks a
+  // link: normalize by adding the scheme, let the backend URL parser handle
+  // it (otherwise the locale dash splits it into a nonsense Name-Realm pair).
+  if (/(?:^|\/)character\//i.test(value)) return { url: `https://${value.replace(/^\/+/, '')}` };
   const payload = { name: value, region: armoryRegion?.value || 'eu' };
   const picked = realmIndex.get(armoryRealm?.value || '');
   // A realm typed into the input ("Name-Realm", "Name, Realm") wins over the

@@ -217,6 +217,32 @@ class TestUrlParsing:
             "character/realm/Name"
         ) == ("kr", "realm", "Name")
 
+    def test_site_character_url(self):
+        # t_696e30aa: the browser-bar form users copy from the Armory site.
+        assert parse_armory_url(
+            "https://worldofwarcraft.com/en-gb/character/eu/draenor/Hamidriel"
+        ) == ("eu", "draenor", "Hamidriel")
+
+    def test_site_character_url_schemeless_and_variants(self):
+        # The reported bug: links pasted without a scheme, www., and the
+        # redirect target host all parse as URLs.
+        assert parse_armory_url(
+            "worldofwarcraft.com/en-gb/character/eu/draenor/Hamidriel"
+        ) == ("eu", "draenor", "Hamidriel")
+        assert parse_armory_url(
+            "https://www.worldofwarcraft.blizzard.com/en-us/character/us/"
+            "area-52/Onry%C3%B4/advanced"
+        ) == ("us", "area-52", "Onryô")
+        assert parse_armory_url(
+            "worldofwarcraft.blizzard.com/ko-kr/character/kr/realm/Name"
+        ) == ("kr", "realm", "Name")
+
+    def test_site_character_url_needs_region_segment(self):
+        # Region is part of the canonical character URL; without it the
+        # realm/name would be ambiguous — reject as a bad URL, don't guess.
+        with pytest.raises(ArmoryInputError):
+            parse_armory_url("worldofwarcraft.com/en-gb/character/draenor/Hamidriel")
+
     def test_garbage_url_rejected(self):
         with pytest.raises(ArmoryInputError):
             parse_armory_url("https://example.com/not/armory")
@@ -276,6 +302,22 @@ class TestParseArmoryInput:
         # The UI sends whatever the user typed as `url` only for http(s);
         # but even a mislabelled plain name must be handled, not 500.
         assert parse_armory_input(url="Hamidriel-Draenor") == ("eu", "draenor", "Hamidriel")
+
+    def test_schemeless_site_link_in_url_field(self):
+        # t_696e30aa: a scheme-less browser-bar link must resolve as a URL,
+        # not fall through to the Name-Realm split (the locale dash made
+        # name="worldofwarcraft.com/en", realm="gb/character/..." and the UI
+        # reported "No character ... found on realm ..." for a valid link).
+        assert parse_armory_input(
+            url="worldofwarcraft.com/en-gb/character/eu/draenor/Hamidriel",
+            region="us",
+        ) == ("eu", "draenor", "Hamidriel")
+
+    def test_link_like_non_armory_text_gets_url_message(self):
+        # t_696e30aa: slash-bearing text is a link, never a Name-Realm pair —
+        # a non-Armory link must fail with the URL message, not the realm hint.
+        with pytest.raises(ArmoryInputError, match="does not look like an Armory URL"):
+            parse_armory_input(url="example.com/x/character/y")
 
 
 class TestBuildModelUrl:

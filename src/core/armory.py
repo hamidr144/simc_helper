@@ -119,6 +119,19 @@ _WORLD_SOUL_URL_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Site profile URL as it appears in the browser bar, e.g.
+# https://worldofwarcraft.com/en-gb/character/eu/draenor/Hamidriel
+# (worldofwarcraft.com 301-redirects to worldofwarcraft.blizzard.com; the
+# region segment is part of the canonical character URL).  t_696e30aa:
+# scheme optional — users paste the link from the address bar.
+_SITE_URL_RE = re.compile(
+    r"^(?:https?://)?(?:www\.)?worldofwarcraft\.(?:blizzard\.)?com/"
+    r"(?:[A-Za-z]{2}(?:-[A-Za-z]{2})?/)?"
+    r"character/(?P<region>eu|us|kr|tw)/"
+    r"(?P<realm>[^/]+)/(?P<name>[^/?#]+)",
+    re.IGNORECASE,
+)
+
 # Legacy battle.net profile URL, e.g.
 # https://eu.battle.net/wow/en/character/draenor/Hamidriel/advanced
 _LEGACY_URL_RE = re.compile(
@@ -199,12 +212,14 @@ def parse_armory_url(url: str) -> Tuple[str, str, str]:
     """Parse a full Armory profile URL into ``(region, realmSlug, name)``.
 
     Accepts the current worldsoul form (locale segment required upstream,
-    optional ``/model.json`` suffix and query string tolerated) and the
-    legacy ``{region}.battle.net/wow/.../character/{realm}/{name}`` form.
+    optional ``/model.json`` suffix and query string tolerated), the site
+    browser-bar form (``worldofwarcraft.com/{locale}/character/{region}/
+    {realm}/{name}``, scheme optional), and the legacy
+    ``{region}.battle.net/wow/.../character/{realm}/{name}`` form.
     Percent-encoded names are decoded (``onry%C3%B4`` -> ``Onryô``).
     """
     text = str(url or "").strip()
-    for pattern in (_WORLD_SOUL_URL_RE, _LEGACY_URL_RE):
+    for pattern in (_WORLD_SOUL_URL_RE, _SITE_URL_RE, _LEGACY_URL_RE):
         match = pattern.match(text)
         if match:
             return (
@@ -213,8 +228,9 @@ def parse_armory_url(url: str) -> Tuple[str, str, str]:
                 unquote(match.group("name")),
             )
     raise ArmoryInputError(
-        "That does not look like an Armory URL. Paste a link like "
-        "worldofwarcraft.blizzard.com/en-gb/worldsoul/eu/armory/character/realm/Name"
+        "That does not look like an Armory URL. Paste the character page "
+        "link from your browser bar, e.g. "
+        "worldofwarcraft.com/en-gb/character/eu/realm/Name"
     )
 
 
@@ -261,6 +277,11 @@ def parse_armory_input(
         try:
             return parse_armory_url(text)
         except ArmoryInputError:
+            # t_696e30aa: a slash means the text was meant as a link (WoW
+            # names and realm text never carry one) — report the URL failure
+            # clearly instead of a Name-Realm hint for a pasted link.
+            if "/" in text:
+                raise
             # Not a URL after all — fall through to Name-Realm handling.
             name, realm = parse_name_realm(text)
             region = region or "eu"

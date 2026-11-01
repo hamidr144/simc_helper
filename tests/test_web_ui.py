@@ -855,6 +855,26 @@ def test_realm_dropdown_pick_feeds_armory_payload():
     assert "!/[,-]/.test(value)" in build_payload
 
 
+def test_schemeless_armory_link_is_normalized_to_url():
+    """t_696e30aa: a browser-bar link pasted WITHOUT a scheme must go down the
+    URL path, not the Name-Realm split — "worldofwarcraft.com/en-gb/
+    character/..." would otherwise parse as name="worldofwarcraft.com/en",
+    realm="gb/character/..." and the user gets "No character ... found on
+    realm ..."."""
+    js = resp(read_js()).text
+
+    build_payload = js.split("function buildArmoryPayload", 1)[1].split(
+        "export function updateArmoryState", 1
+    )[0]
+    # The Armory "character/" path segment marks a link in scheme-less text;
+    # normalization adds the scheme before sending.
+    assert "character/" in build_payload
+    assert "https://${value" in build_payload
+    # Name-Realm text (no slash) is untouched by the link branch: the
+    # realm-typed-wins condition still gates on it.
+    assert "!/[,-]/.test(value)" in build_payload
+
+
 def test_static_browser_code_has_no_root_absolute_urls():
     """t_62ff8faa: every browser-side URL must be page-relative.
 
