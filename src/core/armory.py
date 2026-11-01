@@ -437,7 +437,8 @@ def armory_item_string(item: Dict[str, Any]) -> str:
 
     ``bonus_id=`` omitted for an empty bonus list, ``enchant_id=`` omitted
     for empty/absent enchantments.  Ids only — display strings are
-    locale-dependent and ignored.
+    locale-dependent and ignored; the ONE exception is the crafted source
+    tag below, safe because the fetch is locale-pinned to ``ARMORY_LOCALE``.
     """
     item_id = item.get("id")
     if not isinstance(item_id, int) or item_id <= 0:
@@ -462,6 +463,20 @@ def armory_item_string(item: Dict[str, Any]) -> str:
     level = (item.get("level") or {}).get("value") if isinstance(item.get("level"), dict) else None
     if isinstance(level, (int, float)):
         parts.append(f"ilevel={int(level)}")
+
+    # t_5b5e8ed9 (report t_72a3943e §5.2): crafted pieces carry a
+    # "<family> Crafted" source tag on name_description (live fixture: foot
+    # id 237828 ilvl 331 = "Tidal Crafted").  Emit a crafted marker so
+    # isCraftedItem() excludes crafts from the crest-ladder rank scan — a
+    # craft's ilvl (305/318/331) sits ON the ladder, so the scan used to
+    # fabricate crest rows the game never honors (crafted path = recraft at
+    # the artisan).  The marker is VALUELESS on purpose: the payload carries
+    # no true craft quality tier (GSE-2: never infer a tier from ilvl), and
+    # a fabricated crafted_stats value would fabricate SimC scaling stats.
+    desc = item.get("name_description")
+    tag = desc.get("display_string") if isinstance(desc, dict) else None
+    if "crafted" in str(tag or "").lower():
+        parts.append("crafting_quality=")
 
     return ",".join(parts)
 
@@ -603,7 +618,9 @@ def parse_armory_model(payload: Dict[str, Any]) -> Dict[str, Any]:
     # be encoded from the Armory; upgrade if the endpoint ever ships one.
     warnings.append(
         "The Armory does not report professions, so crafted-stat context "
-        "is not encoded — for full fidelity, use an addon export."
+        "is not encoded — crafted pieces are flagged (no crest-upgrade rows) "
+        "but their craft-quality tier is unknown; for full fidelity, use an "
+        "addon export."
     )
 
     return {

@@ -890,3 +890,104 @@ def test_variant_rows_survive_deselect_reselect_t_8a14506b():
     assert out["ascended"] == {"track": "myth", "rank": 6, "item_level": 341}
     # unmapped bonus ids fall through to the ilvl ladder unchanged
     assert out["heroLadder"] == {"track": "hero", "rank": 4, "item_level": 315}
+
+
+# ---------------------------------------------------------------------------
+# t_5b5e8ed9: Armory-imported crafted pieces got fake crest rows. Armory
+# items carried no crafted_stats/crafting_quality marker, so isCraftedItem()
+# was false and the ilvl ladder scan fabricated rank rows at 305/318/331
+# the game never honors (crafted path = recraft at the artisan, report
+# t_72a3943e §5.2). armory.py now stamps the marker off the Armory source
+# tag; seasonFallbackRanks must then expand ZERO crest rows for crafts and
+# keep exactly the §5.2 ascension exception: a max-quality craft (ladder
+# rung [4]: myth 331 / hero 318) in a VF-eligible slot shows ONLY the
+# Venomforged endpoint row (crafted_results 337/324). Harness runs the REAL
+# ES modules on node with the live season data (same pattern as t_8a14506b).
+# ---------------------------------------------------------------------------
+
+_QA5B_HARNESS = r"""
+import { readFileSync } from 'node:fs';
+
+globalThis.fetch = async () => ({
+  ok: true, status: 200,
+  json: async () => JSON.parse(readFileSync('__SEASON_FILE__', 'utf8')),
+});
+const J = (r) => 'file://__STATIC__/js/' + r;
+const { loadUpgradeData } = await import(J('core/season.js'));
+await loadUpgradeData();
+const { state } = await import(J('core/state.js'));
+const { ranksForItem } = await import(J('core/items.js'));
+
+// Strings shaped exactly as armory.py emits them (crafted slots carry the
+// valueless crafting_quality= marker; drops carry none).
+const FEET = 'id=237828,bonus_id=12214/13667/12497,ilevel=331,crafting_quality=';
+const RING = 'id=251513,bonus_id=12214/13667,ilevel=331,crafting_quality=';
+const CTRINKET = 'id=999991,bonus_id=12214,ilevel=331,crafting_quality=';
+const CNECK = 'id=999992,bonus_id=12214,ilevel=318,crafting_quality=';
+const DTRINKET = 'id=999993,bonus_id=12846,ilevel=331';
+state.parsedData = {
+  item_upgrades: {},
+  item_names: {
+    [FEET]: "Spellbreaker's March (331)", [RING]: 'Crafted Ring (331)',
+    [CTRINKET]: 'Crafted Trinket (331)', [CNECK]: 'Crafted Neck (318)',
+    [DTRINKET]: 'Dropped Trinket (331)',
+  },
+  equipped_gear: { feet: FEET, finger2: RING, trinket1: CTRINKET,
+                   neck: CNECK, trinket2: DTRINKET },
+  items_by_slot: { feet: [FEET], finger: [RING], trinket: [CTRINKET, DTRINKET],
+                   neck: [CNECK] },
+};
+state.selectedItems = {};
+state.addedItems = new Map();
+state.gearUpgrades = {};
+state.voidforgedItems = {};
+
+const rows = (slot, item) => ranksForItem(slot, item)
+  .filter(v => v.rank !== null)
+  .map(v => ({ rank: v.rank, ilvl: v.ilvl, vf: v.voidforged, label: v.label }));
+
+const out = {};
+out.feet = rows('feet', FEET);
+out.ring = rows('finger', RING);
+out.craftedTrinket = rows('trinket', CTRINKET);
+out.craftedNeck = rows('neck', CNECK);
+out.droppedTrinket = rows('trinket', DTRINKET);
+delete state.parsedData.equipped_gear.trinket1;
+out.craftedTrinketUnequipped = rows('trinket', CTRINKET);
+
+console.log(JSON.stringify(out));
+"""
+
+
+def test_armory_crafted_items_expand_no_crest_rows_keep_venomforged_endpoint_t_5b5e8ed9():
+    import json
+    import os
+    import subprocess
+    static = os.path.join(os.path.dirname(__file__), "..", "src", "web", "static")
+    season_file = os.path.join(
+        os.path.dirname(__file__), "..", "src", "core", "data", "upgrade_seasons.json")
+    script = (_QA5B_HARNESS
+              .replace("__STATIC__", os.path.abspath(static))
+              .replace("__SEASON_FILE__", os.path.abspath(season_file)))
+    result = subprocess.run(
+        [_qa8a_node(), "--input-type=module", "-e", script],
+        capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, f"harness failed: {result.stderr[-2000:]}"
+    out = json.loads(result.stdout)
+
+    # Crafts on non-eligible slots: base row only — the fake crest rows at
+    # 331 (Myth 6/6 334, the user-reported symptom) are gone.
+    assert out["feet"] == []
+    assert out["ring"] == []
+    # §5.2 ascension exception, trinket myth-craft 331: ONLY the Venomforged
+    # endpoint row at 337 (never the 334 crest row, never 341).
+    assert out["craftedTrinket"] == [
+        {"rank": 6, "ilvl": 337, "vf": True, "label": "Ascendant Venomforged ×10"}]
+    # hero-craft 318 neck -> endpoint 324.
+    assert out["craftedNeck"] == [
+        {"rank": 6, "ilvl": 324, "vf": True, "label": "Ascendant Venomforged ×10"}]
+    # Drops stay on the crest ladder (331 = Myth 5/6 -> 334 rank row exists).
+    assert any(r["rank"] == 6 and r["ilvl"] == 334 and not r["vf"]
+               for r in out["droppedTrinket"]), out["droppedTrinket"]
+    # Flood guard: an unexpanded candidate craft keeps its single base row.
+    assert out["craftedTrinketUnequipped"] == []

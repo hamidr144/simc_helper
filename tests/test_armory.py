@@ -375,6 +375,19 @@ class TestGearParsingHamidriel:
         assert gear["hands"].startswith("id=271466")         # hand
         assert gear["legs"].startswith("id=271464")          # leg
 
+    def test_crafted_pieces_marked_drops_clean_t_5b5e8ed9(self):
+        # The live Hamidriel payload carries three real "Tidal Crafted"
+        # pieces (feet 237828, ring 251513, wrist 237834 — all ilvl 331,
+        # exactly the user-reported fake-crest-row pattern).  Every crafted
+        # slot carries the crafting marker; every drop stays clean.
+        gear = self.parsed["equipped_gear"]
+        for slot in ("feet", "finger2", "wrist"):
+            assert gear[slot].endswith(",crafting_quality="), slot
+        for slot in ("head", "neck", "shoulder", "back", "chest", "hands",
+                     "waist", "legs", "finger1", "trinket1", "trinket2",
+                     "main_hand"):
+            assert "crafting_quality" not in gear[slot], slot
+
     def test_full_item_string_with_bonus_enchant_ilevel(self):
         # chest: Bulwark of the Consecrated Flame, fixture-pinned values
         assert self.parsed["equipped_gear"]["chest"] == (
@@ -523,6 +536,29 @@ class TestItemStringEdgeCases:
 
     def test_missing_id_yields_empty(self):
         assert armory_item_string({"name": "no id"}) == ""
+
+    # t_5b5e8ed9 (report t_72a3943e §5.2): crafted pieces must carry a crafted
+    # marker so isCraftedItem() excludes them from the crest-ladder rank scan.
+    # The signal is the Armory source tag; locale is pinned to en-gb.
+    def test_crafted_source_tag_emits_marker(self):
+        assert armory_item_string({
+            "id": 237828, "level": {"value": 331},
+            "name_description": {"display_string": "Tidal Crafted"},
+        }) == "id=237828,ilevel=331,crafting_quality="
+
+    def test_drop_source_tags_get_no_marker(self):
+        for tag in ("Mythic+", "Heroic", "Heroic Venomcursed", "Mythic"):
+            assert "crafting_quality" not in armory_item_string({
+                "id": 1, "level": {"value": 321},
+                "name_description": {"display_string": tag},
+            })
+
+    def test_absent_or_malformed_name_description_gets_no_marker(self):
+        assert armory_item_string({"id": 1, "level": {"value": 300}}) == "id=1,ilevel=300"
+        assert "crafting_quality" not in armory_item_string(
+            {"id": 1, "name_description": "Tidal Crafted"})
+        assert "crafting_quality" not in armory_item_string(
+            {"id": 1, "name_description": {"color": {}}})
 
 
 class TestParseModelEdgeCases:
@@ -730,7 +766,7 @@ class TestArmoryLoadEndpoint:
         assert data["char_ilvl"] == 329
         assert data["equipped_gear"]["feet"] == (
             "id=237828,bonus_id=12214/13667/12497/13751/14001/8793/13836,"
-            "enchant_id=7963,ilevel=331"
+            "enchant_id=7963,ilevel=331,crafting_quality="
         )
 
     def test_name_realm_region_form(self, monkeypatch):
