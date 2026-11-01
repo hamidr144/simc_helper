@@ -30,7 +30,7 @@ run-page and QA-bugfix waves merged to dev (source `8ad294e`,
 ### Improvements
 
 - Armory links pasted from the browser bar without a scheme
-  (`armory.warcraftsales.com/...`) are recognized as URLs (t_696e30aa).
+  (`worldofwarcraft.com/en-gb/character/eu/realm/Name`) are recognized as URLs (t_696e30aa).
 - The results verdict discloses when a quarantined run beat the
   winner's DPS instead of dropping it silently (t_9c515360).
 
