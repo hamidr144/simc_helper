@@ -31,14 +31,34 @@ import { refreshWowheadLinks } from '../core/wowhead.js';  // RED-3: tooltips re
 /* Which row of an item is the picked variant. UI truth mirrors the
    payload-side fields: a user-selected grade entry carries the rank,
    voidforgedItems carries the ascension flag. */
-function variantMatches(slot, item, rank, voidforged) {
+function variantMatches(slot, item, rank, voidforged, hasPickedRow = false) {
   if (!state.selectedItems[slot]?.has(item)) return false;
   const entry = state.gearUpgrades[slot]?.[item];
   const pickedRank = entry?.user_selected ? (entry.rank || 0) : 0;
   const pickedVf = Boolean(entry?.user_selected && state.voidforgedItems[slot]?.[item]);
   const rowRank = rank || 0;
-  return voidforged ? (pickedVf && pickedRank === rowRank)
+  const hit = voidforged ? (pickedVf && pickedRank === rowRank)
     : (!pickedVf && pickedRank === rowRank);
+  // t_6b1cd58a: a rank pick can render NO row of its own. The 321
+  // hero-6/6-vs-myth-2/6 shoulder re-grades to the ladder top, where a
+  // non-ascension slot expands zero rank rows; a mid-ladder pick also
+  // consumes its rung (rows expand from rank+1). Keying every row on
+  // pickedRank then leaves the item with nothing pressed, so the equipped
+  // base row rendered unselected behind an invisible pick (user report,
+  // and the pick rode into the payload as a phantom upgrade). The base row
+  // (rank 0) IS the item in its picked form — key it to the selection.
+  return hit || (entry?.user_selected && !hasPickedRow && !voidforged && rowRank === 0);
+}
+
+/* t_6b1cd58a: does the user's pick render a row in this variant list?
+   Row identity is (rank, voidforged) — same as variantMatches
+   and the row data-attrs. */
+function pickedRowRendered(slot, item, variants) {
+  const entry = state.gearUpgrades[slot]?.[item];
+  if (!entry?.user_selected) return true;
+  const vf = Boolean(state.voidforgedItems[slot]?.[item]);
+  const pickedRank = entry.rank || 0;
+  return variants.some(v => (v.rank || 0) === pickedRank && Boolean(v.voidforged) === vf);
 }
 
 /* §7 contract override: pre-run delta = ilvl only, % never. For the
@@ -93,6 +113,7 @@ export function renderGear() {
         .replace(/\s*\(\d+\)/, '');
       const variants = ranksForItem(slot, item);
       const visible = variants;
+      const hasPickedRow = pickedRowRendered(slot, item, variants);
       return visible.map(variant => {
         const level = variant.ilvl
           ?? (Number(params.ilevel) || itemLevelFromLabel(state.parsedData.item_names[item]) || null);
@@ -113,7 +134,7 @@ export function renderGear() {
           name: cleanName + suffix,
           quality: variant.voidforged ? 'epic' : resolveRowQuality(item),
           ilvl: level,
-          sel: variantMatches(slot, item, variant.rank, variant.voidforged),
+          sel: variantMatches(slot, item, variant.rank, variant.voidforged, hasPickedRow),
           eq,
           disabled: locked,
           deltaHtml: eq ? ilvlDeltaHtml(0) : rowDelta(equipped, level),
@@ -285,7 +306,11 @@ function onRowClick(section, row) {
   const vf = row.dataset.vf === '1';
   pinRow(section.dataset.section, item, rank, vf);
   state.selectedItems[slot] ||= new Set();
-  if (variantMatches(slot, item, rank, vf)) {
+  // Toggle truth must equal render truth: recompute the same
+  // pickedRowRendered the rows were keyed with (ranksForItem is cheap and
+  // idempotent here).
+  if (variantMatches(slot, item, rank, vf,
+      pickedRowRendered(slot, item, ranksForItem(slot, item)))) {
     state.selectedItems[slot].delete(item);
     delete state.gearUpgrades[slot]?.[item];
     delete state.voidforgedItems[slot]?.[item];
