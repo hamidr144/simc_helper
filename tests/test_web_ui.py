@@ -419,6 +419,86 @@ def test_gear_row_fold_budget_immune_to_selection():
     assert out["expandRevealsAll"] == [0, 1, 2, 3, 4, 5]
 
 
+def test_add_by_id_slot_guard_rejects_pseudo_items():
+    # t_2fa2e1fe (user report): "1/2 Hand in Hand" / "Aspect of the Iron
+    # Leader" set-bonus pseudo-items entered items_by_slot through the
+    # Add-by-ID fail-open and the draft carried them into every load. The
+    # guard now REJECTS previews without a numeric Wowhead inventorySlot
+    # (invslot 0, null, absent); the t_1699829f fail-open stays for numeric
+    # invslots unknown to the table (future DBC ids). Real module via node.
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    harness = os.path.join(os.path.dirname(__file__), "fixtures", "slot_add_guard_harness.mjs")
+    result = subprocess.run([node, harness], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, f"harness failed: {result.stderr[-2000:]}"
+    out = json.loads(result.stdout)
+    # Pre-fix these three all offered Add (offer true): the phantom entry point.
+    assert out["invslot0"] == {"offer": False, "showSlotName": False}
+    assert out["invslotNull"] == {"offer": False, "showSlotName": False}
+    assert out["invslotAbsent"] == {"offer": False, "showSlotName": False}
+    assert out["wrongSlot"]["offer"] is False      # pre-existing guard intact
+    assert out["futureSlot"] == {"offer": True, "showSlotName": True}
+    assert out["rightSlot"] == {"offer": True, "showSlotName": False}
+
+
+def test_clicked_gear_row_survives_the_fold():
+    # t_2fa2e1fe (user report): equipped/added rows seed selected; clicking
+    # one past the 3-row fold toggles it off and foldChips HID it — the row
+    # "disappeared" and the user never saw it to re-click. pinRow/
+    # keepPinnedRowVisible un-hide the clicked row for the render it
+    # triggers, decrement the +N chip, match the (item,rank,vf) row identity
+    # exactly, are one-shot, and leave untouched sections folded.
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    harness = os.path.join(os.path.dirname(__file__), "fixtures", "clicked_row_pin_harness.mjs")
+    result = subprocess.run([node, harness], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, f"harness failed: {result.stderr[-2000:]}"
+    out = json.loads(result.stdout)
+    # Pre-fix: hidden [false,false,false,true] chip '+1' — clicked row gone.
+    assert out["unhidesClicked"] == {"hidden": [False, False, False, False], "chip": None}
+    assert out["oneShot"] == [False, False, False, False]
+    assert out["chipDecrement"] == {"hidden": [False, False, False, True, False], "chip": "+1"}
+    assert out["rankVfMatch"] == {"hidden": [True, True, False], "chip": "+2"}
+    assert out["keyMismatch"] == {"hidden": [True], "chip": "+1"}
+    assert out["keyMismatchConsumed"] is False
+    assert out["visibleNoop"] == {"hidden": [False, True], "chip": "+1", "removed": False}
+
+
+def test_added_purge_drops_only_confirmed_non_equip():
+    # t_2fa2e1fe review round 1 (BLOCKER): the boot-purge of added keys must
+    # drop ONLY on a confirmed non-equip invslot === 0. The endpoint's
+    # fetch_wowhead_item_slot fail-softs a transient wowhead.com XML failure
+    # to (None, None) — invslot null — and dropping on that outcome would
+    # PERMANENTLY delete the user's real added gear from the draft on a
+    # flaky lookup (work-loss precedent t_26c5ddef). Harness stubs
+    # globalThis.fetch for every outcome; real validateAddedItems on node.
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    harness = os.path.join(os.path.dirname(__file__), "fixtures", "validate_added_purge_harness.mjs")
+    result = subprocess.run([node, harness], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, f"harness failed: {result.stderr[-2000:]}"
+    out = json.loads(result.stdout)
+    # invslot 0 confirmed on every added key: all drop, draft re-persists purged.
+    assert out["confirmedZero"] == {"added": [], "neck": [], "legs": [], "writes": 4}
+    assert out["confirmedZeroDraft"] == {"added": [], "neck": []}
+    # The blocker scenario: one confirmed phantom drops while the flaky
+    # neighbour (invslot null) and the good item (invslot 8) SURVIVE, and the
+    # re-persisted draft carries only the survivors.
+    assert out["mixedConfirmedAndFlaky"] == {
+        "added": ["id=402", "id=403"], "neck": ["id=402"], "legs": ["id=403"], "writes": 2,
+    }
+    assert out["mixedDraft"] == ["id=402", "id=403"]
+    # Every lookup-failure outcome: all gear kept, NO persist (pre-fix these
+    # all wiped the user's added items).
+    keep = {"added": ["id=401", "id=402", "id=403"], "neck": ["id=401", "id=402"],
+            "legs": ["id=403"], "writes": 0}
+    for outcome in ("allNull", "absent", "fetchRejects", "nonOk", "badJson"):
+        assert out[outcome] == keep, outcome
+
+
 def test_row_quality_resolver_and_draft_orphan_drop_node_probe():
     # t_e906dc02: gear-row grade resolves through ONE resolver feeding
     # qualityOf — hydration > Armory payload > param > COMMON (ruling 3) —
@@ -543,8 +623,10 @@ def test_add_by_id_slot_guard_node_probe():
     # t_1699829f: the client-side inventorySlot->slot guard, evaluated in node
     # (same harness pattern as test_crafted_badge_mapping_g4): a mismatch
     # suppresses the Add button and names the item's real slot; a matching
-    # slot still adds; unknown ids and failed/absent invslot fail OPEN; gems
+    # slot still adds; NUMERIC invslots unknown to the table fail OPEN; gems
     # (id 0) and other known non-equip ids never offer an equip slot.
+    # t_2fa2e1fe supersedes the failed/absent-invslot fail-open: NO numeric
+    # invslot = not equipment (set-bonus/aspect pseudo-items), rejected.
     node = shutil.which("node")
     if not node:
         pytest.skip("node not on PATH")
@@ -569,8 +651,8 @@ const cases = [
   ["chest", { name: "Tabard", invslot: 19, invslot_name: "Tabard" }, false, "Tabard fits Tabard, not chest."],
   ["main_hand", { name: "OneHand", invslot: 13, invslot_name: "One-Hand" }, true, ""],
   ["off_hand", { name: "Shield", invslot: 14, invslot_name: "Off Hand" }, true, ""],
-  ["head", { name: "NoSlotInfo" }, true, ""],
-  ["head", { name: "Null", invslot: null, invslot_name: null }, true, ""],
+  ["head", { name: "NoSlotInfo" }, false, "NoSlotInfo has no equip slot on Wowhead"],
+  ["head", { name: "Null", invslot: null, invslot_name: null }, false, "Null has no equip slot on Wowhead"],
   ["head", { name: "Future", invslot: 9042, invslot_name: "Future Slot" }, true, ""],
 ];
 let fail = 0;

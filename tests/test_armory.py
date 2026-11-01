@@ -7,6 +7,7 @@ test suite NEVER touches the live Blizzard network.
 """
 
 import asyncio
+import copy
 import json
 import os
 import sys
@@ -422,6 +423,51 @@ class TestGearParsingHamidriel:
             key: value for key, value in self.parsed.items()
             if key not in ("char_spec", "char_ilvl")
         })
+
+
+class TestGearParsingSetEntries:
+    """t_2fa2e1fe: set/set-bonus pseudo-entries must never become gear candidates.
+
+    The user report showed 'Aspect of the Iron Leader' / '1/2 Hand in Hand'
+    rows in Neck/Shoulders/Legs/Feet after an Armory load. The real
+    model.json (vendored fixture) carries NO set entries at all — gear is
+    keyed strictly by equip slot and items carry no set block — so the
+    parse-side contract is pinned here, and the phantoms' real entry point
+    (pre-guard add-by-ID drafts) is fixed client-side (add-item.js guard +
+    boot purge).
+    """
+
+    def setup_method(self):
+        self.parsed = parse_armory_model(HAMIDRIEL)
+
+    def test_real_payload_yields_no_set_pseudo_rows(self):
+        names = list(self.parsed["item_names"].values())
+        assert not any("1/2 " in n or "Aspect of the" in n for n in names)
+        for items in self.parsed["items_by_slot"].values():
+            for item in items:
+                assert item in self.parsed["item_names"]
+
+    def test_gear_level_set_block_is_not_a_slot(self):
+        payload = copy.deepcopy(HAMIDRIEL)
+        payload["character"]["gear"]["set"] = {
+            "name": "1/2 Hand in Hand",
+            "level": {"value": 334},
+            "quality": {"name": "Epic"},
+            "set": {"href": "...:wowhead:item-set/2062"},
+        }
+        parsed = parse_armory_model(payload)
+        assert "set" not in parsed["items_by_slot"]
+        assert not any("Hand in Hand" in n for n in parsed["item_names"].values())
+        assert len(parsed["equipped_gear"]) == 15  # unknown slot key: skipped
+
+    def test_per_item_nested_set_block_stays_on_the_item(self):
+        payload = copy.deepcopy(HAMIDRIEL)
+        payload["character"]["gear"]["neck"]["set"] = {
+            "key": {"href": "...:wowhead:item-set/2062"},
+        }
+        parsed = parse_armory_model(payload)
+        assert parsed["equipped_gear"]["neck"].startswith("id=268265")
+        assert sum(len(v) for v in parsed["items_by_slot"].values()) == 15
 
 
 class TestGearParsingOnryo:
