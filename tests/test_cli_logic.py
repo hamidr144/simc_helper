@@ -122,6 +122,11 @@ def test_apply_gear_upgrade_crafted_base_uses_crafted_ascension_ilvl():
     assert apply_gear_upgrade("id=1,ilevel=331", {"track": "myth", "rank": 6}, slot="trinket", voidforged=True) == ",id=1,ilevel=341"
     # crafting_quality= is the other crafted marker (app.js isCraftedItem parity).
     assert apply_gear_upgrade("id=1,ilevel=331,crafting_quality=4", {"track": "myth", "rank": 6}, slot="trinket", voidforged=True) == ",id=1,ilevel=337,crafting_quality=4"
+    # t_5b5e8ed9: the Armory import emits the marker VALUELESS (craft-quality
+    # tier unknown) — the predicate is key-presence, so the crafted ascension
+    # ilvl must resolve identically for the bare "crafting_quality=" marker.
+    assert apply_gear_upgrade("id=1,ilevel=331,crafting_quality=", {"track": "myth", "rank": 6}, slot="trinket", voidforged=True) == ",id=1,ilevel=337,crafting_quality="
+    assert apply_gear_upgrade("id=1,ilevel=318,crafting_quality=", {"track": "hero", "rank": 6}, slot="neck", voidforged=True) == ",id=1,ilevel=324,crafting_quality="
     # S1 crafted myth Voidforged: 295 (not the track 298).
     assert apply_gear_upgrade("id=1,ilevel=283,crafted_stats=1/2", {"track": "myth", "rank": 6}, slot="trinket", voidforged=True, season=s1) == ",id=1,ilevel=295,crafted_stats=1/2"
     # Ineligible slot never ascends, crafted or not (stays at the track level).
