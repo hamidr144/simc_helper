@@ -10,6 +10,15 @@ new version is prepared and reviewer-approved as a mandatory step (see WORKFLOW.
 "Milestone: dev → prod"); the `CHANGELOG.md` update ships in the same merge commit
 that bumps the version and tag.
 
+## [Unreleased]
+
+### Bug fixes
+
+- Armory loads now encode the character's saved talent loadout (`talents=`)
+  into the sim input: Armory-run DPS now matches an addon export of the same
+  character — older Armory runs simulated default talents and read ~10x low,
+  so history DPS numbers for Armory runs will jump (t_e296e5c8).
+
 ## [1.4.2] — 2026-10-26
 
 PATCH release from the Gear-page round 3, its QA bugfixes and an

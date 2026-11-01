@@ -454,6 +454,50 @@ def _normalized_slot(slot: str) -> str:
     return slot
 
 
+def _active_talent_code(character: Dict[str, Any]) -> str:
+    """SimC loadout string for the character's current spec (t_e296e5c8).
+
+    ``model.json`` carries ``character.specs[]`` — one entry per spec, each
+    with ``loadouts[]`` whose ``talentLoadoutCode`` is byte-compatible with
+    the addon export's ``talents=`` option (verified: the active Ret
+    loadout of the fixture char equals the addon-exported string from prod
+    run 26a4d9d3).  Prefer the loadout flagged ``active`` on the spec
+    matching ``character.spec.slug``; fall back to that spec's first saved
+    loadout (the player's own build — never invented, only unpinned), then
+    the active spec's loadouts.  ``""`` = nothing encodable (fixtures
+    trimmed before ``specs`` was kept, older payloads): caller warns.
+    """
+    spec_slug = str((character.get("spec") or {}).get("slug") or "").lower()
+    specs = character.get("specs")
+    if not isinstance(specs, list):
+        return ""
+
+    def entry_id(entry: Any) -> str:
+        return str((entry or {}).get("id") or "").lower() if isinstance(entry, dict) else ""
+
+    def codes(entry: Any) -> List[str]:
+        loadouts = (entry or {}).get("loadouts") if isinstance(entry, dict) else None
+        if not isinstance(loadouts, list):
+            return []
+        active = [
+            lo.get("talentLoadoutCode") for lo in loadouts
+            if isinstance(lo, dict) and lo.get("active")
+        ]
+        pool = active or [
+            lo.get("talentLoadoutCode") for lo in loadouts if isinstance(lo, dict)
+        ]
+        return [c.strip() for c in pool if isinstance(c, str) and c.strip()]
+
+    ordered = [e for e in specs if entry_id(e) == spec_slug] if spec_slug else []
+    ordered += [e for e in specs if isinstance(e, dict) and e.get("active") and e not in ordered]
+    ordered += [e for e in specs if e not in ordered]
+    for entry in ordered:
+        found = codes(entry)
+        if found:
+            return found[0]
+    return ""
+
+
 def parse_armory_model(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Convert a model.json payload into the ``/api/parse-addon`` response shape.
 
@@ -519,6 +563,27 @@ def parse_armory_model(payload: Dict[str, Any]) -> Dict[str, Any]:
         base_lines.append(f"race={char_race}")
     if char_spec:
         base_lines.append(f"spec={char_spec}")
+
+    # Armory sims without talents run a default-spec APL (~10x below the
+    # same character's addon-export sim — prod runs fd3efaed 18,278 vs
+    # 26a4d9d3 189,193, t_e296e5c8).  Encode the real loadout when the
+    # payload carries one.
+    talents = _active_talent_code(character)
+    if talents:
+        base_lines.append(f"talents={talents}")
+    else:
+        warnings.append(
+            "No talent loadout found in the Armory data — the sim runs "
+            "default talents, so DPS reads far below an addon export of "
+            "this character."
+        )
+    # shortcut: model.json carries no professions field (grep-verified on
+    # live payloads 2026-11-01), so professions/consumable context cannot
+    # be encoded from the Armory; upgrade if the endpoint ever ships one.
+    warnings.append(
+        "The Armory does not report professions, so crafted-stat context "
+        "is not encoded — for full fidelity, use an addon export."
+    )
 
     return {
         "base_profile": "\n".join(base_lines),
