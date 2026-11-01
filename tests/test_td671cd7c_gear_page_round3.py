@@ -11,7 +11,7 @@ Pins the six user directives + the binding addenda:
 + addendum 3: 'Start over' label, hidden at rest
 + addendum 4: Armory band above the gear grid (#armory-import exists, and
   paste.js collapse/reset toggling is wired to a real element)
-+ version 1.4.2-dev.2 and cache-bust sweep.
++ version 1.4.3-dev.3 and cache-bust sweep.
 """
 import json
 import re
