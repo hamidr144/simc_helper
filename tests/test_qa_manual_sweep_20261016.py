@@ -769,3 +769,124 @@ def test_secfix_reports_mount_per_owner_authz(auth_on, monkeypatch):
     finally:
         shutil.rmtree(os.path.join(
             root, master._user_report_dir(v.user_id)), ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# t_8a14506b: gear upgrade-variant rows vanished permanently after base-row
+# deselect/reselect. onRowClick drops the gearUpgrades entry on deselect;
+# seasonFallbackRanks must then re-derive the item's grade. ilvl-only
+# inference loses on two-ladder ilvls (321 = hero 6/6 AND myth 2/6 — hero
+# wins the track scan, hero 6/6 renders zero rank rows on non-ascension
+# slots). The fix mirrors the server bonus_track ruling (t_58a8fcd8): the
+# item string's own upgrade bonus (12846 = Myth 2/6) wins over the ladder.
+# Harness runs the REAL ES modules on node with the live season data.
+# ---------------------------------------------------------------------------
+
+def _qa8a_node() -> str:
+    import shutil
+    node = shutil.which("node")
+    if node:
+        return node
+    from pathlib import Path
+    bundled = sorted(
+        Path.home().glob(".hermes/tools/node-*/bin/node"),
+        key=lambda p: p.parts[-4] if len(p.parts) > 3 else str(p),
+    )
+    if bundled:
+        return str(bundled[-1])
+    pytest.skip("node not available; t_8a14506b harness needs it")
+
+
+_QA8A_HARNESS = r"""
+import { readFileSync } from 'node:fs';
+
+// Serve the real season data (upgrade_bonuses: 12846 = Myth 2/6) through the
+// same apiFetch->fetch path the browser uses, so season() is midnight-s2.
+globalThis.fetch = async () => ({
+  ok: true, status: 200,
+  json: async () => JSON.parse(readFileSync('__SEASON_FILE__', 'utf8')),
+});
+const J = (r) => 'file://__STATIC__/js/' + r;
+const { loadUpgradeData } = await import(J('core/season.js'));
+await loadUpgradeData(); // renderSeasonChip throws on absent document -> caught offline path
+const { state } = await import(J('core/state.js'));
+const { inferMidnightUpgrade, ranksForItem } = await import(J('core/items.js'));
+
+const SHOULDER = 'id=271483,bonus_id=6652/13440/13694/13697/12846,enchant_id=8001,ilevel=321';
+const NAME = 'Pauldrons of the Consecrated Flame (321)';
+state.parsedData = {
+  item_upgrades: {},
+  item_names: { [SHOULDER]: NAME },
+  equipped_gear: { shoulder: SHOULDER },
+  items_by_slot: { shoulder: [SHOULDER] },
+};
+state.selectedItems = { shoulder: new Set([SHOULDER]) };
+state.addedItems = new Map();
+state.voidforgedItems = { shoulder: {} };
+
+const out = {};
+out.infer = inferMidnightUpgrade('shoulder', SHOULDER, NAME);
+
+const rows = () => ranksForItem('shoulder', SHOULDER)
+  .filter(v => v.rank !== null)
+  .map(v => ({ rank: v.rank, ilvl: v.ilvl, label: v.label }));
+
+// 1. load state: Wowhead-hydrated myth 2/6 entry present
+state.gearUpgrades = { shoulder: { [SHOULDER]: { track: 'myth', rank: 2 } } };
+out.withEntry = rows();
+
+// 2. onRowClick deselect: entry dropped, item off selectedItems (equipped
+//    flood guard keeps it expanding)
+delete state.gearUpgrades.shoulder[SHOULDER];
+state.selectedItems.shoulder.delete(SHOULDER);
+out.afterDeselect = rows();
+
+// 3. reselect: onRowClick base-row path deletes again; entry stays gone
+state.selectedItems.shoulder.add(SHOULDER);
+out.afterReselect = rows();
+
+// 4. ascension order preserved: an ascended myth 6/6 (341, bonus 12854 +
+//    12856) must keep ilvl 341, NOT the bonus map's 334 rung — baseline
+//    payload ilvl regression guard.
+out.ascended = inferMidnightUpgrade('trinket',
+  'id=99,bonus_id=12854/12856,ilevel=341', 'Ascended Myth 6/6 (341)');
+
+// 5. ilvl ladder stays the fallback for unmapped bonuses / no bonus.
+out.heroLadder = inferMidnightUpgrade('trinket',
+  'id=7,bonus_id=6652,ilevel=315', 'Hero 4/6 (315)');
+
+console.log(JSON.stringify(out));
+"""
+
+
+def test_variant_rows_survive_deselect_reselect_t_8a14506b():
+    import json
+    import os
+    import subprocess
+    static = os.path.join(os.path.dirname(__file__), "..", "src", "web", "static")
+    season_file = os.path.join(
+        os.path.dirname(__file__), "..", "src", "core", "data", "upgrade_seasons.json")
+    script = (_QA8A_HARNESS
+              .replace("__STATIC__", os.path.abspath(static))
+              .replace("__SEASON_FILE__", os.path.abspath(season_file)))
+    result = subprocess.run(
+        [_qa8a_node(), "--input-type=module", "-e", script],
+        capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, f"harness failed: {result.stderr[-2000:]}"
+    out = json.loads(result.stdout)
+
+    myth_rows = [
+        {"rank": 3, "ilvl": 324, "label": "Myth 3/6 ×20 Mistcrest"},
+        {"rank": 4, "ilvl": 328, "label": "Myth 4/6 ×20 Mistcrest"},
+        {"rank": 5, "ilvl": 331, "label": "Myth 5/6 ×20 Mistcrest"},
+        {"rank": 6, "ilvl": 334, "label": "Myth 6/6 ×20 Mistcrest"},
+    ]
+    # bonus truth beats the hero ladder the entry-less ilvl scan used to pick
+    assert out["infer"] == {"track": "myth", "rank": 2, "item_level": 321}
+    assert out["withEntry"] == myth_rows
+    assert out["afterDeselect"] == myth_rows, "variant rows vanished on deselect"
+    assert out["afterReselect"] == myth_rows, "ladder never re-seeded on reselect"
+    # ascension mapping keeps precedence over the bonus map (341, not 334)
+    assert out["ascended"] == {"track": "myth", "rank": 6, "item_level": 341}
+    # unmapped bonus ids fall through to the ilvl ladder unchanged
+    assert out["heroLadder"] == {"track": "hero", "rank": 4, "item_level": 315}
