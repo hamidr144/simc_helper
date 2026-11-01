@@ -103,15 +103,20 @@ export function renderGear() {
           isCraftedItem(item) ? craftedBadgeHtml(item) : '',
           state.addedItems.has(item) ? 'added by you — click the × in the row to drop it' : '']
           .filter(Boolean).join(' · ');
+        // t_38a21c87: an equipped row IS the baseline. In two-equipment slots
+        // rowDelta baselines against the weakest equipped item, so the
+        // stronger equipped piece (e.g. a maxed ring) showed '+N ilvl' on its
+        // own row — it read like an upgrade offer. Label equipped rows 'base'.
+        const eq = !variant.rank && !variant.voidforged && equippedSet.has(item);
         return itemRow('vrow', {
           id: params.id,
           name: cleanName + suffix,
           quality: variant.voidforged ? 'epic' : resolveRowQuality(item),
           ilvl: level,
           sel: variantMatches(slot, item, variant.rank, variant.voidforged),
-          eq: !variant.rank && !variant.voidforged && equippedSet.has(item),
+          eq,
           disabled: locked,
-          deltaHtml: rowDelta(equipped, level),
+          deltaHtml: eq ? ilvlDeltaHtml(0) : rowDelta(equipped, level),
           title,
           item, rank: variant.rank, voidforged: variant.voidforged,
         });

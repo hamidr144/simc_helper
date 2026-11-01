@@ -26,9 +26,6 @@ import { createEnhancementWowheadLink, refreshWowheadLinks } from '../core/wowhe
 
 import { selectionChanged } from './runbar.js';
 
-// shortcut: PVP meta gems are excluded by name substring; upgrade to item-id
-// filtering when the backend exposes gem ids.
-const PVP_META_NAME_MATCH = /heliotrope/i;
 export const visibleEnchants = enchants => enchants.filter(entry => entry.quality !== 2);
 function appendWowheadLink(group, enhancement, name) {
   const wrapper = document.createElement('span');
@@ -171,9 +168,10 @@ export function renderEnhancements() {
   // t_d671cd7c directive 3 + t_f9c2ead6: all gems (stat groups AND meta
   // gems) render into one dense grid; 'Other' absorbs entries without a
   // usable `stat` classification, and the flow layout keeps that case dense.
-  const gems = (state.appConfig.gems?.standard || []).filter(gem =>
-    !PVP_META_NAME_MATCH.test(String(gem.name || ''))
-  );
+  // t_38a21c87: the old name-substring PVP filter silently dropped the
+  // deployed config's Heliotrope standard gems (23 configured, 20 rendered)
+  // — every configured standard gem renders.
+  const gems = state.appConfig.gems?.standard || [];
   const metaGems = state.appConfig.gems?.meta || [];
   if (gems.length || metaGems.length) {
     const grid = addColumns(bodies.Gems);
