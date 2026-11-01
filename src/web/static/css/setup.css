@@ -163,6 +163,16 @@ main button.row-x{min-height:28px;padding:3px 7px}
    columns aligned across the rows of a column. Stacks on mobile (auto-fit). */
 .enh-columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:var(--gap-sm);align-items:start}
 .enh-columns>.enhancement-group{display:flex;flex-direction:column;align-items:stretch;gap:var(--gap-2xs)}
+/* t_f9c2ead6: the gem panel (meta gems folded in) is one dense 5-column
+   chip grid; groups flow via display:contents — head spans a row, chips
+   pack under it, so an 'Other'-only config fills all 5 columns.
+   --gem-cols (set by enhancements.js) collapses unused tracks on sparse
+   stat-grouped configs (4-per-group shipped shape): 4 chips/band fill the
+   panel edge-to-edge instead of leaving a full-height empty 5th column. */
+.gem-grid{grid-template-columns:repeat(var(--gem-cols,5),minmax(0,1fr));row-gap:var(--gap-xs)}
+.gem-grid .enh-group{display:contents}
+.gem-grid .enh-group-head{grid-column:1/-1;font-size:12px;font-weight:650;color:var(--ink2);margin-top:var(--gap-xs)}
+.gem-grid .enh-group-head:first-child{margin-top:0}
 .enh-rows{display:flex;flex-direction:column;align-items:stretch;gap:var(--gap-2xs)}
 .enh-entry{display:grid;grid-template-columns:26px minmax(0,1fr);align-items:center;gap:var(--gap-xs)}
 .enh-entry .choice-chip {grid-column:2;grid-row:1;border-radius:var(--r-ctl);justify-content:flex-start}
@@ -205,4 +215,8 @@ main button.row-x{min-height:28px;padding:3px 7px}
 /* the bar rides main's top edge: the review popover opens downward so main's
    overflow can't clip it (t_d86c148d pattern; directive 5+7). */
 .runbar-top .popover{top:calc(100% + 8px);bottom:auto;right:0;left:auto}}
+/* t_f9c2ead6: gem grid column collapse at the app's standard widths. */
+@media (max-width:850px){.gem-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:430px){.gem-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:320px){.gem-grid{grid-template-columns:minmax(0,1fr)}}
 .enh-section:not([open]) .enhancement-group{display:none}

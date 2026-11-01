@@ -319,6 +319,59 @@ def config_app_url(tmp_path_factory):
             config_path.unlink(missing_ok=True)
 
 
+@pytest.fixture(scope="module")
+def sparse_gem_config_app_url(tmp_path_factory):
+    """t_f9c2ead6 review round 1: a server serving the shipped 4-per-group
+    stat shape (4/4/4/4 standard + 4 meta) — the config that exposed the
+    full-height empty 5th grid track. config.json loads relative to the
+    server CWD, so the server runs from a tmp dir (static rides a symlink
+    to ROOT/src); ROOT/config.json stays untouched."""
+    import json
+    base_dir = tmp_path_factory.mktemp("sparse-gem-app")
+    config = json.loads((ROOT / "examples" / "config.example.json").read_text(encoding="utf-8"))
+    kept, per_stat = [], {}
+    for gem in config["gems"]["standard"]:
+        stat = gem.get("stat")
+        if stat is None:
+            continue  # sparse shipped shape: no 'Other' pile
+        per_stat[stat] = per_stat.get(stat, 0) + 1
+        if per_stat[stat] <= 4:
+            kept.append(gem)
+    config["gems"]["standard"] = kept
+    (base_dir / "config.json").write_text(json.dumps(config), encoding="utf-8")
+    os.symlink(ROOT / "src", base_dir / "src")
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    env = os.environ.copy()
+    env.update(
+        BASE_DIR=str(base_dir),
+        REPORTS_DIR=str(base_dir / "reports"),
+        AUTHENTICATION_ENABLED="false",
+        PYTHONPATH=os.pathsep.join((str(ROOT), str(ROOT / "src"), env.get("PYTHONPATH", ""))),
+    )
+    log = (base_dir / "uvicorn.log").open("w")
+    process = subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "src.web.main:app",
+         "--host", "127.0.0.1", "--port", str(port)],
+        cwd=str(base_dir), env=env, stdout=log, stderr=subprocess.STDOUT,
+    )
+    try:
+        for _ in range(80):
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+                    break
+            except OSError:
+                time.sleep(0.25)
+        else:
+            process.terminate()
+            pytest.fail("uvicorn did not start: " + (base_dir / "uvicorn.log").read_text()[-2000:])
+        yield f"http://127.0.0.1:{port}/"
+    finally:
+        process.terminate()
+        process.wait(timeout=10)
+
+
 @pytest.mark.parametrize("width, height", [(320, 660), (430, 844), (1440, 900)])
 def test_top_runbar_gem_enchant_columns_and_chevron_fit(config_app_url, width, height):
     """t_d671cd7c directives 3/4/5/7: top run bar above the gear grid, gem
@@ -366,11 +419,19 @@ def test_top_runbar_gem_enchant_columns_and_chevron_fit(config_app_url, width, h
             "els => els.map(el => el.getBoundingClientRect().height)")
         assert abs(heights[0] - heights[1]) <= 1, heights
 
-        # directive 3: gems split into one column per secondary stat.
-        gem_legends = page.locator('[data-enh-group="Gems"] .enh-columns legend') \
+        # t_f9c2ead6 supersedes t_d671cd7c directive 3's per-stat legend
+        # columns: gems (meta gems included) render as ONE dense gem-grid
+        # whose stat groups + Meta gems are full-row .enh-group-head labels.
+        gem_heads = page.locator('[data-enh-group="Gems"] .gem-grid .enh-group-head') \
             .evaluate_all("els => els.map(el => el.textContent)")
-        for needed in ("Mastery", "Critical Strike", "Versatility", "Haste"):
-            assert needed in gem_legends, gem_legends
+        for needed in ("Mastery", "Critical Strike", "Versatility", "Haste", "Meta gems"):
+            assert needed in gem_heads, gem_heads
+        # the reported defect: 'Other'-only configs stacked one tall column
+        # with free space right; chips must pack across every grid column.
+        chip_cols = page.evaluate(
+            "() => new Set([...document.querySelectorAll("
+            "'[data-enh-group=\"Gems\"] .gem-grid .enh-entry')]"
+            ".map(e => Math.round(e.getBoundingClientRect().x))).size")
         # directive 2: grade-colored names on every entry; the Wowhead icon
         # anchor exists in the DOM (the img itself self-removes when the icon
         # proxy is offline, so the anchor is the network-independent fact).
@@ -385,8 +446,12 @@ def test_top_runbar_gem_enchant_columns_and_chevron_fit(config_app_url, width, h
         needed_slots = {"Legs", "Boots", "Chest", "Helm", "Rings", "Shoulders", "Weapon"}
         assert needed_slots <= set(enchant_legends), enchant_legends
         # directive 7: icon/name columns aligned across the rows of a column.
+        # (gem-grid excluded: its chips pack across 5 columns, so cross-row x
+        # alignment is meaningless there; alignment inside each chip row holds
+        # via the untouched .enh-entry grid.)
         misaligned = page.evaluate("""() => {
-          const grids = [...document.querySelectorAll('#enh-card .enh-columns')];
+          const grids = [...document.querySelectorAll('#enh-card .enh-columns')]
+            .filter(g => !g.classList.contains('gem-grid'));
           let off = 0;
           for (const grid of grids) for (const col of grid.children) {
             const rows = [...col.querySelectorAll('.enh-entry')];
@@ -406,14 +471,56 @@ def test_top_runbar_gem_enchant_columns_and_chevron_fit(config_app_url, width, h
         }""")
         assert misaligned == 0, misaligned
 
-        # responsive columns + no horizontal overflow.
+        # t_f9c2ead6: the first grid is now the gem grid — dense 5 columns on
+        # desktop, collapsing 3/2/1 at 850/430/320 (was auto-fit 1-col phones).
         layout = page.evaluate("""() => {
-          const grid = document.querySelector('#enh-card .enh-columns');
+          const grid = document.querySelector('#enh-card .gem-grid');
           return [getComputedStyle(grid).gridTemplateColumns.split(' ').length, grid.clientWidth];
         }""")
-        if width <= 430:
-            assert layout[0] == 1, (width, layout)
-        else:
-            assert layout[0] >= 2, (width, layout)
+        expected_cols = 1 if width <= 320 else (2 if width <= 430 else (3 if width <= 850 else 5))
+        assert layout[0] == expected_cols, (width, layout)
+        assert chip_cols == expected_cols, (width, chip_cols)
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), width
+        browser.close()
+
+
+@pytest.mark.parametrize("width", [900, 1280])
+def test_gem_grid_fills_every_track_on_sparse_stat_config(sparse_gem_config_app_url, width):
+    """t_f9c2ead6 review round 1: the shipped 4-per-group stat config
+    (4/4/4/4 + 4 meta — the simc-dev shape) rendered a full-height empty
+    5th grid track (~229px right margin at 1280px). Desktop must show
+    exactly the densest group's track count with every track in use:
+    no giant whitespace column."""
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": width, "height": 900}, device_scale_factor=1)
+        page.goto(sparse_gem_config_app_url, wait_until="networkidle")
+        page.locator("#addon-input").evaluate(
+            "(el, value) => { el.value = value; "
+            "el.dispatchEvent(new Event('input', {bubbles:true})); }",
+            FIXTURE.read_text(),
+        )
+        page.locator("#btn-parse-addon").click()
+        page.locator('#enh-card .gem-grid .enh-entry').first.wait_for(
+            state="visible", timeout=15000)
+        gem = page.evaluate("""() => {
+          const grid = document.querySelector('#enh-card .gem-grid');
+          const rect = grid.getBoundingClientRect();
+          const chips = [...grid.querySelectorAll('.enh-entry')];
+          return {
+            cols: getComputedStyle(grid).gridTemplateColumns.split(' ').length,
+            chipCols: new Set(chips.map(e => Math.round(e.getBoundingClientRect().x))).size,
+            rightGap: Math.round(rect.right
+              - Math.max(...chips.map(e => e.getBoundingClientRect().right))),
+            gridW: grid.clientWidth,
+            heads: [...grid.querySelectorAll('.enh-group-head')].map(h => h.textContent),
+          };
+        }""")
+        # >850px: --gem-cols caps at the densest group (4 chips) — the
+        # 5 fixed desktop columns collapse to 4 fully-filled tracks.
+        assert "Mastery" in gem["heads"] and "Meta gems" in gem["heads"], gem
+        assert gem["cols"] == 4, (width, gem)
+        assert gem["chipCols"] == 4, (width, gem)
+        assert gem["rightGap"] <= gem["gridW"] / 4, (width, gem)
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), width
         browser.close()

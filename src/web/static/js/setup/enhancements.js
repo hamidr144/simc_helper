@@ -13,6 +13,11 @@
 // + grade-colored name (quality ships on the record via t_a856571d, default
 // epic). Selection state semantics (selected/equipped, meta single-select,
 // extra sockets) are unchanged.
+// t_f9c2ead6: the gem panel is ONE dense 5-column grid (3 at ≤850px, 2 at
+// ≤430px) and the meta-gem fieldset folds into it. Groups flow inline
+// (display:contents): the head spans a row and chips pack under it, so a
+// deployed config without `stat` fields (everything in 'Other') fills the
+// grid densely instead of stretching into one tall column.
 import { state } from '../core/state.js';
 
 import { PAPER_DOLL_SLOTS, qualityOf } from '../core/items.js';
@@ -49,6 +54,19 @@ function addColumns(body) {
   grid.className = 'enh-columns';
   body.appendChild(grid);
   return grid;
+}
+/* t_f9c2ead6: gem groups flow inside the single gem grid (CSS display:
+   contents): the head becomes a full-row grid item, the chips are grid
+   items of the parent, so groups pack densely across the 5 columns. */
+function addGemGroup(grid, legend) {
+  const group = document.createElement('div');
+  group.className = 'enh-group';
+  const head = document.createElement('span');
+  head.className = 'enh-group-head';
+  head.textContent = legend;
+  group.appendChild(head);
+  grid.appendChild(group);
+  return group;
 }
 // t_d671cd7c directive 3: canonical gem stat columns (backend load_config
 // normalizes/validates `stat`; anything else lands in 'Other').
@@ -150,14 +168,16 @@ export function renderEnhancements() {
     }
   }
 
-  // t_d671cd7c directive 3: gems grouped by their config `stat` — one column
-  // per main secondary stat, fixed Mastery/Crit/Versa/Haste order, 'Other'
-  // for entries without a usable classification.
+  // t_d671cd7c directive 3 + t_f9c2ead6: all gems (stat groups AND meta
+  // gems) render into one dense grid; 'Other' absorbs entries without a
+  // usable `stat` classification, and the flow layout keeps that case dense.
   const gems = (state.appConfig.gems?.standard || []).filter(gem =>
     !PVP_META_NAME_MATCH.test(String(gem.name || ''))
   );
-  if (gems.length) {
-    const columns = addColumns(bodies.Gems);
+  const metaGems = state.appConfig.gems?.meta || [];
+  if (gems.length || metaGems.length) {
+    const grid = addColumns(bodies.Gems);
+    grid.classList.add('gem-grid');
     const byStat = new Map();
     for (const gem of gems) {
       const label = gemStatLabel(gem);
@@ -167,7 +187,7 @@ export function renderEnhancements() {
     for (const label of GEM_STAT_ORDER) {
       const statGems = byStat.get(label);
       if (!statGems) continue;
-      const group = addFieldset(columns, label);
+      const group = addGemGroup(grid, label);
       for (const gem of statGems) {
         const id = String(typeof gem === 'object' ? gem.id : gem);
         const name = typeof gem === 'object' ? gem.name : `Gem ${id}`;
@@ -183,32 +203,36 @@ export function renderEnhancements() {
         });
       }
     }
-  }
-
-  const metaGems = state.appConfig.gems?.meta || [];
-  if (metaGems.length) {
-    // its own group (not a stat column), single-select semantics unchanged
-    const group = addFieldset(bodies.Gems, 'Meta gems');
-    group.classList.add('enh-rows');
-    for (const gem of metaGems) {
-      const id = String(typeof gem === 'object' ? gem.id : gem);
-      const name = typeof gem === 'object' ? gem.name : `Meta gem ${id}`;
-      const equipped = state.equippedGems.has(id);
-      enhancementEntry(group, gem, name, {
-        id,
-        pressed: state.selectedMetaGems.has(id) || equipped,
-        equipped,
-        onToggle: selected => {
-          state.selectedMetaGems.clear();
-          if (selected) state.selectedMetaGems.add(id);
-          for (const option of group.querySelectorAll('button.choice-chip')) {
-            const pressed = state.selectedMetaGems.has(option.dataset.id);
-            option.classList.toggle('selected', pressed);
-            option.setAttribute('aria-pressed', String(pressed));
-          }
-        },
-      });
+    if (metaGems.length) {
+      // folded into the gem grid (t_f9c2ead6); single-select semantics unchanged
+      const group = addGemGroup(grid, 'Meta gems');
+      for (const gem of metaGems) {
+        const id = String(typeof gem === 'object' ? gem.id : gem);
+        const name = typeof gem === 'object' ? gem.name : `Meta gem ${id}`;
+        const equipped = state.equippedGems.has(id);
+        enhancementEntry(group, gem, name, {
+          id,
+          pressed: state.selectedMetaGems.has(id) || equipped,
+          equipped,
+          onToggle: selected => {
+            state.selectedMetaGems.clear();
+            if (selected) state.selectedMetaGems.add(id);
+            for (const option of group.querySelectorAll('button.choice-chip')) {
+              const pressed = state.selectedMetaGems.has(option.dataset.id);
+              option.classList.toggle('selected', pressed);
+              option.setAttribute('aria-pressed', String(pressed));
+            }
+          },
+        });
+      }
     }
+    // review t_f9c2ead6 round 1: collapse unused grid tracks on sparse
+    // stat-grouped configs (auto-fit semantics) — the shipped 4/4/4/4+meta
+    // shape fills 4 tracks edge-to-edge instead of leaving a full-height
+    // empty 5th column; dense groups (and stat-less 'Other' piles) keep 5.
+    grid.style.setProperty('--gem-cols', String(Math.min(5, Math.max(
+      1, ...[...grid.children].map(g => g.querySelectorAll('.enh-entry').length)
+    ))));
   }
 
   // D-6 (design contract): the per-slot "extra socket" experiment checkbox
@@ -268,10 +292,14 @@ export function renderEnhancements() {
         chip.hidden = !hit;
         if (hit) visible += 1;
       });
-      section.querySelectorAll('fieldset').forEach(fieldset => {
-        const hits = [...fieldset.querySelectorAll('.choice-chip')].filter(chip => !chip.hidden).length;
-        fieldset.querySelectorAll('legend').forEach(legend => { legend.hidden = Boolean(needle) && !hits; });
-        fieldset.hidden = Boolean(needle) && !hits;
+      // t_f9c2ead6: gem groups are div.enh-group (fieldset was a box per
+      // stat; the grid flows groups inline). display:contents beats the UA
+      // [hidden] rule on the wrapper, so every chip/entry hides individually
+      // in the loop above — an unmatched group renders as nothing.
+      section.querySelectorAll('fieldset, .enh-group').forEach(group => {
+        const hits = [...group.querySelectorAll('.choice-chip')].filter(chip => !chip.hidden).length;
+        group.querySelectorAll('legend, .enh-group-head').forEach(head => { head.hidden = Boolean(needle) && !hits; });
+        group.hidden = Boolean(needle) && !hits;
       });
       section.hidden = Boolean(needle) && visible === 0;
     });
