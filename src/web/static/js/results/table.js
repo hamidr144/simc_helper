@@ -209,6 +209,14 @@ export function renderResults(results, mode, els) {
   // synthetic top-candidate reference, never "your current gear", so the
   // "keep your current gear" state and Apply-hiding must not fire there.
   const noUpgrade = isEquipped && !!topRow && Number(topRow.dps) <= Number(baseline.dps);
+  // t_9c515360 (live 39e2539f): a quarantined no-diff run that measured
+  // higher than the baseline must not coexist with a "baseline is best"
+  // claim — the rail discloses it, so the band must too. Its gear parsed
+  // identical to baseline, so its edge is simulation noise, not an
+  // upgrade: disclose the leader, keep the rail invariant (never ranked,
+  // never baseline).
+  const quarLeader = noDiff.reduce((best, r) => (!best || Number(r.dps) > Number(best.dps) ? r : best), null);
+  const quarBeats = !!quarLeader && Number(quarLeader.dps) > Number(baseline.dps);
   const gain = topRow ? topRow.dps - baseline.dps : 0;
   const gainPct = topRow && baseline.dps ? gain / baseline.dps : null;
   // R4 (§4 verdict band): Σ across ranked swaps — client arithmetic on the
@@ -219,9 +227,9 @@ export function renderResults(results, mode, els) {
   slots.verdict.className = 'panel verdict';
   slots.verdict.innerHTML = `<div class="vl">
       <div class="lvg">${modeChip}${topRow ? deltaPill(gain, { pct: gainPct, title: `vs ${baseLabel}` }) : ''}</div>
-      <h2>${topRow ? (noUpgrade ? 'No upgrade found — baseline is best' : 'Top gear') : 'Your current gear is the reference'}</h2>
+      <h2>${topRow ? (quarBeats ? 'No ranked upgrade — a quarantined run measured higher' : noUpgrade ? 'No upgrade found — baseline is best' : 'Top gear') : 'Your current gear is the reference'}</h2>
       <p class="tdesc">${escapeHtml(MODE_HINTS[mode] || '')}${isEquipped
-        ? '' : ' No equipped baseline run was found, so percentages compare against the top candidate — the equipped set itself is not ranked here.'}${noUpgrade ? ' Every simulated candidate lost to the baseline — keep your current gear.' : ''}</p>
+        ? '' : ' No equipped baseline run was found, so percentages compare against the top candidate — the equipped set itself is not ranked here.'}${quarBeats ? ` ${escapeHtml(quarLeader.name)} measured ${fmt(quarLeader.dps)} DPS in an excluded run — its gear parsed identical to the baseline, so it is never ranked and never becomes the baseline; inspect it in the excluded-runs rail.` : noUpgrade ? ' Every simulated candidate lost to the baseline — keep your current gear.' : ''}</p>
       ${mode === 'single_swap' && rankedRows.length && sumPct != null ? `<div style="margin:4px 0 2px"><span class="gain num">Σ <b>${deltaPill(sumDelta, { pct: sumPct, title: 'sum of every ranked single-swap gain vs baseline — arithmetic on independent swaps, not one simulated set' })}</b> across ranked swaps</span></div>` : ''}
       <div class="chips">${topChanges.map(c => chipHtml(c, 'cchip')).join('')}</div>
     </div>

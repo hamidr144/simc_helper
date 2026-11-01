@@ -853,6 +853,31 @@ def test_api_get_results_nightly_report_format():
     assert back12 != back and "gem_id=240896" in back12
 
 
+def test_report_parser_gear_identical_for_quarantine_winner_class():
+    """Audit evidence (t_9c515360, live 39e2539f): the quarantined
+    "winner" Hamidriel_head_0 (196,257 > 196,240 baseline) is NOT a
+    hidden ilvl swap — the report's gear anchors are byte-identical
+    (ilvl=321 in BOTH hrefs; the generated stage3.simc copy carries
+    ilevel=321 on top of bonus 12850's natural 321, i.e. it equals the
+    equipped state and its +17 DPS is simulation noise). The parse path
+    keeps ilvl identity (pinned above + ranking_gear_identity_harness.
+    mjs), so the report faithfully carries NO gear diff for this class;
+    the honest fix lives in the verdict band —
+    tests/test_results_quarantine_winner_verdict.py. Fixture: trimmed
+    sections of the real 39e2539f report."""
+    from src.web.main import parse_report_results
+    fixture = os.path.join(os.path.dirname(__file__), "fixtures",
+                           "simc_report_quarantine_winner_snippet.html")
+    with open(fixture, encoding="utf-8") as f:
+        results = parse_report_results(f.read())
+    by_name = {r["name"]: r for r in results}
+    assert set(by_name) == {"Hamidriel", "Hamidriel_head_0"}
+    assert by_name["Hamidriel"]["dps"] == 196240
+    assert by_name["Hamidriel_head_0"]["dps"] == 196257
+    assert by_name["Hamidriel_head_0"]["gear"] == by_name["Hamidriel"]["gear"]
+    assert by_name["Hamidriel"]["gear"]["head"].endswith(",ilevel=321")
+
+
 # --- mean±error end-to-end (D6, t_791b16f5) ---------------------------------
 
 # Synthetic but verbatim-shaped (Appendix A: `Player: <name> <race> <class>
