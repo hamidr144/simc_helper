@@ -466,6 +466,39 @@ def test_clicked_gear_row_survives_the_fold():
     assert out["visibleNoop"] == {"hidden": [False, True], "chip": "+1", "removed": False}
 
 
+def test_added_purge_drops_only_confirmed_non_equip():
+    # t_2fa2e1fe review round 1 (BLOCKER): the boot-purge of added keys must
+    # drop ONLY on a confirmed non-equip invslot === 0. The endpoint's
+    # fetch_wowhead_item_slot fail-softs a transient wowhead.com XML failure
+    # to (None, None) — invslot null — and dropping on that outcome would
+    # PERMANENTLY delete the user's real added gear from the draft on a
+    # flaky lookup (work-loss precedent t_26c5ddef). Harness stubs
+    # globalThis.fetch for every outcome; real validateAddedItems on node.
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    harness = os.path.join(os.path.dirname(__file__), "fixtures", "validate_added_purge_harness.mjs")
+    result = subprocess.run([node, harness], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, f"harness failed: {result.stderr[-2000:]}"
+    out = json.loads(result.stdout)
+    # invslot 0 confirmed on every added key: all drop, draft re-persists purged.
+    assert out["confirmedZero"] == {"added": [], "neck": [], "legs": [], "writes": 4}
+    assert out["confirmedZeroDraft"] == {"added": [], "neck": []}
+    # The blocker scenario: one confirmed phantom drops while the flaky
+    # neighbour (invslot null) and the good item (invslot 8) SURVIVE, and the
+    # re-persisted draft carries only the survivors.
+    assert out["mixedConfirmedAndFlaky"] == {
+        "added": ["id=402", "id=403"], "neck": ["id=402"], "legs": ["id=403"], "writes": 2,
+    }
+    assert out["mixedDraft"] == ["id=402", "id=403"]
+    # Every lookup-failure outcome: all gear kept, NO persist (pre-fix these
+    # all wiped the user's added items).
+    keep = {"added": ["id=401", "id=402", "id=403"], "neck": ["id=401", "id=402"],
+            "legs": ["id=403"], "writes": 0}
+    for outcome in ("allNull", "absent", "fetchRejects", "nonOk", "badJson"):
+        assert out[outcome] == keep, outcome
+
+
 def test_row_quality_resolver_and_draft_orphan_drop_node_probe():
     # t_e906dc02: gear-row grade resolves through ONE resolver feeding
     # qualityOf — hydration > Armory payload > param > COMMON (ruling 3) —

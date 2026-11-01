@@ -155,6 +155,11 @@ export function renderGear() {
   refreshWowheadLinks();
   wireSections(list);
   renderSlotConflict();
+  // Review round 1: a pin is scoped to the render the click triggered. If no
+  // section consumed it this pass, it must not leak into a later unrelated
+  // render (cleared at the END of the pass — onRowClick pins right before
+  // calling renderGear, so clearing at the start would kill every pin).
+  pinnedRow = null;
 }
 
 /* t_2fa2e1fe (BUG: clicked row vanishes): equipped/added rows seed as

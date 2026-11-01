@@ -163,11 +163,15 @@ export function wireSlotAddForm(group, slot) {
    pseudo-items (set bonuses, aspects: no equip slot on Wowhead) as gear
    candidates, and restoreAddedItem rides them into every later load —
    including fresh Armory loads (user report: phantom Neck/Shoulders/Legs/
-   Feet rows). Validate each persisted added key once per boot: a CONFIRMED
-   non-equip item (invslot 0, no slot node, or a slot-0 cosmetic) drops from
-   state and the draft re-persists. Every other outcome — fetch failure,
-   non-OK response, numeric invslot absent from the table — KEEPS the row:
-   the user's real added gear is never dropped on a flaky lookup. */
+   Feet rows). Validate each persisted added key once per boot: ONLY a
+   CONFIRMED non-equip item (invslot === 0 — gems/bags/mounts/spell
+   wrappers) drops from state and the draft re-persists. Every other
+   outcome KEEPS the row: fetch failure, non-OK response, and invslot
+   null/absent all mean the slot LOOKUP FAILED (fetch_wowhead_item_slot
+   fail-softs to (None, None), review round 1), and gear lost to a flaky
+   wowhead.com fetch is unrecoverable work loss (t_26c5ddef precedent).
+   Add-side slotAddDecision keeps its null rejection — non-destructive and
+   retryable. */
 export async function validateAddedItems() {
   let dropped = false;
   for (const [key, slot] of [...state.addedItems]) {
@@ -178,7 +182,7 @@ export async function validateAddedItems() {
       if (!response.ok) continue;
       const data = await response.json().catch(() => ({}));
       const invslot = data.preview?.invslot;
-      if (invslot === 0 || typeof invslot !== 'number') {
+      if (invslot === 0) {
         removeAddedItem(slot, key);
         dropped = true;
       }
