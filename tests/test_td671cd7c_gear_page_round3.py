@@ -119,8 +119,8 @@ def test_version_and_cache_bust_sweep():
     assert 'version = "1.4.2"' in pyproject
     assert "css/tokens.css?v=red3-5" in APP_HTML
     assert "css/setup.css?v=red3-19" in APP_HTML
-    assert "css/run.css?v=red3-5" in APP_HTML
-    assert "js/pages/setup.js?v=red3-7" in APP_HTML
-    assert "import { renderWorkflow } from '../pages/setup.js?v=red3-7';" in PASTE_JS
+    assert "css/run.css?v=red3-6" in APP_HTML
+    assert "js/pages/setup.js?v=red3-8" in APP_HTML
+    assert "import { renderWorkflow } from '../pages/setup.js?v=red3-8';" in PASTE_JS
     for page in ("history.html", "login.html", "register.html", "results.html"):
         assert "tokens.css?v=red3-5" in (STATIC / page).read_text(), page

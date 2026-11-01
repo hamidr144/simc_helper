@@ -4,14 +4,12 @@
    (.progress-*, .log-*, .simulation-log, .run-actions, .slot-add-preview)
    so run.js hosts move without renaming; tokenized throughout. */
 
-/* t_76a0ceb9 directive 6: a run opens as its own full-screen view (run-view
-   overlay); the progress panel and the log hosts ride inside it. */
-.runview{position:fixed;inset:0;z-index:80;background:var(--bg);overflow:auto}
-.runview-in{max-width:1240px;margin:0 auto;padding:var(--gap-md) 20px 40px}
-.runview-title{font-size:15px}
+/* t_37e0320e: run UI is a page, not a gear-page overlay — the fixed
+   .runview dialog block is removed. The panel hosts ride the results
+   page's .runpanel (ids intact), sized for the page flow. */
+.runpanel .simulation-log{max-height:min(62vh,520px);min-height:140px}
 .runview-log{margin-top:var(--gap-md)}
-.runview .simulation-log{max-height:none;min-height:40vh}
-@media (max-width:430px){.runview-in{padding:var(--gap-sm) 12px 24px}}
+@media (max-width:430px){.progress-head{gap:10px}.runpanel .simulation-log{max-height:60vh}}
 .progwrap{border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--surface);
   padding:var(--gap-md) 18px;display:flex;flex-direction:column;gap:10px}
 .progwrap[hidden]{display:none}
