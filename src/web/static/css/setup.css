@@ -165,8 +165,11 @@ main button.row-x{min-height:28px;padding:3px 7px}
 .enh-columns>.enhancement-group{display:flex;flex-direction:column;align-items:stretch;gap:var(--gap-2xs)}
 /* t_f9c2ead6: the gem panel (meta gems folded in) is one dense 5-column
    chip grid; groups flow via display:contents — head spans a row, chips
-   pack under it, so an 'Other'-only config fills all 5 columns. */
-.gem-grid{grid-template-columns:repeat(5,minmax(0,1fr));row-gap:var(--gap-xs)}
+   pack under it, so an 'Other'-only config fills all 5 columns.
+   --gem-cols (set by enhancements.js) collapses unused tracks on sparse
+   stat-grouped configs (4-per-group shipped shape): 4 chips/band fill the
+   panel edge-to-edge instead of leaving a full-height empty 5th column. */
+.gem-grid{grid-template-columns:repeat(var(--gem-cols,5),minmax(0,1fr));row-gap:var(--gap-xs)}
 .gem-grid .enh-group{display:contents}
 .gem-grid .enh-group-head{grid-column:1/-1;font-size:12px;font-weight:650;color:var(--ink2);margin-top:var(--gap-xs)}
 .gem-grid .enh-group-head:first-child{margin-top:0}

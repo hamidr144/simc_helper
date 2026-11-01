@@ -226,6 +226,13 @@ export function renderEnhancements() {
         });
       }
     }
+    // review t_f9c2ead6 round 1: collapse unused grid tracks on sparse
+    // stat-grouped configs (auto-fit semantics) — the shipped 4/4/4/4+meta
+    // shape fills 4 tracks edge-to-edge instead of leaving a full-height
+    // empty 5th column; dense groups (and stat-less 'Other' piles) keep 5.
+    grid.style.setProperty('--gem-cols', String(Math.min(5, Math.max(
+      1, ...[...grid.children].map(g => g.querySelectorAll('.enh-entry').length)
+    ))));
   }
 
   // D-6 (design contract): the per-slot "extra socket" experiment checkbox

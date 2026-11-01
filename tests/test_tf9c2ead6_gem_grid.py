@@ -4,7 +4,10 @@ Pins:
 1 the gem panel (standard + meta gems) renders into ONE grid with the
   gem-grid class; the meta-gem fieldset is folded in.
 2 dense 5-column desktop layout with the app's standard collapse widths
-  (3 columns at <=850px, 2 at <=430px, 1 at <=320px).
+  (3 columns at <=850px, 2 at <=430px, 1 at <=320px), with the grid capped
+  at the densest group's chip count (--gem-cols) so a sparse 4-per-group
+  stat config fills its tracks edge-to-edge (review round 1: no full-height
+  empty 5th column).
 3 groups flow inline inside the grid (display:contents + full-row head) so
   an unclassifiable 'Other'-only config fills every column — no giant
   whitespace column.
@@ -20,10 +23,23 @@ ENH_JS = (STATIC / "js" / "setup" / "enhancements.js").read_text()
 
 
 def test_gem_grid_five_columns_with_standard_collapse():
-    assert ".gem-grid{grid-template-columns:repeat(5,minmax(0,1fr))" in SETUP_CSS
+    # default 5 columns; --gem-cols (JS density cap) collapses unused tracks
+    assert ".gem-grid{grid-template-columns:repeat(var(--gem-cols,5),minmax(0,1fr))" in SETUP_CSS
     assert "@media (max-width:850px){.gem-grid{grid-template-columns:repeat(3,minmax(0,1fr))" in SETUP_CSS
     assert "@media (max-width:430px){.gem-grid{grid-template-columns:repeat(2,minmax(0,1fr))" in SETUP_CSS
     assert "@media (max-width:320px){.gem-grid{grid-template-columns:minmax(0,1fr)}" in SETUP_CSS
+
+
+def test_grid_collapses_unused_tracks_on_sparse_configs():
+    # review round 1: the shipped 4/4/4/4+meta shape rendered a full-height
+    # empty 5th grid track; JS caps --gem-cols at the densest group's chip
+    # count (max 5) so every desktop track is filled.
+    assert "grid.style.setProperty('--gem-cols'" in ENH_JS
+    assert "Math.min(5, Math.max(" in ENH_JS
+    # cap rides the custom property, AFTER groups are built (the density
+    # computation must not sit at grid creation — children are empty there)
+    cap = ENH_JS.index("grid.style.setProperty('--gem-cols'")
+    assert cap > ENH_JS.index("addGemGroup(grid, 'Meta gems')")
 
 
 def test_all_gem_groups_share_one_grid_meta_folded_in():
