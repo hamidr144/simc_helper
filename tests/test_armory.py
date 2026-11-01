@@ -465,6 +465,54 @@ class TestParseModelEdgeCases:
 
 
 # ---------------------------------------------------------------------------
+# Talent encoding (t_e296e5c8) — the ~10x Armory-vs-addon DPS fidelity gap
+# ---------------------------------------------------------------------------
+
+
+class TestTalentEncoding:
+    ACTIVE_RET_LOADOUT = (
+        "CYEAzbn3egSOtoSwvPw1U1vTLAAAAAwoZbbmZWGzMzAAAAAAYmyYGmZsNmthZ2mxYMG"
+        "mxCbAYWmtZmZrBBAAsAYAwYGGYGzMbAzMDjZMYA"
+    )
+
+    def test_generated_input_snapshot_base_profile(self):
+        # The parse-addon-shape base_profile is written verbatim into every
+        # generated .simc (generate-simc), so this snapshot IS the baseline
+        # block of every armory-run stage file: talents= present, current.
+        # The code equals the addon-exported talents= string of prod addon
+        # run 26a4d9d3 (t_7679cb1e evidence bundle) — same character, same
+        # live Armory data, byte-identical.
+        assert parse_armory_model(HAMIDRIEL)["base_profile"].splitlines() == [
+            'paladin="Hamidriel"',
+            "level=90",
+            "race=blood_elf",
+            "spec=retribution",
+            f"talents={self.ACTIVE_RET_LOADOUT}",
+        ]
+
+    def test_missing_specs_omits_talents_and_warns(self):
+        payload = json.loads(json.dumps(HAMIDRIEL))
+        del payload["character"]["specs"]
+        parsed = parse_armory_model(payload)
+        assert "talents=" not in parsed["base_profile"]
+        assert any("talent loadout" in w for w in parsed["warnings"])
+
+    def test_no_active_flag_falls_back_to_first_saved_loadout(self):
+        payload = json.loads(json.dumps(HAMIDRIEL))
+        for spec in payload["character"]["specs"]:
+            for loadout in spec["loadouts"]:
+                loadout["active"] = False
+        first_saved = HAMIDRIEL["character"]["specs"][2]["loadouts"][0]["talentLoadoutCode"]
+        assert first_saved != self.ACTIVE_RET_LOADOUT
+        assert f"talents={first_saved}" in parse_armory_model(payload)["base_profile"]
+
+    def test_professions_api_gap_warned(self):
+        # model.json carries no professions field; encoding stays fail-open
+        # (no invented data) and the user is told the fidelity limit.
+        assert any("professions" in w for w in parse_armory_model(HAMIDRIEL)["warnings"])
+
+
+# ---------------------------------------------------------------------------
 # Fetch layer: 500 discrimination, retry, cache — faked transport only
 # ---------------------------------------------------------------------------
 
