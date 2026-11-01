@@ -842,6 +842,15 @@ def test_api_get_results_nightly_report_format():
     assert head.startswith("id=271465")
     assert "enchant_id=8017" in head
     assert "bonus_id=6652/12850" in head
+    # t_7679cb1e: ilvl is part of the parsed gear identity. The upgrade-track
+    # candidates change ONLY ilvl (same item id); a parser that drops ilvl
+    # parses those copies as gear identical to the baseline, the results page
+    # quarantines them as "no gear difference" and ranks 0 candidates.
+    assert head.endswith(",ilevel=321")
+    back = by_name["Hamidriel"]["gear"]["back"]
+    back12 = by_name["Hamidriel_back_12"]["gear"]["back"]
+    assert back.endswith(",ilevel=321")
+    assert back12 != back and "gem_id=240896" in back12
 
 
 # --- mean±error end-to-end (D6, t_791b16f5) ---------------------------------

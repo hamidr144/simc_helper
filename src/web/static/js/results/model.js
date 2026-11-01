@@ -28,12 +28,17 @@ export function changesFromBaseline(candidate, baseline) {
   const slots = new Set([...Object.keys(baseline.gear || {}), ...Object.keys(candidate.gear || {})]);
   for (const slot of slots) {
     const baseItem = baseline.gear?.[slot] || '';
+    const candItem = candidate.gear?.[slot] || '';
     const before = itemId(baseItem);
-    const after = itemId(candidate.gear?.[slot]);
-    if (after && after !== before) {
+    const after = itemId(candItem);
+    if (after && candItem !== baseItem) {
+      // Gear diff is the FULL parsed identity (id, enchant, gems, bonus, ilvl).
+      // t_7679cb1e: upgrade-track/enchant/gem swaps keep the item id and change
+      // only those fields; the old item-id-only comparison hid every such swap
+      // as "no gear difference" and quarantined it, ranking 0 candidates.
       // TG3-G gap 5: carry the replaced equipped item so the chip tooltip can
       // name it (peer pattern: candidate-shown-beside-equipped).
-      changes.push({ slot: slot.replaceAll('_', ' '), id: after, bonus: itemBonus(candidate.gear[slot]), before, beforeBonus: itemBonus(baseItem) });
+      changes.push({ slot: slot.replaceAll('_', ' '), id: after, bonus: itemBonus(candItem), before, beforeBonus: itemBonus(baseItem) });
     }
   }
   return changes;

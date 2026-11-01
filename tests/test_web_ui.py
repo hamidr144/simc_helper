@@ -969,3 +969,32 @@ def test_chip_render_degrades_on_malformed_tooltip():
           / "js" / "results" / "chips.js").read_text(encoding="utf-8")
     assert js.count("if (!info || !info.name)") == 2
     assert "base && base.name" in js
+
+
+def test_ranking_gear_identity_node_probe():
+    # t_7679cb1e: changesFromBaseline must compare the FULL parsed gear
+    # identity (id, enchant, gems, bonus, ilvl), not just the item id. Prod
+    # run 302ab428: the shoulder_0 copy (same item/enchant/bonus, ilvl
+    # 321 -> 334, +69 DPS over baseline) was classified "no gear difference"
+    # by the id-only comparison, quarantined, and the page ranked 0 swaps.
+    # Real model.js via node, fold_chips_harness.mjs pattern.
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    assert node
+    harness = os.path.join(os.path.dirname(__file__), "fixtures",
+                           "ranking_gear_identity_harness.mjs")
+    result = subprocess.run([node, harness], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, f"harness failed: {result.stderr[-2000:]}"
+    out = json.loads(result.stdout)
+    assert out["fails"] == []
+    assert [c["slot"] for c in out["ilvlOnly"]] == ["shoulder"]
+    assert out["ilvlOnly"][0]["id"] == "271463"
+    assert out["identical"] == []
+    # Pre-fix parser shape (ilvl dropped) parses byte-identical — that half
+    # of the defect lives in parse_report_results, pinned by the fixture
+    # assertions in test_master_api.test_api_get_results_nightly_report_format.
+    assert out["legacyNoIlvl"] == []
+    assert len(out["gemOnly"]) == 1
+    assert len(out["enchantOnly"]) == 1
+    assert len(out["bonusOnly"]) == 1
