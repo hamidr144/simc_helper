@@ -104,7 +104,10 @@ def test_populated_mobile_setup_geometry_and_safe_area(app_url, width):
             assert not overlap, f"{selector}'s painted region intersects the runbar at initial scroll position: {bounds}"
         assert neck.locator(".vrow").count() > 0
         assert page.locator("#enh-card").is_visible()
-        assert page.locator("#log-card").is_visible()
+        # t_37e0320e: run progress left the gear page (its dialog host is
+        # gone); the populated setup page carries no log/run panel at all.
+        assert page.locator("#log-card").count() == 0
+        assert page.locator("#run-view").count() == 0
         pressed = page.locator(".vrow[aria-pressed=true]")
         assert pressed.count() > 0
         assert pressed.count() == page.locator(".vrow .tag.eq").count()
@@ -227,7 +230,9 @@ def test_populated_desktop_setup_rows_clear_runbar_initial_and_running(app_url):
 
         for running in (False, True):
             if running:
-                page.locator("#run-progress").evaluate("el => el.hidden = false")
+                # t_37e0320e: the running affordance on setup is the plain
+                # "View run" link (the run panel streams on the results page).
+                page.locator("#btn-open-run").evaluate("el => el.hidden = false")
             assert page.locator("#btn-run").is_visible()
             # t_d671cd7c directive 5: desktop bar is main's sticky top card.
             assert page.locator(".runbar").evaluate("el => getComputedStyle(el).position") == "sticky"
