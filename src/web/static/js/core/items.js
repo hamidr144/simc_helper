@@ -149,12 +149,37 @@ export function exportRanksFor(slot, item) {
    ilvl inference lands in state.gearUpgrades as {track, rank} — and walk the
    season ladder from there. Flood guard (leader ruling comment 1885): only
    equipped / selected / added items expand; every other candidate keeps its
-   single base row.
-   shortcut: crafted items skip this — they are off-track (ascension resolves
-   via crafted_results elsewhere) and the grade popover was deleted in the
-   redesign. */
+   single base row. */
+/* t_5b5e8ed9 (report t_72a3943e §5.2): crafted pieces are off the crest
+   ladder — the upgrade path is a recraft at the artisan, not Cuzolth — so
+   they NEVER expand crest rank rows (Armory imports now stamp the crafted
+   marker, closing the asymmetry that made only addon exports immune: an
+   unmarked craft at 305/318/331 fell into the ilvl scan and got fake crest
+   rows).  The ONE exception: a MAX-quality craft — the crafted top rung is
+   6 below the ascension endpoint, hero 318→324 / myth 331→337, i.e. the
+   track-ladder rung [4] of a track that has a crafted_results entry — in an
+   ascension-eligible slot shows ONLY the Venomforged endpoint row. */
+function craftedAscensionRows(slot, item) {
+  if (!normalizedEquippedItems(slot).includes(item)
+    && !state.selectedItems[slot]?.has(item)
+    && !state.addedItems.has(item)) return null;
+  const level = Number(parseItemParams(item).ilevel)
+    || itemLevelFromLabel(state.parsedData?.item_names?.[item]);
+  if (!level) return null;
+  const ascension = seasonAscension();
+  for (const [track, levels] of Object.entries(seasonTracks())) {
+    if (levels[4] !== level) continue;
+    const endpoint = (ascension.crafted_results || {})[track];
+    if (endpoint == null
+      || !isVoidforgeEligibleSlot(slot)
+      || isAlreadyVoidforgedItem(slot, item, state.parsedData?.item_names?.[item])) return null;
+    return [{ rank: levels.length, track, ilvl: endpoint, voidforged: true,
+      label: `${ascension.name || 'Ascendant'} ×${ascension.cost}` }];
+  }
+  return null;
+}
 function seasonFallbackRanks(slot, item) {
-  if (isCraftedItem(item)) return null;
+  if (isCraftedItem(item)) return craftedAscensionRows(slot, item);
   if (!normalizedEquippedItems(slot).includes(item)
     && !state.selectedItems[slot]?.has(item)
     && !state.addedItems.has(item)) return null;
