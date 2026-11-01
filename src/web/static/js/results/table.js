@@ -202,6 +202,10 @@ export function renderResults(results, mode, els) {
 
   // ---- verdict band ----
   const topChanges = topRow ? changesFromBaseline(topRow, baseline) : [];
+  // t_02facd2d: rank order is the engine's, but calling the top-ranked row
+  // "best candidate" when it loses to the baseline is a misleading label —
+  // the baseline itself is the best set. Render the honest no-upgrade state.
+  const noUpgrade = !!topRow && Number(topRow.dps) <= Number(baseline.dps);
   const gain = topRow ? topRow.dps - baseline.dps : 0;
   const gainPct = topRow && baseline.dps ? gain / baseline.dps : null;
   // R4 (§4 verdict band): Σ across ranked swaps — client arithmetic on the
@@ -212,18 +216,18 @@ export function renderResults(results, mode, els) {
   slots.verdict.className = 'panel verdict';
   slots.verdict.innerHTML = `<div class="vl">
       <div class="lvg">${modeChip}${topRow ? deltaPill(gain, { pct: gainPct, title: `vs ${baseLabel}` }) : ''}</div>
-      <h2>${topRow ? 'Top gear' : 'Your current gear is the reference'}</h2>
+      <h2>${topRow ? (noUpgrade ? 'No upgrade found — baseline is best' : 'Top gear') : 'Your current gear is the reference'}</h2>
       <p class="tdesc">${escapeHtml(MODE_HINTS[mode] || '')}${isEquipped
-        ? '' : ' No equipped baseline run was found, so percentages compare against the top candidate — the equipped set itself is not ranked here.'}</p>
+        ? '' : ' No equipped baseline run was found, so percentages compare against the top candidate — the equipped set itself is not ranked here.'}${noUpgrade ? ' Every simulated candidate lost to the baseline — keep your current gear.' : ''}</p>
       ${mode === 'single_swap' && rankedRows.length && sumPct != null ? `<div style="margin:4px 0 2px"><span class="gain num">Σ <b>${deltaPill(sumDelta, { pct: sumPct, title: 'sum of every ranked single-swap gain vs baseline — arithmetic on independent swaps, not one simulated set' })}</b> across ranked swaps</span></div>` : ''}
       <div class="chips">${topChanges.map(c => chipHtml(c, 'cchip')).join('')}</div>
     </div>
     <div class="vbigbox">
       <div class="vbig num">${fmt(topRow ? topRow.dps : baseline.dps)}</div>
-      <div class="ol">DPS · ${topRow ? 'best candidate' : 'baseline'}</div>
+      <div class="ol">DPS · ${topRow ? (noUpgrade ? 'top-ranked candidate · below baseline' : 'best candidate') : 'baseline'}</div>
       <div class="vabs num">${fmt(baseline.dps)} baseline · ${escapeHtml(baseline.name)}</div>
     </div>
-    <div class="chips vbtns">${topRow
+    <div class="chips vbtns">${topRow && !noUpgrade
       ? '<button type="button" class="btn" id="btn-apply-best">Apply best set</button>'
       : ''}<a class="btn-ghost" href="/">Back to gear</a></div>`;
   document.getElementById('btn-apply-best')?.addEventListener('click', () => {
@@ -307,14 +311,14 @@ export function renderResults(results, mode, els) {
     // §4 set-level gem line: the config's 16-name standard pool, labelled
     // with the REC_SRC source string (combo output carries no per-item picks).
     const gemPool = appConfig?.gems?.standard || [];
-    slots.set.innerHTML = `<div class="panelh"><h2>Best combination — full set</h2>
+    slots.set.innerHTML = `<div class="panelh"><h2>${noUpgrade ? 'Top-ranked set — below baseline' : 'Best combination — full set'}</h2>
         <span class="sub">${changedKeys.size} of ${setChanges.length} slots replaced · the rest stay equipped</span>
         <span class="seg setseg" role="radiogroup" aria-label="Set view">
           <button type="button" role="radio" aria-checked="true" class="on" data-view="all">All slots</button><button
           type="button" role="radio" aria-checked="false" data-view="sw">Only changed</button></span></div>
       <div class="setsum"><span class="rdps num">${fmt(topRow.dps)} DPS</span>
         <span class="gainbox">${deltaPill(gain, { pct: gainPct, title: `vs ${baseLabel}` })}</span>
-        <button type="button" class="btn setapply" id="btn-apply-set">Apply full set</button>
+        ${noUpgrade ? '' : '<button type="button" class="btn setapply" id="btn-apply-set">Apply full set</button>'}
         ${gemPool.length ? `<span class="setgems"><span class="ol">Recommended gems · ${escapeHtml(REC_SRC)}</span>${gemPool.map(g => `<span class="mod gem" title="${escapeHtml(`Recommended gem — ${REC_SRC}: ${g.name}`)}">◆ ${escapeHtml(g.name)}</span>`).join('')}</span>` : ''}</div>
       <div class="setgrid">${setChanges.map(setrow).join('')}</div>
       <p class="setnote dnote">ilvl numbers are equipped-item levels from Wowhead; the DPS gain belongs to the whole combination, not to any single row.</p>`;
@@ -332,7 +336,7 @@ export function renderResults(results, mode, els) {
       b.addEventListener('click', () => applyView(b.dataset.view));
     });
     applyView('all');
-    document.getElementById('btn-apply-set').addEventListener('click', () => {
+    document.getElementById('btn-apply-set')?.addEventListener('click', () => {
       applyAndGo(selectedItemMap(topRow, baseline), taskId, baselineName || baseline.name);
     });
   }
