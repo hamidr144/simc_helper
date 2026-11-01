@@ -205,7 +205,10 @@ export function renderResults(results, mode, els) {
   // t_02facd2d: rank order is the engine's, but calling the top-ranked row
   // "best candidate" when it loses to the baseline is a misleading label —
   // the baseline itself is the best set. Render the honest no-upgrade state.
-  const noUpgrade = !!topRow && Number(topRow.dps) <= Number(baseline.dps);
+  // Review round 1: scope to isEquipped — the fallback baseline is a
+  // synthetic top-candidate reference, never "your current gear", so the
+  // "keep your current gear" state and Apply-hiding must not fire there.
+  const noUpgrade = isEquipped && !!topRow && Number(topRow.dps) <= Number(baseline.dps);
   const gain = topRow ? topRow.dps - baseline.dps : 0;
   const gainPct = topRow && baseline.dps ? gain / baseline.dps : null;
   // R4 (§4 verdict band): Σ across ranked swaps — client arithmetic on the

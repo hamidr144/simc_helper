@@ -74,6 +74,27 @@ if (verdict().includes("Apply best set")) throw Error("apply button offered for 
 
 
 @pytest.mark.skipif(NODE is None, reason="Node.js is required for this JavaScript regression")
+def test_fallback_baseline_report_keeps_best_candidate_state_and_apply():
+    # Review round 1 blocker: with no baselineName, pickBaseline synthesizes
+    # the baseline from the top-DPS candidate (isEquipped false). Every other
+    # row is <= that synthetic baseline, so the no-upgrade label must NOT fire
+    # — "keep your current gear" would lie and Apply must stay available.
+    body = r'''
+const subtitle = { textContent: "" };
+const results = [
+  { name: "Hamidriel_neck_0", dps: 1000, gear: { neck: "id=1" } },
+  { name: "Hamidriel_head_1", dps: 992, gear: { neck: "id=1", head: "id=9" } },
+];
+renderResults(results, "single_swap", { subtitle, taskId: "task" });
+if (verdict().includes("No upgrade found")) throw Error("no-upgrade state fired on fallback baseline");
+if (!verdict().includes("best candidate<")) throw Error("fallback baseline lost best-candidate label");
+if (!verdict().includes("Apply best set")) throw Error("fallback baseline lost apply button");
+if (!setPanel().includes("Apply full set")) throw Error("fallback baseline lost apply-full-set");
+'''
+    run_harness(body)
+
+
+@pytest.mark.skipif(NODE is None, reason="Node.js is required for this JavaScript regression")
 def test_winning_candidate_keeps_best_candidate_label_and_apply():
     body = r'''
 const subtitle = { textContent: "" };
