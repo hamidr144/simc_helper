@@ -781,8 +781,13 @@ def test_successful_simulation_opens_in_app_results():
     assert response.status_code == 200
     js = response.text
 
-    assert "message.report_file && message.task_id" in js
-    assert "window.location.href = `results?task_id=${encodeURIComponent(message.task_id)}" in js
+    # t_37e0320e: the app opens the dedicated run page (results?run_task=)
+    # at run start; the finished report renders in place at done — no
+    # report-url handoff, no open-report button, no done-time navigation.
+    assert "window.location.href = activeRunHref(run)" in js
+    assert "results?run_task=" in js
+    assert "fetchResults(runTask)" in js
+    assert "window.location.href = `results?task_id=" not in js
     assert "api/report-url?task_id=" not in js
     assert "btn-open-report" not in js
 

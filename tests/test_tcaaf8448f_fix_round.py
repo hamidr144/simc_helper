@@ -44,7 +44,7 @@ def test_r3_runbar_and_batched_apply_queue():
     # The fixed action bar must have normal-suite CSS clearance; this is a
     # source contract, not a live viewport geometry check.
     assert "main{padding-bottom:120px}" in RESULTS_CSS
-    assert "results.css?v=red3-6" in RESULTS_HTML
+    assert "results.css?v=red3-7" in RESULTS_HTML
     # §4 run bar hosts; per-row buttons toggle aria-pressed; ONE writeApply
     # rides the Review-on-Gear navigation (queue), not per-row navigation.
     for host in ("results-runbar", "btn-review-gear", "btn-apply-all-bar",
