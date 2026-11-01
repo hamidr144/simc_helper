@@ -12,12 +12,45 @@ that bumps the version and tag.
 
 ## [Unreleased]
 
+## [1.4.3] — 2026-11-01
+
+PATCH release from the Armory-fidelity, gear-ranking, gem-grid,
+run-page and QA-bugfix waves merged to dev (source `8ad294e`,
+37 commits over `v1.4.2`).
+
+### Features
+
+- Dedicated run page: starting a sim navigates off the gear page to a
+  run page with live log and progress; the gear page stays usable
+  during runs and the results page links to the run (t_37e0320e).
+- The gem panel (meta gems folded in) is a dense 5-column grid —
+  3/2/1 columns on narrower screens — and unused stat columns
+  collapse on sparse stat configs (t_f9c2ead6).
+
+### Improvements
+
+- Armory links pasted from the browser bar without a scheme
+  (`armory.warcraftsales.com/...`) are recognized as URLs (t_696e30aa).
+- The results verdict discloses when a quarantined run beat the
+  winner's DPS instead of dropping it silently (t_9c515360).
+
 ### Bug fixes
 
 - Armory loads now encode the character's saved talent loadout (`talents=`)
   into the sim input: Armory-run DPS now matches an addon export of the same
   character — older Armory runs simulated default talents and read ~10x low,
   so history DPS numbers for Armory runs will jump (t_e296e5c8).
+- Gear candidates are ranked by full gear identity — ilvl, enchant and
+  gem swaps now rank correctly instead of vanishing from the ranking
+  (t_7679cb1e).
+- Armory loads no longer show set-bonus pseudo-items as gear
+  candidates, and a clicked gear row stays visible instead of
+  vanishing (t_2fa2e1fe).
+- The results page shows an honest "no upgrade found" state when every
+  candidate loses to the baseline, instead of labeling a worse swap
+  "BEST CANDIDATE" (t_02facd2d).
+- Gear upgrade-variant rows no longer vanish permanently after
+  deselecting and reselecting the base row (t_8a14506b).
 
 ## [1.4.2] — 2026-10-26
 
