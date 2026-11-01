@@ -69,6 +69,21 @@ export function inferMidnightUpgrade(slot, item, label) {
     const legacyDelta = ascension.legacy_bonus_ilvl;
     if (legacyDelta) level -= legacyDelta;
   }
+  // t_8a14506b: mirror the server's bonus_track (t_58a8fcd8 ruling) — the
+  // item string's own upgrade bonus is the authoritative track signal at
+  // ilvls present in two ladders (321 = hero 6/6 AND myth 2/6; the ladder
+  // scan below picks hero 6/6, which renders zero rank rows on
+  // non-ascension slots, so the variant rows built from the Wowhead-
+  // hydrated entry vanished permanently once onRowClick deselect dropped
+  // that entry). Unknown bonus ids (crafted/GA/enchant) fall through to the
+  // ilvl ladder as before.
+  for (const bonus of String(parseItemParams(item).bonus_id || '').split('/')) {
+    const hit = (season().upgrade_bonuses || {})[bonus];
+    const ladder = hit ? seasonTracks()[hit.track] : null;
+    if (ladder && ladder[hit.rank - 1] != null) {
+      return { track: hit.track, rank: hit.rank, item_level: ladder[hit.rank - 1] };
+    }
+  }
   for (const [track, levels] of Object.entries(seasonTracks())) {
     const rank = levels.indexOf(level) + 1;
     if (rank > 0) return { track, rank, item_level: level };
