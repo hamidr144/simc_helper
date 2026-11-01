@@ -14,8 +14,8 @@
     ?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):window.__pref;})();
   </script>
   <link rel="stylesheet" href="static/css/tokens.css?v=red3-5">
-  <link rel="stylesheet" href="static/css/setup.css?v=red3-19">
-  <link rel="stylesheet" href="static/css/run.css?v=red3-5">
+  <link rel="stylesheet" href="static/css/setup.css?v=red3-21">
+  <link rel="stylesheet" href="static/css/run.css?v=red3-6">
 </head>
 <body>
 <a class="skip skip-link" href="#gear-grid">Skip to gear</a>
@@ -61,7 +61,9 @@
   <div class="runbar runbar-top">
     <div class="in">
       <button id="btn-run" class="runbtn">Run comparison</button>
-      <button id="btn-open-run" class="btn-ghost" hidden aria-label="Open the run progress view">run progress</button>
+      <!-- t_37e0320e: the run panel is a page now, so this is a plain link
+           to the run surface, revealed by setup.js while a run is active. -->
+      <a id="btn-open-run" class="btn-ghost" hidden href="results">View run</a>
       <span class="est"><b class="num" id="combo-count">0</b> <span id="combo-word">combinations</span><span id="work-estimate" class="est" role="status"></span></span>
       <span class="bud num"><b id="selected-item-count">0</b> <span id="item-word">items</span></span>
       <label class="sr-only" for="fight-style">Fighting style</label>
@@ -108,6 +110,8 @@
        and restores it on Start over). -->
   <div class="armory-import-band" id="armory-import">
     <p class="armory-divider">Armory character</p>
+    <!-- t_e296e5c8: fidelity expectation — armory loads now carry talents= -->
+    <p class="armory-divider">Loads live gear plus your saved talent loadout — sim results now match an addon export (older Armory runs read ~10x low).</p>
     <div class="armory-controls">
       <div class="armory-field">
         <label class="sr-only" for="armory-input">Character name and realm, or a full Armory link</label>
@@ -146,16 +150,10 @@
     </div>
   </section>
 
-  <section class="card workflow-step" id="log-card" hidden>
-    <div class="cardbody">
-      <div id="run-result"></div>
-      <div id="log-toolbar" class="log-toolbar">
-        <label class="log-follow"><input type="checkbox" id="log-follow" checked>follow output</label>
-        <a class="btn btn-sm" id="btn-log-download" href="api/download-log" download>download log</a>
-      </div>
-      <pre id="simulation-log" class="simulation-log" role="log" aria-live="polite" aria-label="Simulation log"></pre>
-    </div>
-  </section>
+  <!-- t_37e0320e: the log/run panel left the gear page entirely — its hosts
+       (#run-progress, #runview-log, #simulation-log, #run-result, …) moved to
+       the results page, which is the dedicated run surface. No overlay is
+       reachable from setup; gear editing stays free while a run continues. -->
 
   <!-- t_d671cd7c directive 6: nav links live in the header profile dropdown
        now; the footer keeps the non-button metadata only. -->
@@ -165,30 +163,7 @@
   </div>
 </main>
 
-<!-- t_76a0ceb9 directive 6: a run opens as its own full-screen view (progress,
-     combinations, timer, log) instead of an inline block in the run bar.
-     run.js moves the log hosts (#log-toolbar, #simulation-log, #run-result)
-     into #runview-log while a run is active. -->
-<div class="runview" id="run-view" hidden role="dialog" aria-modal="true" aria-label="Simulation run">
-  <div class="runview-in">
-    <div id="run-progress" class="progwrap">
-      <div class="progress-head">
-        <b class="runview-title">Simulation running</b>
-        <span id="runview-combos" class="chip num" role="status"></span>
-        <span id="run-eta" class="progress-eta"></span>
-        <span class="progress-elapsed" id="run-elapsed">00:00</span>
-        <button id="btn-stop" class="btn btn-sm btn-danger" aria-label="Stop simulation run">stop</button>
-        <button id="btn-close-runview" class="btn-ghost" aria-label="Back to gear while the run continues">back</button>
-      </div>
-      <div id="run-stage" class="progress-stage"></div>
-      <div class="progress-track"><div id="run-progress-fill" class="progress-fill"></div></div>
-      <div id="run-progress-meta" class="progress-meta">connecting...</div>
-    </div>
-    <div id="runview-log" class="runview-log"></div>
-  </div>
-</div>
-
-<script type="module" src="static/js/pages/setup.js?v=red3-7"></script>
+<script type="module" src="static/js/pages/setup.js?v=red3-9"></script>
 <noscript>
   <p class="noscript-warning">This application requires JavaScript to function.</p>
 </noscript>

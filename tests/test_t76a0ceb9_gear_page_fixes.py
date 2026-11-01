@@ -35,25 +35,33 @@ def test_directives_1_2_3_instruction_text_removed():
 
 def test_directive_5_enhancements_and_log_hidden_until_import():
     assert 'id="enh-card" hidden' in APP_HTML
-    assert 'id="log-card" hidden' in APP_HTML
     assert 'id="gear-step" hidden' in APP_HTML
     pages = _read("js/pages/setup.js")
     assert "getElementById('gear-step').hidden = false" in pages
     assert "getElementById('enh-card').hidden = false" in pages
-    assert "getElementById('log-card').hidden = false" in pages
+    # t_37e0320e: the log card left the gear page with the run panel —
+    # the results page is the dedicated run surface, nothing to reveal here.
+    assert 'id="log-card"' not in APP_HTML
     paste = _read("js/setup/paste.js")
     assert "getElementById('enh-card').hidden = true" in paste
     assert "paste-guide" not in APP_HTML
 
 
 def test_directive_6_run_opens_as_own_view():
-    assert 'id="run-view"' in APP_HTML
-    assert "export function openRunView" in RUN_JS
-    assert "openRunView();" in RUN_JS  # runSimulation opens the view
-    assert "btn-close-runview" in APP_HTML
-    assert "btn-open-run" in APP_HTML
-    # mobile: the view bar padding exists in the 430px block
-    assert ".runview-in{padding:var(--gap-sm) 12px 24px}" in RUN_CSS
+    # t_37e0320e supersedes this directive's dialog shape: run progress is a
+    # dedicated page (results?run_task=), never an overlay over the gear grid.
+    assert 'id="run-view"' not in APP_HTML
+    assert "aria-modal" not in APP_HTML
+    assert "openRunView" not in RUN_JS
+    assert "closeRunView" not in RUN_JS
+    results = _read("results.html")
+    for host in ("run-progress", "runview-combos", "run-elapsed", "run-stage",
+                 "run-progress-fill", "run-progress-meta", "runview-log",
+                 "simulation-log", "run-result", "log-toolbar", "btn-stop"):
+        assert f'id="{host}"' in results, host
+    assert "results?run_task=" in RUN_JS  # runSimulation navigates to the run page
+    assert ".runview{position:fixed" not in RUN_CSS
+    assert ".runpanel .simulation-log" in RUN_CSS
 
 
 def test_directives_7_8_no_oversized_equipped_card():

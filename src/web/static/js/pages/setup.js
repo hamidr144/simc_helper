@@ -29,9 +29,11 @@ import { applyDraftToState, applyPayloadToState, consumeApply, loadDrafts } from
 
 import { persistDraft } from '../setup/draft.js';
 
+import { validateAddedItems } from '../setup/add-item.js';
+
 import { generateInput } from '../setup/payload.js';
 
-import { downloadLog, runSimulation, stopSimulation, openRunView, closeRunView } from '../setup/run.js';
+import { runSimulation, loadActiveRun, activeRunHref } from '../setup/run.js';
 
 import { renderReviewPopover, selectionChanged, setWorkflowStatus, updateSummary } from '../setup/runbar.js';
 import { fetchVersion } from '../core/version.js';
@@ -53,6 +55,9 @@ export function afterSelectionsInit() {
     const draft = pendingBoot.drafts.find(d => d.parsedData.char_name === char);
     if (draft) {
       applyDraftToState(draft);
+      // t_2fa2e1fe: purge pre-guard add-by-ID pseudo-items (set bonuses,
+      // aspects) restored from the draft; every fetch failure keeps the row.
+      void validateAddedItems();
       if (note) note.textContent =
         `draft restored (saved ${new Date(draft.savedAt * 1000).toLocaleString()})`;
     }
@@ -66,11 +71,11 @@ export function renderWorkflow() {
   renderGear();
   renderEnhancements();
   renderCharChip();
-  // t_76a0ceb9 directive 5: enhancements and the log area appear only once a
-  // gear import is present (renderWorkflow runs only after a successful one).
+  // t_76a0ceb9 directive 5: enhancements appear only once a gear import is
+  // present (renderWorkflow runs only after a successful one). The log area
+  // left the page with t_37e0320e — run progress is the results-page run page.
   document.getElementById('gear-step').hidden = false;
   document.getElementById('enh-card').hidden = false;
-  document.getElementById('log-card').hidden = false;
   // R7 (ruling D-4): the import band collapses once a character has loaded;
   // btn-new-export re-opens it (paste.js).
   const importBand = document.getElementById('import-details');
@@ -130,11 +135,20 @@ export function wire() {
   document.getElementById('btn-run').addEventListener('click', runSimulation);
   document.getElementById('fight-style').addEventListener('change', selectionChanged);
   document.getElementById('compare-mode').addEventListener('change', selectionChanged);
-  document.getElementById('btn-stop').addEventListener('click', stopSimulation);
-  document.getElementById('btn-log-download').addEventListener('click', downloadLog);
-  // t_76a0ceb9 directive 6: the run view's enter/exit wires.
-  document.getElementById('btn-close-runview').addEventListener('click', closeRunView);
-  document.getElementById('btn-open-run').addEventListener('click', openRunView);
+  // t_37e0320e: run progress lives on its own page (results?run_task=). The
+  // runbar keeps a plain "View run" link while a run is active; the run
+  // itself streams on the other page, so the gear grid stays fully usable.
+  // A finished run's stale row self-heals: the run page falls back to
+  // rendering the saved report and clears the row.
+  const activeRun = loadActiveRun();
+  if (activeRun) {
+    const viewRun = document.getElementById('btn-open-run');
+    if (viewRun) {
+      viewRun.href = activeRunHref(activeRun);
+      viewRun.hidden = false;
+    }
+    setWorkflowStatus('A simulation run is in progress — gear editing stays free; View run follows its progress.');
+  }
   wirePopover(document.getElementById('btn-review'),
     document.getElementById('review-popover'), renderReviewPopover);
   // §10: fresh draft hint before any import (offer rehydration path).

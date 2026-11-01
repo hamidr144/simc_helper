@@ -419,6 +419,86 @@ def test_gear_row_fold_budget_immune_to_selection():
     assert out["expandRevealsAll"] == [0, 1, 2, 3, 4, 5]
 
 
+def test_add_by_id_slot_guard_rejects_pseudo_items():
+    # t_2fa2e1fe (user report): "1/2 Hand in Hand" / "Aspect of the Iron
+    # Leader" set-bonus pseudo-items entered items_by_slot through the
+    # Add-by-ID fail-open and the draft carried them into every load. The
+    # guard now REJECTS previews without a numeric Wowhead inventorySlot
+    # (invslot 0, null, absent); the t_1699829f fail-open stays for numeric
+    # invslots unknown to the table (future DBC ids). Real module via node.
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    harness = os.path.join(os.path.dirname(__file__), "fixtures", "slot_add_guard_harness.mjs")
+    result = subprocess.run([node, harness], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, f"harness failed: {result.stderr[-2000:]}"
+    out = json.loads(result.stdout)
+    # Pre-fix these three all offered Add (offer true): the phantom entry point.
+    assert out["invslot0"] == {"offer": False, "showSlotName": False}
+    assert out["invslotNull"] == {"offer": False, "showSlotName": False}
+    assert out["invslotAbsent"] == {"offer": False, "showSlotName": False}
+    assert out["wrongSlot"]["offer"] is False      # pre-existing guard intact
+    assert out["futureSlot"] == {"offer": True, "showSlotName": True}
+    assert out["rightSlot"] == {"offer": True, "showSlotName": False}
+
+
+def test_clicked_gear_row_survives_the_fold():
+    # t_2fa2e1fe (user report): equipped/added rows seed selected; clicking
+    # one past the 3-row fold toggles it off and foldChips HID it — the row
+    # "disappeared" and the user never saw it to re-click. pinRow/
+    # keepPinnedRowVisible un-hide the clicked row for the render it
+    # triggers, decrement the +N chip, match the (item,rank,vf) row identity
+    # exactly, are one-shot, and leave untouched sections folded.
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    harness = os.path.join(os.path.dirname(__file__), "fixtures", "clicked_row_pin_harness.mjs")
+    result = subprocess.run([node, harness], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, f"harness failed: {result.stderr[-2000:]}"
+    out = json.loads(result.stdout)
+    # Pre-fix: hidden [false,false,false,true] chip '+1' — clicked row gone.
+    assert out["unhidesClicked"] == {"hidden": [False, False, False, False], "chip": None}
+    assert out["oneShot"] == [False, False, False, False]
+    assert out["chipDecrement"] == {"hidden": [False, False, False, True, False], "chip": "+1"}
+    assert out["rankVfMatch"] == {"hidden": [True, True, False], "chip": "+2"}
+    assert out["keyMismatch"] == {"hidden": [True], "chip": "+1"}
+    assert out["keyMismatchConsumed"] is False
+    assert out["visibleNoop"] == {"hidden": [False, True], "chip": "+1", "removed": False}
+
+
+def test_added_purge_drops_only_confirmed_non_equip():
+    # t_2fa2e1fe review round 1 (BLOCKER): the boot-purge of added keys must
+    # drop ONLY on a confirmed non-equip invslot === 0. The endpoint's
+    # fetch_wowhead_item_slot fail-softs a transient wowhead.com XML failure
+    # to (None, None) — invslot null — and dropping on that outcome would
+    # PERMANENTLY delete the user's real added gear from the draft on a
+    # flaky lookup (work-loss precedent t_26c5ddef). Harness stubs
+    # globalThis.fetch for every outcome; real validateAddedItems on node.
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    harness = os.path.join(os.path.dirname(__file__), "fixtures", "validate_added_purge_harness.mjs")
+    result = subprocess.run([node, harness], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, f"harness failed: {result.stderr[-2000:]}"
+    out = json.loads(result.stdout)
+    # invslot 0 confirmed on every added key: all drop, draft re-persists purged.
+    assert out["confirmedZero"] == {"added": [], "neck": [], "legs": [], "writes": 4}
+    assert out["confirmedZeroDraft"] == {"added": [], "neck": []}
+    # The blocker scenario: one confirmed phantom drops while the flaky
+    # neighbour (invslot null) and the good item (invslot 8) SURVIVE, and the
+    # re-persisted draft carries only the survivors.
+    assert out["mixedConfirmedAndFlaky"] == {
+        "added": ["id=402", "id=403"], "neck": ["id=402"], "legs": ["id=403"], "writes": 2,
+    }
+    assert out["mixedDraft"] == ["id=402", "id=403"]
+    # Every lookup-failure outcome: all gear kept, NO persist (pre-fix these
+    # all wiped the user's added items).
+    keep = {"added": ["id=401", "id=402", "id=403"], "neck": ["id=401", "id=402"],
+            "legs": ["id=403"], "writes": 0}
+    for outcome in ("allNull", "absent", "fetchRejects", "nonOk", "badJson"):
+        assert out[outcome] == keep, outcome
+
+
 def test_row_quality_resolver_and_draft_orphan_drop_node_probe():
     # t_e906dc02: gear-row grade resolves through ONE resolver feeding
     # qualityOf — hydration > Armory payload > param > COMMON (ruling 3) —
@@ -543,8 +623,10 @@ def test_add_by_id_slot_guard_node_probe():
     # t_1699829f: the client-side inventorySlot->slot guard, evaluated in node
     # (same harness pattern as test_crafted_badge_mapping_g4): a mismatch
     # suppresses the Add button and names the item's real slot; a matching
-    # slot still adds; unknown ids and failed/absent invslot fail OPEN; gems
+    # slot still adds; NUMERIC invslots unknown to the table fail OPEN; gems
     # (id 0) and other known non-equip ids never offer an equip slot.
+    # t_2fa2e1fe supersedes the failed/absent-invslot fail-open: NO numeric
+    # invslot = not equipment (set-bonus/aspect pseudo-items), rejected.
     node = shutil.which("node")
     if not node:
         pytest.skip("node not on PATH")
@@ -569,8 +651,8 @@ const cases = [
   ["chest", { name: "Tabard", invslot: 19, invslot_name: "Tabard" }, false, "Tabard fits Tabard, not chest."],
   ["main_hand", { name: "OneHand", invslot: 13, invslot_name: "One-Hand" }, true, ""],
   ["off_hand", { name: "Shield", invslot: 14, invslot_name: "Off Hand" }, true, ""],
-  ["head", { name: "NoSlotInfo" }, true, ""],
-  ["head", { name: "Null", invslot: null, invslot_name: null }, true, ""],
+  ["head", { name: "NoSlotInfo" }, false, "NoSlotInfo has no equip slot on Wowhead"],
+  ["head", { name: "Null", invslot: null, invslot_name: null }, false, "Null has no equip slot on Wowhead"],
   ["head", { name: "Future", invslot: 9042, invslot_name: "Future Slot" }, true, ""],
 ];
 let fail = 0;
@@ -781,8 +863,13 @@ def test_successful_simulation_opens_in_app_results():
     assert response.status_code == 200
     js = response.text
 
-    assert "message.report_file && message.task_id" in js
-    assert "window.location.href = `results?task_id=${encodeURIComponent(message.task_id)}" in js
+    # t_37e0320e: the app opens the dedicated run page (results?run_task=)
+    # at run start; the finished report renders in place at done — no
+    # report-url handoff, no open-report button, no done-time navigation.
+    assert "window.location.href = activeRunHref(run)" in js
+    assert "results?run_task=" in js
+    assert "fetchResults(runTask)" in js
+    assert "window.location.href = `results?task_id=" not in js
     assert "api/report-url?task_id=" not in js
     assert "btn-open-report" not in js
 
@@ -847,6 +934,26 @@ def test_realm_dropdown_pick_feeds_armory_payload():
     # a realm typed into the input ("Name-Realm") wins over the pick.
     assert "payload.realm = picked.slug" in build_payload
     assert "payload.region = picked.region" in build_payload
+    assert "!/[,-]/.test(value)" in build_payload
+
+
+def test_schemeless_armory_link_is_normalized_to_url():
+    """t_696e30aa: a browser-bar link pasted WITHOUT a scheme must go down the
+    URL path, not the Name-Realm split — "worldofwarcraft.com/en-gb/
+    character/..." would otherwise parse as name="worldofwarcraft.com/en",
+    realm="gb/character/..." and the user gets "No character ... found on
+    realm ..."."""
+    js = resp(read_js()).text
+
+    build_payload = js.split("function buildArmoryPayload", 1)[1].split(
+        "export function updateArmoryState", 1
+    )[0]
+    # The Armory "character/" path segment marks a link in scheme-less text;
+    # normalization adds the scheme before sending.
+    assert "character/" in build_payload
+    assert "https://${value" in build_payload
+    # Name-Realm text (no slash) is untouched by the link branch: the
+    # realm-typed-wins condition still gates on it.
     assert "!/[,-]/.test(value)" in build_payload
 
 
@@ -969,3 +1076,32 @@ def test_chip_render_degrades_on_malformed_tooltip():
           / "js" / "results" / "chips.js").read_text(encoding="utf-8")
     assert js.count("if (!info || !info.name)") == 2
     assert "base && base.name" in js
+
+
+def test_ranking_gear_identity_node_probe():
+    # t_7679cb1e: changesFromBaseline must compare the FULL parsed gear
+    # identity (id, enchant, gems, bonus, ilvl), not just the item id. Prod
+    # run 302ab428: the shoulder_0 copy (same item/enchant/bonus, ilvl
+    # 321 -> 334, +69 DPS over baseline) was classified "no gear difference"
+    # by the id-only comparison, quarantined, and the page ranked 0 swaps.
+    # Real model.js via node, fold_chips_harness.mjs pattern.
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    assert node
+    harness = os.path.join(os.path.dirname(__file__), "fixtures",
+                           "ranking_gear_identity_harness.mjs")
+    result = subprocess.run([node, harness], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, f"harness failed: {result.stderr[-2000:]}"
+    out = json.loads(result.stdout)
+    assert out["fails"] == []
+    assert [c["slot"] for c in out["ilvlOnly"]] == ["shoulder"]
+    assert out["ilvlOnly"][0]["id"] == "271463"
+    assert out["identical"] == []
+    # Pre-fix parser shape (ilvl dropped) parses byte-identical — that half
+    # of the defect lives in parse_report_results, pinned by the fixture
+    # assertions in test_master_api.test_api_get_results_nightly_report_format.
+    assert out["legacyNoIlvl"] == []
+    assert len(out["gemOnly"]) == 1
+    assert len(out["enchantOnly"]) == 1
+    assert len(out["bonusOnly"]) == 1

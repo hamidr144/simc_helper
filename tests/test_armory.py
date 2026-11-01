@@ -7,6 +7,7 @@ test suite NEVER touches the live Blizzard network.
 """
 
 import asyncio
+import copy
 import json
 import os
 import sys
@@ -217,6 +218,32 @@ class TestUrlParsing:
             "character/realm/Name"
         ) == ("kr", "realm", "Name")
 
+    def test_site_character_url(self):
+        # t_696e30aa: the browser-bar form users copy from the Armory site.
+        assert parse_armory_url(
+            "https://worldofwarcraft.com/en-gb/character/eu/draenor/Hamidriel"
+        ) == ("eu", "draenor", "Hamidriel")
+
+    def test_site_character_url_schemeless_and_variants(self):
+        # The reported bug: links pasted without a scheme, www., and the
+        # redirect target host all parse as URLs.
+        assert parse_armory_url(
+            "worldofwarcraft.com/en-gb/character/eu/draenor/Hamidriel"
+        ) == ("eu", "draenor", "Hamidriel")
+        assert parse_armory_url(
+            "https://www.worldofwarcraft.blizzard.com/en-us/character/us/"
+            "area-52/Onry%C3%B4/advanced"
+        ) == ("us", "area-52", "Onryô")
+        assert parse_armory_url(
+            "worldofwarcraft.blizzard.com/ko-kr/character/kr/realm/Name"
+        ) == ("kr", "realm", "Name")
+
+    def test_site_character_url_needs_region_segment(self):
+        # Region is part of the canonical character URL; without it the
+        # realm/name would be ambiguous — reject as a bad URL, don't guess.
+        with pytest.raises(ArmoryInputError):
+            parse_armory_url("worldofwarcraft.com/en-gb/character/draenor/Hamidriel")
+
     def test_garbage_url_rejected(self):
         with pytest.raises(ArmoryInputError):
             parse_armory_url("https://example.com/not/armory")
@@ -276,6 +303,22 @@ class TestParseArmoryInput:
         # The UI sends whatever the user typed as `url` only for http(s);
         # but even a mislabelled plain name must be handled, not 500.
         assert parse_armory_input(url="Hamidriel-Draenor") == ("eu", "draenor", "Hamidriel")
+
+    def test_schemeless_site_link_in_url_field(self):
+        # t_696e30aa: a scheme-less browser-bar link must resolve as a URL,
+        # not fall through to the Name-Realm split (the locale dash made
+        # name="worldofwarcraft.com/en", realm="gb/character/..." and the UI
+        # reported "No character ... found on realm ..." for a valid link).
+        assert parse_armory_input(
+            url="worldofwarcraft.com/en-gb/character/eu/draenor/Hamidriel",
+            region="us",
+        ) == ("eu", "draenor", "Hamidriel")
+
+    def test_link_like_non_armory_text_gets_url_message(self):
+        # t_696e30aa: slash-bearing text is a link, never a Name-Realm pair —
+        # a non-Armory link must fail with the URL message, not the realm hint.
+        with pytest.raises(ArmoryInputError, match="does not look like an Armory URL"):
+            parse_armory_input(url="example.com/x/character/y")
 
 
 class TestBuildModelUrl:
@@ -382,6 +425,51 @@ class TestGearParsingHamidriel:
         })
 
 
+class TestGearParsingSetEntries:
+    """t_2fa2e1fe: set/set-bonus pseudo-entries must never become gear candidates.
+
+    The user report showed 'Aspect of the Iron Leader' / '1/2 Hand in Hand'
+    rows in Neck/Shoulders/Legs/Feet after an Armory load. The real
+    model.json (vendored fixture) carries NO set entries at all — gear is
+    keyed strictly by equip slot and items carry no set block — so the
+    parse-side contract is pinned here, and the phantoms' real entry point
+    (pre-guard add-by-ID drafts) is fixed client-side (add-item.js guard +
+    boot purge).
+    """
+
+    def setup_method(self):
+        self.parsed = parse_armory_model(HAMIDRIEL)
+
+    def test_real_payload_yields_no_set_pseudo_rows(self):
+        names = list(self.parsed["item_names"].values())
+        assert not any("1/2 " in n or "Aspect of the" in n for n in names)
+        for items in self.parsed["items_by_slot"].values():
+            for item in items:
+                assert item in self.parsed["item_names"]
+
+    def test_gear_level_set_block_is_not_a_slot(self):
+        payload = copy.deepcopy(HAMIDRIEL)
+        payload["character"]["gear"]["set"] = {
+            "name": "1/2 Hand in Hand",
+            "level": {"value": 334},
+            "quality": {"name": "Epic"},
+            "set": {"href": "...:wowhead:item-set/2062"},
+        }
+        parsed = parse_armory_model(payload)
+        assert "set" not in parsed["items_by_slot"]
+        assert not any("Hand in Hand" in n for n in parsed["item_names"].values())
+        assert len(parsed["equipped_gear"]) == 15  # unknown slot key: skipped
+
+    def test_per_item_nested_set_block_stays_on_the_item(self):
+        payload = copy.deepcopy(HAMIDRIEL)
+        payload["character"]["gear"]["neck"]["set"] = {
+            "key": {"href": "...:wowhead:item-set/2062"},
+        }
+        parsed = parse_armory_model(payload)
+        assert parsed["equipped_gear"]["neck"].startswith("id=268265")
+        assert sum(len(v) for v in parsed["items_by_slot"].values()) == 15
+
+
 class TestGearParsingOnryo:
     def setup_method(self):
         self.parsed = parse_armory_model(ONRYO)
@@ -462,6 +550,54 @@ class TestParseModelEdgeCases:
         parsed = parse_armory_model(payload)
         assert len(parsed["equipped_gear"]) == 15
         assert all("id=999" not in v for v in parsed["equipped_gear"].values())
+
+
+# ---------------------------------------------------------------------------
+# Talent encoding (t_e296e5c8) — the ~10x Armory-vs-addon DPS fidelity gap
+# ---------------------------------------------------------------------------
+
+
+class TestTalentEncoding:
+    ACTIVE_RET_LOADOUT = (
+        "CYEAzbn3egSOtoSwvPw1U1vTLAAAAAwoZbbmZWGzMzAAAAAAYmyYGmZsNmthZ2mxYMG"
+        "mxCbAYWmtZmZrBBAAsAYAwYGGYGzMbAzMDjZMYA"
+    )
+
+    def test_generated_input_snapshot_base_profile(self):
+        # The parse-addon-shape base_profile is written verbatim into every
+        # generated .simc (generate-simc), so this snapshot IS the baseline
+        # block of every armory-run stage file: talents= present, current.
+        # The code equals the addon-exported talents= string of prod addon
+        # run 26a4d9d3 (t_7679cb1e evidence bundle) — same character, same
+        # live Armory data, byte-identical.
+        assert parse_armory_model(HAMIDRIEL)["base_profile"].splitlines() == [
+            'paladin="Hamidriel"',
+            "level=90",
+            "race=blood_elf",
+            "spec=retribution",
+            f"talents={self.ACTIVE_RET_LOADOUT}",
+        ]
+
+    def test_missing_specs_omits_talents_and_warns(self):
+        payload = json.loads(json.dumps(HAMIDRIEL))
+        del payload["character"]["specs"]
+        parsed = parse_armory_model(payload)
+        assert "talents=" not in parsed["base_profile"]
+        assert any("talent loadout" in w for w in parsed["warnings"])
+
+    def test_no_active_flag_falls_back_to_first_saved_loadout(self):
+        payload = json.loads(json.dumps(HAMIDRIEL))
+        for spec in payload["character"]["specs"]:
+            for loadout in spec["loadouts"]:
+                loadout["active"] = False
+        first_saved = HAMIDRIEL["character"]["specs"][2]["loadouts"][0]["talentLoadoutCode"]
+        assert first_saved != self.ACTIVE_RET_LOADOUT
+        assert f"talents={first_saved}" in parse_armory_model(payload)["base_profile"]
+
+    def test_professions_api_gap_warned(self):
+        # model.json carries no professions field; encoding stays fail-open
+        # (no invented data) and the user is told the fidelity limit.
+        assert any("professions" in w for w in parse_armory_model(HAMIDRIEL)["warnings"])
 
 
 # ---------------------------------------------------------------------------

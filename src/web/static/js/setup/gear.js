@@ -155,6 +155,43 @@ export function renderGear() {
   refreshWowheadLinks();
   wireSections(list);
   renderSlotConflict();
+  // Review round 1: a pin is scoped to the render the click triggered. If no
+  // section consumed it this pass, it must not leak into a later unrelated
+  // render (cleared at the END of the pass — onRowClick pins right before
+  // calling renderGear, so clearing at the start would kill every pin).
+  pinnedRow = null;
+}
+
+/* t_2fa2e1fe (BUG: clicked row vanishes): equipped/added rows seed as
+   selected, and foldChips folds every unselected row past the 3-row budget —
+   so clicking one to deselect made it DISAPPEAR, and the user never saw the
+   row to re-click it. The clicked row is pinned for the render it triggers:
+   after the fold it is un-hidden and the +N chip decremented, so the fold
+   only ever moves rows the user is not working with. One-shot by design:
+   untouched sections keep the standard fold. */
+let pinnedRow = null;
+export function pinRow(key, item, rank, voidforged) {
+  pinnedRow = { key, item, rank, voidforged };
+}
+export function keepPinnedRowVisible(section) {
+  if (!pinnedRow || section.dataset.section !== pinnedRow.key) return;
+  const { item, rank, voidforged } = pinnedRow;
+  pinnedRow = null;
+  for (const row of section.querySelectorAll('.rows .vrow')) {
+    if (row.dataset.item !== item) continue;
+    if ((row.dataset.rank ? Number(row.dataset.rank) : null) !== rank) continue;
+    if ((row.dataset.vf === '1') !== voidforged) continue;
+    if (row.hidden) {
+      row.hidden = false;
+      const chip = section.querySelector('.rows .fold');
+      if (chip) {
+        const n = Math.max(0, (parseInt(chip.textContent.slice(1), 10) || 1) - 1);
+        if (n > 0) chip.textContent = `+${n}`;
+        else chip.remove();
+      }
+    }
+    return;
+  }
 }
 
 function wireSections(list) {
@@ -164,6 +201,7 @@ function wireSections(list) {
   // selecting a visible row no longer reveals another one).
   for (const rows of list.querySelectorAll('.rows')) foldChips(rows, 3);
   for (const section of list.querySelectorAll('.slotsec')) {
+    keepPinnedRowVisible(section);
     const slot = section.dataset.slot;
     const key = section.dataset.section;
     const items = state.parsedData.items_by_slot[slot] || [];
@@ -240,6 +278,7 @@ function onRowClick(section, row) {
   const item = row.dataset.item;
   const rank = row.dataset.rank ? Number(row.dataset.rank) : null;
   const vf = row.dataset.vf === '1';
+  pinRow(section.dataset.section, item, rank, vf);
   state.selectedItems[slot] ||= new Set();
   if (variantMatches(slot, item, rank, vf)) {
     state.selectedItems[slot].delete(item);

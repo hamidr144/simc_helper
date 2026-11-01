@@ -11,10 +11,13 @@ hitting Blizzard live.
 | `armory_model_hamidriel_achievements_tab.json` | `GET .../Hamidriel/achievements/model.json` — shows the per-tab `model.json` pattern |
 | `error_500_unknown_character.txt` | `GET .../draenor/NotACharacter12345` — unknown characters return **HTTP 500** (not 404) with this HTML error page |
 
-Trimming applied (structure otherwise byte-faithful): removed
-`character.specs` (150 KB per-spec dumps), `character.pve`,
-`character.mythicKeystoneDungeons` (top-level list kept to 2 entries),
-duplicated `media.content._links`; compact JSON.
+Trimming applied (structure otherwise byte-faithful): `character.specs`
+removed from `onryo_us`; on `hamidriel_eu` it is kept loadout-only
+(t_e296e5c8 — per spec: `active`/`id`/`name`; per `loadouts[]` entry:
+`active`/`talentLoadoutCode`; the 150 KB spell/icon dumps dropped).
+Also removed: `character.pve`, `character.mythicKeystoneDungeons`
+(top-level list kept to 2 entries), duplicated `media.content._links`;
+compact single-line JSON.
 
 Regenerate with curl + the trim logic in kanban task t_234f51f3 if the
 schema ever changes.

@@ -5,7 +5,7 @@ import { initializeSelections, resetCharacterState, state } from '../core/state.
 import { detectSeasonFromExport, loadUpgradeData, renderSeasonChip, upgradeData } from '../core/season.js';
 
 // t_26c5ddef: token must equal the app.html entry ?v= token or the browser loads a second pages/setup.js instance (pinned by tests/test_add_item_sorting.py)
-import { renderWorkflow } from '../pages/setup.js?v=red3-7';
+import { renderWorkflow } from '../pages/setup.js?v=red3-9';
 
 import { updateArmoryState } from './armory.js';
 
@@ -14,7 +14,6 @@ import { clearDraftKeys, persistDraft } from './draft.js';
 import { hydrateWowheadUpgrades } from './conflict.js';
 
 import { updateSummary } from './runbar.js';
-import { resetRunUI } from './run.js';
 import { apiFetch } from '../core/api.js';
 
 const addonInput = document.getElementById('addon-input');
@@ -138,11 +137,9 @@ document.getElementById('btn-new-export').addEventListener('click', () => {
   document.getElementById('qj').innerHTML = '';
   document.getElementById('gear-step').hidden = true;
   document.getElementById('enh-card').hidden = true;
-  document.getElementById('log-card').hidden = true;
-  resetRunUI();
+  // t_37e0320e: the run/log hosts no longer live on this page (nothing
+  // run-related to reset); Start over stays a pure character-state reset.
   document.getElementById('char-chip').hidden = true;
-  const result = document.getElementById('run-result');
-  if (result) { result.hidden = true; result.innerHTML = ''; }
   document.getElementById('import-details').open = true;
   // t_16e4f177: no gear list anymore — restore the plain skip link.
   const skipLink = document.querySelector('.skip-link');

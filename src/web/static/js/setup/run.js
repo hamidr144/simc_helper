@@ -1,4 +1,10 @@
 // js module — mechanical port of app.js regions by t_94a15fe3 (gui-rewrite-contract §3.1: setup/run)
+// t_37e0320e: run progress is a dedicated page on the results surface
+// (results?run_task=), not a modal over the gear page. run.js keeps the one
+// copy of the run-state + SSE polling; the panel hosts (#run-progress,
+// #runview-log, #simulation-log, #run-result, …) moved to results.html with
+// their ids intact, and js/pages/results.js imports this module. No logic
+// duplicated: the gear page only starts runs and links back to them.
 
 import { state } from '../core/state.js';
 
@@ -9,14 +15,36 @@ import { generateInput } from './payload.js';
 import { setWorkflowStatus } from './runbar.js';
 import { apiFetch } from '../core/api.js';
 
+/* Active-run session: survives navigation so the gear page keeps a plain
+   "View run" link, and a mid-run reload/re-entry re-attaches to the same
+   stream. Live SSE joins are incremental (the server queues per viewer from
+   connect time); the full log stays available via the download endpoint.
+   Closing the tab mid-run is safe: the run is server-side and drafts persist
+   per change — the session row is cleared when the run terminalizes. */
+const ACTIVE_RUN_KEY = 'simc-active-run@1';
+function saveActiveRun(run) {
+  try { localStorage.setItem(ACTIVE_RUN_KEY, JSON.stringify(run)); } catch { /* storage off: link is a convenience */ }
+}
+export function loadActiveRun() {
+  try {
+    const run = JSON.parse(localStorage.getItem(ACTIVE_RUN_KEY));
+    return run && run.task_id ? run : null;
+  } catch { return null; }
+}
+export function clearActiveRun() { localStorage.removeItem(ACTIVE_RUN_KEY); }
+export function activeRunHref(run) {
+  const baseline = run.baseline ? `&baseline=${encodeURIComponent(run.baseline)}` : '';
+  return `results?run_task=${encodeURIComponent(run.task_id)}&worker=${encodeURIComponent(run.worker_id || '')}${baseline}`;
+}
+
 function formatElapsed(ms) {
   const secs = Math.floor(ms / 1000);
   return `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
 }
-function startRunProgress() {
+function startRunProgress(combosLabel, startedAt) {
   stopRunProgress();
   state.simulationDone = false;
-  state.runStartedAt = Date.now();
+  state.runStartedAt = Number(startedAt) || Date.now();
   state.logLineCount = 0;
   state.logLines = [];
   lastProgressPct = 0;
@@ -24,41 +52,17 @@ function startRunProgress() {
   const resultSlot = document.getElementById('run-result');
   if (resultSlot) { resultSlot.hidden = true; resultSlot.innerHTML = ''; }
   const combos = document.getElementById('runview-combos');
-  if (combos) combos.textContent =
-    `${document.getElementById('combo-count').textContent} ${document.getElementById('combo-word').textContent}`;
+  if (combos) combos.textContent = combosLabel || '';
+  const toolbar = document.getElementById('log-toolbar');
+  if (toolbar) toolbar.hidden = false;
   document.getElementById('run-progress').hidden = false;
-  document.getElementById('btn-open-run').hidden = false;  // back affordance after "back"
   setRunProgress(0, 'Starting…');
   setRunStage('');
-  document.getElementById('run-elapsed').textContent = '00:00';
-  state.runTimer = setInterval(() => {
+  const renderElapsed = () => {
     document.getElementById('run-elapsed').textContent = formatElapsed(Date.now() - state.runStartedAt);
-  }, 1000);
-}
-/* t_76a0ceb9 directive 6: the run lives in its own full-screen view; the log
-   hosts (#run-result, #log-toolbar, #simulation-log) are moved into it while
-   a run is active, and back to the page's log card when the run is over. */
-export function openRunView() {
-  document.getElementById('runview-log')
-    .append(document.getElementById('run-result'),
-      document.getElementById('log-toolbar'),
-      document.getElementById('simulation-log'));
-  const view = document.getElementById('run-view');
-  view.hidden = false;
-  view.scrollTop = 0;
-}
-export function closeRunView() {
-  document.getElementById('run-view').hidden = true;
-}
-export function resetRunUI() {
-  closeRunView();
-  document.getElementById('run-progress').hidden = true;
-  document.getElementById('btn-open-run').hidden = true;
-  document.getElementById('log-card').append(
-    document.getElementById('run-result'),
-    document.getElementById('log-toolbar'),
-    document.getElementById('simulation-log'));
-  document.getElementById('simulation-log').textContent = '';
+  };
+  renderElapsed();
+  state.runTimer = setInterval(renderElapsed, 1000);
 }
 function stopRunProgress() {
   if (state.runTimer) { clearInterval(state.runTimer); state.runTimer = null; }
@@ -167,71 +171,81 @@ export async function stopSimulation() {
     setWorkflowStatus(`Could not stop simulation: ${error.message}`);
   }
 }
+/* t_37e0320e: attach to a run on the run page. This is the runSimulation
+   SSE block moved, not duplicated: stream, progress parsing and the failure
+   card all live here. onDone fires on done, error and on a stream that
+   closes early — a fresh EventSource for a finished task 404s (the master
+   frees the queue), so the results page falls back to fetching the saved
+   report. */
+export function watchRun({ taskId, workerId, combosLabel, startedAt, onDone }) {
+  state.currentTaskId = taskId;
+  startRunProgress(combosLabel, startedAt);
+  const events = new EventSource(`api/simulation/stream/${taskId}?worker_id=${encodeURIComponent(workerId || '')}`);
+  events.onmessage = event => {
+    const message = JSON.parse(event.data);
+    if (message.type === 'log') {
+      pushLogLines([message.text]);
+      updateRunProgressMeta(message.text);
+    }
+    if (message.type === 'log_batch') {
+      pushLogLines(message.lines);
+    }
+    if (message.type === 'log' || message.type === 'log_batch') {
+      const linesEl = document.getElementById('log-lines');
+      if (linesEl) linesEl.textContent = `${state.logLineCount.toLocaleString()} lines`;
+    }
+    if (message.type === 'done' || message.type === 'error') {
+      stopRunProgress();
+      document.getElementById('run-progress').hidden = true;
+      clearActiveRun();
+      if (message.type === 'done') state.simulationDone = true;
+      else showRunFailureCard(message);
+      events.close();
+      if (onDone) onDone(message);
+    }
+  };
+  events.onerror = () => {
+    events.close();
+    stopRunProgress();
+    clearActiveRun();
+    if (onDone) onDone({ type: 'closed' });
+  };
+}
 export async function runSimulation() {
   // t_4485565b: generate even when the client-side estimate is 0 — a
   // 0-candidate input is a valid baseline current-gear run.
   if (!state.generatedInput) await generateInput();
   if (!state.generatedInput) return;
-  const log = document.getElementById('simulation-log');
   setWorkflowStatus('Looking for an idle worker…');
   try {
     const response = await apiFetch(`api/run-simulation?input_id=${encodeURIComponent(state.generatedInput.input_id)}`, { method: 'POST' });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || 'Simulation could not start');
-    setWorkflowStatus(`Simulation ${data.task_id} is running on worker ${data.worker_id}.`);
     state.currentTaskId = data.task_id;
-    log.hidden = false;
-    log.textContent = '';
-    document.getElementById('log-toolbar').hidden = false;
-    openRunView();
-    startRunProgress();
-    const events = new EventSource(`api/simulation/stream/${data.task_id}?worker_id=${encodeURIComponent(data.worker_id)}`);
-    events.onmessage = async event => {
-      const message = JSON.parse(event.data);
-      if (message.type === 'log') {
-        pushLogLines([message.text]);
-        updateRunProgressMeta(message.text);
-      }
-      if (message.type === 'log_batch') {
-        pushLogLines(message.lines);
-      }
-      if (message.type === 'log' || message.type === 'log_batch') {
-        const linesEl = document.getElementById('log-lines');
-        if (linesEl) linesEl.textContent = `${state.logLineCount.toLocaleString()} lines`;
-      }
-      if (message.type === 'done' || message.type === 'error') {
-        stopRunProgress();
-        document.getElementById('run-progress').hidden = true;
-        if (message.type === 'done') state.simulationDone = true;
-        if (message.type === 'done' && message.report_file && message.task_id) {
-          // MGE-2 §2 (A2): done navigates without a click; the results?task_id=
-          // substring stays for its test pin. Failure never navigates.
-          window.location.href = `results?task_id=${encodeURIComponent(message.task_id)}&baseline=${encodeURIComponent(state.parsedData?.char_name || '')}`;
-        } else {
-          showRunFailureCard(message);
-        }
-        events.close();
-      }
+    const run = {
+      task_id: data.task_id,
+      worker_id: data.worker_id,
+      started_at: Date.now(),
+      combos: `${document.getElementById('combo-count').textContent} ${document.getElementById('combo-word').textContent}`,
+      baseline: state.parsedData?.char_name || '',
     };
-    events.onerror = () => { events.close(); stopRunProgress(); };
+    saveActiveRun(run);
+    setWorkflowStatus(`Simulation ${data.task_id} is running on worker ${data.worker_id}.`);
+    // t_37e0320e: navigate to the run page instead of opening a panel over
+    // the gear grid. Gear drafts persist per change (draft.js) and the run
+    // itself is server-side, so navigation is safe mid-flight.
+    window.location.href = activeRunHref(run);
   } catch (error) {
     setWorkflowStatus(`Could not start simulation: ${error.message}`);
   }
 }
 
 function showRunFailureCard(message) {
-  const status = document.getElementById('workflow-status');
   const slot = document.getElementById('run-result');
   setWorkflowStatus(message.text || 'The simulation stopped unexpectedly.');
-  status.classList.add('error');
   if (!slot) return;
   const tail = state.logLines.slice(-12).join('\n');
   slot.hidden = false;
-  slot.innerHTML = `<div class="success-card is-failed"><span class="success-icon" aria-hidden="true">\u2715</span><div><h3>Run failed</h3><p>${escapeHtml(message.text || 'The simulation stopped unexpectedly \u2014 see the log below.')}</p>${tail ? `<pre class="success-log-tail">${escapeHtml(tail)}</pre>` : ''}<div class="success-actions"><button type="button" data-open-log class="btn-ghost">Open log</button><button type="button" data-back-gear class="btn-ghost">Back to gear</button></div></div></div>`;
+  slot.innerHTML = `<div class="success-card is-failed"><span class="success-icon" aria-hidden="true">\u2715</span><div><h3>Run failed</h3><p>${escapeHtml(message.text || 'The simulation stopped unexpectedly \u2014 see the log below.')}</p>${tail ? `<pre class="success-log-tail">${escapeHtml(tail)}</pre>` : ''}<div class="success-actions"><button type="button" data-open-log class="btn-ghost">Open log</button><a href="./" class="btn-ghost">Back to gear</a></div></div></div>`;
   slot.querySelector('[data-open-log]').addEventListener('click', () => document.getElementById('simulation-log')?.scrollIntoView({ block: 'start' }));
-  slot.querySelector('[data-back-gear]').addEventListener('click', backToGear);
-}
-function backToGear() {
-  closeRunView();
-  document.getElementById('gear-grid')?.scrollIntoView({ block: 'start' });
 }

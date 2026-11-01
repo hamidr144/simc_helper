@@ -12,7 +12,8 @@
     ?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):s;})();
   </script>
   <link rel="stylesheet" href="static/css/tokens.css?v=red3-5">
-  <link rel="stylesheet" href="static/css/results.css?v=red3-6">
+  <link rel="stylesheet" href="static/css/results.css?v=red3-7">
+  <link rel="stylesheet" href="static/css/run.css?v=red3-6">
 </head>
 <body>
 <a class="skip skip-link" href="#verdict-slot">Skip to results</a>
@@ -37,6 +38,40 @@
   </div>
 
   <div id="verdict-slot" tabindex="-1"></div>
+
+  <!-- t_37e0320e: the run page. The panel hosts moved here from the gear
+       page's #run-view dialog (ids intact, run.js logic imported not
+       duplicated): entered via ?run_task= at run start, live log + progress
+       stream while running, and results render below in place on done. The
+       "back to gear" affordance is a plain link; a mid-run navigation never
+       cancels the server-side run. -->
+  <section class="panel runpanel" id="run-panel" hidden aria-labelledby="run-panel-title">
+    <div class="panelh"><h2 id="run-panel-title">Simulation running</h2>
+      <span class="chip num" id="runview-combos" role="status"></span>
+      <span class="progress-eta" id="run-eta"></span>
+      <span class="progress-elapsed" id="run-elapsed">00:00</span>
+    </div>
+    <div class="panelbody">
+      <div id="run-progress" class="progwrap">
+        <div class="progress-head">
+          <div id="run-stage" class="progress-stage"></div>
+          <button id="btn-stop" class="btn btn-sm btn-danger" aria-label="Stop simulation run">stop</button>
+          <a class="btn-ghost" href="./" style="margin-left:auto">Back to gear</a>
+        </div>
+        <div class="progress-track"><div id="run-progress-fill" class="progress-fill" role="progressbar"
+          aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Simulation progress"></div></div>
+        <div id="run-progress-meta" class="progress-meta">connecting...</div>
+      </div>
+      <div id="runview-log" class="runview-log">
+        <div id="run-result"></div>
+        <div id="log-toolbar" class="log-toolbar" hidden>
+          <label class="log-follow"><input type="checkbox" id="log-follow" checked>follow output</label>
+          <a class="btn btn-sm" id="btn-log-download" href="api/download-log" download>download log</a>
+        </div>
+        <pre id="simulation-log" class="simulation-log" role="log" aria-live="polite" aria-label="Simulation log"></pre>
+      </div>
+    </div>
+  </section>
 
   <div class="resgrid">
     <div>
@@ -125,7 +160,7 @@
   <span class="chip" id="chip-quarantined" hidden></span>
 </div></div>
 
-<script type="module" src="static/js/pages/results.js?v=red3-5"></script>
+<script type="module" src="static/js/pages/results.js?v=red3-7"></script>
 <noscript>
   <p class="noscript-warning">This application requires JavaScript to function.</p>
 </noscript>

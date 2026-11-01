@@ -119,6 +119,19 @@ _WORLD_SOUL_URL_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Site profile URL as it appears in the browser bar, e.g.
+# https://worldofwarcraft.com/en-gb/character/eu/draenor/Hamidriel
+# (worldofwarcraft.com 301-redirects to worldofwarcraft.blizzard.com; the
+# region segment is part of the canonical character URL).  t_696e30aa:
+# scheme optional — users paste the link from the address bar.
+_SITE_URL_RE = re.compile(
+    r"^(?:https?://)?(?:www\.)?worldofwarcraft\.(?:blizzard\.)?com/"
+    r"(?:[A-Za-z]{2}(?:-[A-Za-z]{2})?/)?"
+    r"character/(?P<region>eu|us|kr|tw)/"
+    r"(?P<realm>[^/]+)/(?P<name>[^/?#]+)",
+    re.IGNORECASE,
+)
+
 # Legacy battle.net profile URL, e.g.
 # https://eu.battle.net/wow/en/character/draenor/Hamidriel/advanced
 _LEGACY_URL_RE = re.compile(
@@ -199,12 +212,14 @@ def parse_armory_url(url: str) -> Tuple[str, str, str]:
     """Parse a full Armory profile URL into ``(region, realmSlug, name)``.
 
     Accepts the current worldsoul form (locale segment required upstream,
-    optional ``/model.json`` suffix and query string tolerated) and the
-    legacy ``{region}.battle.net/wow/.../character/{realm}/{name}`` form.
+    optional ``/model.json`` suffix and query string tolerated), the site
+    browser-bar form (``worldofwarcraft.com/{locale}/character/{region}/
+    {realm}/{name}``, scheme optional), and the legacy
+    ``{region}.battle.net/wow/.../character/{realm}/{name}`` form.
     Percent-encoded names are decoded (``onry%C3%B4`` -> ``Onryô``).
     """
     text = str(url or "").strip()
-    for pattern in (_WORLD_SOUL_URL_RE, _LEGACY_URL_RE):
+    for pattern in (_WORLD_SOUL_URL_RE, _SITE_URL_RE, _LEGACY_URL_RE):
         match = pattern.match(text)
         if match:
             return (
@@ -213,8 +228,9 @@ def parse_armory_url(url: str) -> Tuple[str, str, str]:
                 unquote(match.group("name")),
             )
     raise ArmoryInputError(
-        "That does not look like an Armory URL. Paste a link like "
-        "worldofwarcraft.blizzard.com/en-gb/worldsoul/eu/armory/character/realm/Name"
+        "That does not look like an Armory URL. Paste the character page "
+        "link from your browser bar, e.g. "
+        "worldofwarcraft.com/en-gb/character/eu/realm/Name"
     )
 
 
@@ -261,6 +277,11 @@ def parse_armory_input(
         try:
             return parse_armory_url(text)
         except ArmoryInputError:
+            # t_696e30aa: a slash means the text was meant as a link (WoW
+            # names and realm text never carry one) — report the URL failure
+            # clearly instead of a Name-Realm hint for a pasted link.
+            if "/" in text:
+                raise
             # Not a URL after all — fall through to Name-Realm handling.
             name, realm = parse_name_realm(text)
             region = region or "eu"
@@ -454,6 +475,50 @@ def _normalized_slot(slot: str) -> str:
     return slot
 
 
+def _active_talent_code(character: Dict[str, Any]) -> str:
+    """SimC loadout string for the character's current spec (t_e296e5c8).
+
+    ``model.json`` carries ``character.specs[]`` — one entry per spec, each
+    with ``loadouts[]`` whose ``talentLoadoutCode`` is byte-compatible with
+    the addon export's ``talents=`` option (verified: the active Ret
+    loadout of the fixture char equals the addon-exported string from prod
+    run 26a4d9d3).  Prefer the loadout flagged ``active`` on the spec
+    matching ``character.spec.slug``; fall back to that spec's first saved
+    loadout (the player's own build — never invented, only unpinned), then
+    the active spec's loadouts.  ``""`` = nothing encodable (fixtures
+    trimmed before ``specs`` was kept, older payloads): caller warns.
+    """
+    spec_slug = str((character.get("spec") or {}).get("slug") or "").lower()
+    specs = character.get("specs")
+    if not isinstance(specs, list):
+        return ""
+
+    def entry_id(entry: Any) -> str:
+        return str((entry or {}).get("id") or "").lower() if isinstance(entry, dict) else ""
+
+    def codes(entry: Any) -> List[str]:
+        loadouts = (entry or {}).get("loadouts") if isinstance(entry, dict) else None
+        if not isinstance(loadouts, list):
+            return []
+        active = [
+            lo.get("talentLoadoutCode") for lo in loadouts
+            if isinstance(lo, dict) and lo.get("active")
+        ]
+        pool = active or [
+            lo.get("talentLoadoutCode") for lo in loadouts if isinstance(lo, dict)
+        ]
+        return [c.strip() for c in pool if isinstance(c, str) and c.strip()]
+
+    ordered = [e for e in specs if entry_id(e) == spec_slug] if spec_slug else []
+    ordered += [e for e in specs if isinstance(e, dict) and e.get("active") and e not in ordered]
+    ordered += [e for e in specs if e not in ordered]
+    for entry in ordered:
+        found = codes(entry)
+        if found:
+            return found[0]
+    return ""
+
+
 def parse_armory_model(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Convert a model.json payload into the ``/api/parse-addon`` response shape.
 
@@ -519,6 +584,27 @@ def parse_armory_model(payload: Dict[str, Any]) -> Dict[str, Any]:
         base_lines.append(f"race={char_race}")
     if char_spec:
         base_lines.append(f"spec={char_spec}")
+
+    # Armory sims without talents run a default-spec APL (~10x below the
+    # same character's addon-export sim — prod runs fd3efaed 18,278 vs
+    # 26a4d9d3 189,193, t_e296e5c8).  Encode the real loadout when the
+    # payload carries one.
+    talents = _active_talent_code(character)
+    if talents:
+        base_lines.append(f"talents={talents}")
+    else:
+        warnings.append(
+            "No talent loadout found in the Armory data — the sim runs "
+            "default talents, so DPS reads far below an addon export of "
+            "this character."
+        )
+    # shortcut: model.json carries no professions field (grep-verified on
+    # live payloads 2026-11-01), so professions/consumable context cannot
+    # be encoded from the Armory; upgrade if the endpoint ever ships one.
+    warnings.append(
+        "The Armory does not report professions, so crafted-stat context "
+        "is not encoded — for full fidelity, use an addon export."
+    )
 
     return {
         "base_profile": "\n".join(base_lines),

@@ -2995,6 +2995,12 @@ def parse_report_results(html_content: str) -> list:
                         if gems: simc_str += f",gem_id={gems.group(1).replace(':', '/')}"
                         bonus = re.search(r'bonus=([0-9:]+)', href)
                         if bonus: simc_str += f",bonus_id={bonus.group(1).replace(':', '/')}"
+                        # t_7679cb1e: upgrade-track swaps change ONLY ilvl (same
+                        # item id). Dropping ilvl made those copies parse as gear
+                        # identical to the baseline, so they were quarantined as
+                        # "no gear diff" and 0 swaps ranked.
+                        ilvl = re.search(r'ilvl=([0-9]+)', href)
+                        if ilvl: simc_str += f",ilevel={ilvl.group(1)}"
                         gear[simc_slot] = simc_str
         results.append({"name": name, "dps": dps, "gear": gear})
     return results
