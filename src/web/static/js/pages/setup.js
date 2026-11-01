@@ -29,6 +29,8 @@ import { applyDraftToState, applyPayloadToState, consumeApply, loadDrafts } from
 
 import { persistDraft } from '../setup/draft.js';
 
+import { validateAddedItems } from '../setup/add-item.js';
+
 import { generateInput } from '../setup/payload.js';
 
 import { runSimulation, loadActiveRun, activeRunHref } from '../setup/run.js';
@@ -53,6 +55,9 @@ export function afterSelectionsInit() {
     const draft = pendingBoot.drafts.find(d => d.parsedData.char_name === char);
     if (draft) {
       applyDraftToState(draft);
+      // t_2fa2e1fe: purge pre-guard add-by-ID pseudo-items (set bonuses,
+      // aspects) restored from the draft; every fetch failure keeps the row.
+      void validateAddedItems();
       if (note) note.textContent =
         `draft restored (saved ${new Date(draft.savedAt * 1000).toLocaleString()})`;
     }

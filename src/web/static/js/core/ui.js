@@ -97,9 +97,10 @@ export function foldChips(host, max) {
   });
   host.appendChild(more);
 }
-// shortcut: rows that fold away on DE-select (a parity-selected row beyond the
-// budget) or re-fold after a +N expand still move layout; upgrade only if that
-// flow ever persists the expanded state across renders.
+// shortcut (t_2fa2e1fe): the gear grid PINS the row the user clicked
+// (gear.js pinRow/keepPinnedRowVisible), so a de-select never silently hides
+// the row being worked with. Rows the user never clicked may still fold
+// away, and a +N expand re-folds on the next render.
 
 export { esc };
 

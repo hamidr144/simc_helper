@@ -12,6 +12,7 @@ import { renderGear } from './gear.js';
 
 import { selectionChanged, updateSummary } from './runbar.js';
 import { apiFetch } from '../core/api.js';
+import { persistDraft } from './draft.js';
 
 function showSlotAddMessage(host, kind, message) {
   host.hidden = false;
@@ -26,8 +27,12 @@ function showSlotAddMessage(host, kind, message) {
    Keys are the payload-side slot keys gear.js hands wireSlotAddForm (the
    finger/trinket pools are single sections). Values are the slots the item
    may join; an empty list means "known id, never an equip slot here".
-   Additive on purpose: ids absent from this table fail open (Add still
-   offered) so valid future DBC ids are never blocked.
+   Additive on purpose: ids with a NUMERIC invslot absent from this table
+   fail open (Add still offered) so valid future DBC ids are never blocked.
+   A preview with NO numeric invslot is rejected (t_2fa2e1fe): set-bonus
+   "1/2 ..." pseudo-items, aspects and other spell wrappers carry no equip
+   slot, and the old fail-open let them into items_by_slot as gear
+   candidates (phantom rows surviving every load through the draft).
    shortcut: client-side only; upgrade to server-side validation at
    run-build time if false-positive rejections are reported. */
 const INV_SLOT_TABLE = {
@@ -39,8 +44,14 @@ const INV_SLOT_TABLE = {
   16: ['back'],
   17: ['main_hand', 'off_hand', 'two_hand'],
 };
-function slotAddDecision(slot, preview) {
-  if (typeof preview.invslot !== 'number') return { offer: true };
+export function slotAddDecision(slot, preview) {
+  // t_2fa2e1fe: no numeric inventorySlot = not equipment (slot lookup said
+  // so, or Wowhead has no slot for this id — pseudo-items). Reject; the
+  // fail-open stays ONLY for numeric invslots absent from the table above.
+  if (typeof preview.invslot !== 'number') {
+    return { offer: false, message:
+      `${preview.name || 'That item'} has no equip slot on Wowhead — set bonuses, aspects and other pseudo-items are not gear candidates. If this is real gear, the Wowhead slot lookup failed; try again in a minute.` };
+  }
   const allowed = Object.hasOwn(INV_SLOT_TABLE, preview.invslot)
     ? INV_SLOT_TABLE[preview.invslot] : null;
   if (allowed && !allowed.includes(slot)) {
@@ -146,4 +157,32 @@ export function wireSlotAddForm(group, slot) {
   addInput.addEventListener('keydown', event => {
     if (event.key === 'Enter') { event.preventDefault(); previewAdd(); }
   });
+}
+
+/* t_2fa2e1fe: drafts saved before the add-time guard persist add-by-ID
+   pseudo-items (set bonuses, aspects: no equip slot on Wowhead) as gear
+   candidates, and restoreAddedItem rides them into every later load —
+   including fresh Armory loads (user report: phantom Neck/Shoulders/Legs/
+   Feet rows). Validate each persisted added key once per boot: a CONFIRMED
+   non-equip item (invslot 0, no slot node, or a slot-0 cosmetic) drops from
+   state and the draft re-persists. Every other outcome — fetch failure,
+   non-OK response, numeric invslot absent from the table — KEEPS the row:
+   the user's real added gear is never dropped on a flaky lookup. */
+export async function validateAddedItems() {
+  let dropped = false;
+  for (const [key, slot] of [...state.addedItems]) {
+    const id = /^id=(\d+)$/.exec(key)?.[1];
+    if (!id) continue;
+    try {
+      const response = await apiFetch(`api/wowhead/tooltip?item=${id}`);
+      if (!response.ok) continue;
+      const data = await response.json().catch(() => ({}));
+      const invslot = data.preview?.invslot;
+      if (invslot === 0 || typeof invslot !== 'number') {
+        removeAddedItem(slot, key);
+        dropped = true;
+      }
+    } catch { /* keep on network failure */ }
+  }
+  if (dropped) persistDraft();
 }
