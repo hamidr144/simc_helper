@@ -91,15 +91,21 @@ export function initializeSelections() {
       state.voidforgedItems[slot] = {};
     }
   }
+  // t_01eaf932: exports encode gems/enchants as pair tokens ("240892:0" =
+  // gem+socket, "8017:8017" = enchant+effect); the config lists the raw id.
+  // shortcut: the suffix is a socket/effect index and rides no meaning
+  // here — take the leading token, widen if a suffix ever becomes semantic.
+  const configId = token => String(token || '').split(':')[0];
+
   for (const slot of Object.keys(state.appConfig.enchantments || {})) {
     state.equippedEnchants[slot] = new Set();
     const configuredIds = new Set((state.appConfig.enchantments[slot] || []).map(enchant =>
       String(typeof enchant === 'object' ? enchant.id : enchant)
     ));
     for (const item of normalizedEquippedItems(slot)) {
-      const enchantId = parseItemParams(item).enchant_id;
-      if (enchantId && configuredIds.has(String(enchantId))) {
-        state.equippedEnchants[slot].add(String(enchantId));
+      const enchantId = configId(parseItemParams(item).enchant_id);
+      if (enchantId && configuredIds.has(enchantId)) {
+        state.equippedEnchants[slot].add(enchantId);
       }
     }
     state.selectedEnchants[slot] = new Set(state.equippedEnchants[slot]);
@@ -109,7 +115,8 @@ export function initializeSelections() {
     String(typeof gem === 'object' ? gem.id : gem)
   ));
   for (const item of Object.values(state.parsedData.equipped_gear || {})) {
-    for (const gemId of String(parseItemParams(item).gem_id || '').split('/')) {
+    for (const rawGemId of String(parseItemParams(item).gem_id || '').split('/')) {
+      const gemId = configId(rawGemId);
       if (configuredGemIds.has(gemId)) {
         state.equippedGems.add(gemId);
         state.selectedGems.add(gemId);
@@ -117,15 +124,22 @@ export function initializeSelections() {
     }
   }
 
-  // MGE-2 §8.2: pre-check the equipped head's meta gem (single-select, <=1).
+  // MGE-2 §8.2 (single meta, <=1) + t_01eaf932: the meta socket is not the
+  // head's alone — DF/Midnight payloads ship the meta on the neck (live
+  // export: Eversong Diamond 240983 in the neck), so scan the paperdoll in
+  // slot order (head first wins) instead of reading only the head line.
   const configuredMetaIds = new Set((state.appConfig.gems?.meta || []).map(gem =>
     String(typeof gem === 'object' ? gem.id : gem)
   ));
-  const headMeta = (state.parsedData.equipped_gear || {}).head || '';
-  for (const gemId of String(parseItemParams(headMeta).gem_id || '').split('/')) {
-    if (configuredMetaIds.has(gemId) && !state.selectedMetaGems.size) {
-      state.selectedMetaGems.add(gemId);
-      state.equippedGems.add(gemId);
+  for (const slot of PAPER_DOLL_SLOTS) {
+    for (const item of normalizedEquippedItems(slot)) {
+      for (const rawGemId of String(parseItemParams(item).gem_id || '').split('/')) {
+        const metaId = configId(rawGemId);
+        if (configuredMetaIds.has(metaId) && !state.selectedMetaGems.size) {
+          state.selectedMetaGems.add(metaId);
+          state.equippedGems.add(metaId);
+        }
+      }
     }
   }
 }

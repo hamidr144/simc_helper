@@ -5,7 +5,7 @@ import { initializeSelections, resetCharacterState, state } from '../core/state.
 import { detectSeasonFromExport, loadUpgradeData, renderSeasonChip, upgradeData } from '../core/season.js';
 
 // t_26c5ddef: token must equal the app.html entry ?v= token or the browser loads a second pages/setup.js instance (pinned by tests/test_add_item_sorting.py)
-import { renderWorkflow } from '../pages/setup.js?v=red3-9';
+import { renderWorkflow } from '../pages/setup.js?v=red3-10';
 
 import { updateArmoryState } from './armory.js';
 
