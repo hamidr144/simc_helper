@@ -8,8 +8,6 @@ import { fetchVersion } from '../core/version.js';
 wireTheme(document.querySelector('.pal .seg'));
 fetchVersion();
 
-wireTheme(document.querySelector('.pal .seg'));
-
 
 const historyQuery = new URLSearchParams(window.location.search);
 const runId = historyQuery.get('run');

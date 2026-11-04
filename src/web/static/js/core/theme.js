@@ -6,6 +6,7 @@
 // Simulate-OS button. Pages pre-paint data-pal inline (no FOUC); this module
 // only wires the radiogroup and OS tracking (change event + 1.5 s poll — CDP
 // media emulation fires no change event, M6 note).
+import { wireRadioKeys } from './ui.js';
 let pref = 'system';
 try { pref = localStorage.getItem('simc-theme') || 'system'; } catch { /* System */ }
 // headless harnesses have no matchMedia: degrade to a light-OS stub.
@@ -36,6 +37,7 @@ export function wireTheme() {
     } catch { /* storage errors degrade silently to System */ }
     applyTheme();
   });
+  wireRadioKeys(group);
   const trackOs = () => {
     if (osDark !== mq.matches) {
       osDark = mq.matches;
