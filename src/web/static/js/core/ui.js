@@ -104,6 +104,24 @@ export function foldChips(host, max) {
 
 export { esc };
 
+/* HIG keyboard operability + WAI-ARIA radio-group pattern (theme switcher,
+   results set-view switcher): arrow keys move selection. Each radio stays a
+   tab stop (native buttons activate on Enter/Space), arrows select+focus the
+   neighbour, wrapping — no roving-tabindex machinery needed. */
+export function wireRadioKeys(group) {
+  group?.addEventListener('keydown', event => {
+    const dir = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+    if (!dir) return;
+    const buttons = [...group.querySelectorAll('[role=radio]')].filter(b => !b.disabled);
+    const at = buttons.indexOf(document.activeElement);
+    if (at < 0) return;
+    event.preventDefault();
+    const next = buttons[(at + dir + buttons.length) % buttons.length];
+    next.focus();
+    next.click();
+  });
+}
+
 /* Contract §toast: shared transient status pill (results apply flow reuses
    .toast from tokens.css). role=status, auto-dismiss after 5 s. */
 export function toast(text) {

@@ -10,7 +10,7 @@ import {
   pickBaseline, changesFromBaseline, candidateLabel, bestGearChanges,
 } from './model.js';
 import { chipHtml, infoFor, titleFor } from './chips.js';
-import { fmt, toast } from '../core/ui.js';
+import { fmt, toast, wireRadioKeys } from '../core/ui.js';
 import { writeApply } from '../setup/draft.js';
 
 // Gap 1: compare-mode indicator. Keys mirror MODE_* in src/web/main.py;
@@ -346,6 +346,7 @@ export function renderResults(results, mode, els) {
     slots.set.querySelectorAll('.setseg button').forEach((b) => {
       b.addEventListener('click', () => applyView(b.dataset.view));
     });
+    wireRadioKeys(slots.set.querySelector('.setseg'));
     applyView('all');
     document.getElementById('btn-apply-set')?.addEventListener('click', () => {
       applyAndGo(selectedItemMap(topRow, baseline), taskId, baselineName || baseline.name);
