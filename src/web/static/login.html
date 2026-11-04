@@ -11,12 +11,6 @@
   document.documentElement.dataset.pal=!s||s==='system'
     ?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):s;})();
   </script>
-    <script>
-  /* RED-3 theme pre-paint (contract §2): stored explicit choice wins; else OS. */
-  (function(){var s=null;try{s=localStorage.getItem('simc-theme')}catch(e){}
-  document.documentElement.dataset.pal=!s||s==='system'
-    ?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):s;})();
-  </script>
   <link rel="stylesheet" href="static/css/tokens.css?v=red3-5">
   <link rel="stylesheet" href="static/css/auth.css?v=red3-2">
 </head>
