@@ -1,7 +1,7 @@
 """Single-source running version (MGE-3, epic item 6).
 
-WORKFLOW.md bumps ``pyproject.toml`` per PR, so pyproject is the only version
-string; this module resolves the *running* version from it. Preference order:
+The agent harness workflow bumps ``pyproject.toml`` per PR, so pyproject is the
+only version string; this module resolves the *running* version from it. Preference order:
 
 1. the repo-root ``pyproject.toml`` next to the running code — the checkout /
    Docker image (``COPY . /app``) that the code actually came from;
