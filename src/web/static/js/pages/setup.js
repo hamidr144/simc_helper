@@ -128,6 +128,9 @@ export function wire() {
   wirePaste();
   wireArmory();
   wireRealms();
+  // t_75c08981: paint the run-bar state at boot so Run starts disabled with
+  // no character (it was only recomputed after the first character load).
+  updateSummary();
   pollWorkerStatus();
   setInterval(pollWorkerStatus, 15000);
   loadUpgradeData().then(renderSeasonChip);

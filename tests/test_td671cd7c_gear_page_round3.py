@@ -119,10 +119,10 @@ def test_addendum_4_armory_band_above_the_gear_grid():
 def test_version_and_cache_bust_sweep():
     pyproject = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text()
     assert 'version = "1.4.5-dev.4"' in pyproject
-    assert "css/tokens.css?v=red3-5" in APP_HTML
+    assert "css/tokens.css?v=red3-6" in APP_HTML
     assert "css/setup.css?v=red3-21" in APP_HTML  # t_f9c2ead6 gem grid sweep
     assert "css/run.css?v=red3-6" in APP_HTML
-    assert "js/pages/setup.js?v=red3-10" in APP_HTML
-    assert "import { renderWorkflow } from '../pages/setup.js?v=red3-10';" in PASTE_JS
+    assert "js/pages/setup.js?v=red3-11" in APP_HTML
+    assert "import { renderWorkflow } from '../pages/setup.js?v=red3-11';" in PASTE_JS
     for page in ("history.html", "login.html", "register.html", "results.html"):
-        assert "tokens.css?v=red3-5" in (STATIC / page).read_text(), page
+        assert "tokens.css?v=red3-6" in (STATIC / page).read_text(), page

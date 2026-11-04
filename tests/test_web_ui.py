@@ -1045,9 +1045,11 @@ def test_uncommon_item_name_matches_grade_color_token():
 
 def test_quality_palette_wowhead_all_grades_both_themes():
     # t_c0c0b245 (user: equipped item name rides its grade color, Wowhead-style).
-    # Dark theme carries Wowhead's canonical .q* values (verified from their own
-    # global.css: .q0 #9d9d9d, .q2 #1eff00, .q3 #0070dd, .q4 #a335ee,
-    # .q5 #ff8000, .q6 #e5cc80); light theme keeps same-hue WCAG-safe variants.
+    # Dark theme carries Wowhead's canonical .q* hue family; t_75c08981 (ISO
+    # 9241 audit) lightened .q3/.q4 to WCAG-AA values (verified 5.1/4.8 on the
+    # row background; the canonical #0070dd/#a335ee measured 2.6-2.7 at 10-13px)
+    # while the rest stay canonical (they already pass AA). Light theme keeps
+    # same-hue WCAG-safe variants.
     # Contract: all six --q-* tokens defined in :root AND the dark override
     # block; every .q-<cls> has the .nm.q-<cls> twin that beats .st .nm{color};
     # the old dark gold .nm override must stay deleted.
@@ -1057,7 +1059,7 @@ def test_quality_palette_wowhead_all_grades_both_themes():
     css = root.read_text(encoding="utf-8")
     dark = css[css.index("html[data-pal=dark]{"):]
     canonical = {"common": ("common", "#9d9d9d"), "uncom": ("uncommon", "#1eff00"),
-                 "rare": ("rare", "#0070dd"), "epic": ("epic", "#a335ee"),
+                 "rare": ("rare", "#58a6ff"), "epic": ("epic", "#c77dff"),
                  "legendary": ("legendary", "#ff8000"), "artifact": ("artifact", "#e6cc80")}
     for tok, (cls, hexv) in canonical.items():
         assert f"--q-{tok}:" in css, f"light token --q-{tok} missing"
