@@ -155,7 +155,7 @@ export function renderGear() {
         aria-labelledby="h-${esc(section.key)}" data-slot="${esc(slot)}" data-section="${esc(section.key)}">
       <header class="sechead">
         <h2 id="h-${esc(section.key)}">${esc(section.label)}</h2>
-        <span class="cnt num">${items.length} candidates</span>
+        <span class="cnt num">${items.length} candidate${items.length === 1 ? '' : 's'}</span>
         <span class="headtools">
           <select class="slot-sort-select" aria-label="Sort ${esc(section.label)} candidates"
             title="Sort candidates. 'Stat priority' is a heuristic class weight order, not a sim result.">

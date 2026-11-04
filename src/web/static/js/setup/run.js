@@ -212,6 +212,13 @@ export function watchRun({ taskId, workerId, combosLabel, startedAt, onDone }) {
   };
 }
 export async function runSimulation() {
+  // t_75c08981 (ISO 9241-110 error tolerance): with no character loaded the
+  // payload builder used to crash and surface a raw TypeError in the status
+  // line; say what is missing and stop.
+  if (!state.parsedData) {
+    setWorkflowStatus('Load a character first — there is nothing to run.');
+    return;
+  }
   // t_4485565b: generate even when the client-side estimate is 0 — a
   // 0-candidate input is a valid baseline current-gear run.
   if (!state.generatedInput) await generateInput();

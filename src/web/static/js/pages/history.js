@@ -47,6 +47,10 @@ function statusBadge(status) {
   return `<span class="history-status ${ok ? 'history-status-ok' : 'history-status-failed'}">${escapeHtml(status)}</span>`;
 }
 
+// t_75c08981: raw enum values (single_boss, retribution) read as machine
+// output; display them humanized (ISO 9241-110 conformity).
+const human = value => (value ? value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, ' ') : '—');
+
 function renderList(runs) {
   subtitleEl.textContent = runs.length
     ? `${runs.length} stored run${runs.length === 1 ? '' : 's'}. Showing your 50 most recent runs.`
@@ -58,8 +62,8 @@ function renderList(runs) {
   const rows = runs.map(run => `<tr class="history-row" data-run="${escapeHtml(run.run_id)}" data-search="${escapeHtml(`${characterLabel(run)} ${run.spec || ''}`.toLowerCase())}">
     <td data-label="When"><a class="history-run-link" href="history?run=${encodeURIComponent(run.run_id)}">${escapeHtml(formatWhen(run.created_at))}</a></td>
     <td data-label="Character">${escapeHtml(characterLabel(run))}</td>
-    <td data-label="Spec">${escapeHtml(run.spec || '—')}</td>
-    <td data-label="Fight">${escapeHtml(run.fighting_style || '—')}</td>
+    <td data-label="Spec">${escapeHtml(human(run.spec))}</td>
+    <td data-label="Fight">${escapeHtml(human(run.fighting_style))}</td>
     <td data-label="Top DPS" class="history-dps">${escapeHtml(formatDps(run.top_dps))}</td>
     <td data-label="Status">${statusBadge(run.status)}</td>
     <td data-label="Results">${resultsCell(run)}</td>
@@ -103,8 +107,8 @@ function renderDetail(run) {
   backEl.hidden = false;
   const fields = [
     ['Character', characterLabel(run)],
-    ['Spec', run.spec || '—'],
-    ['Fighting style', run.fighting_style || '—'],
+    ['Spec', human(run.spec)],
+    ['Fighting style', human(run.fighting_style)],
     ['Source', run.source || '—'],
     ['Top DPS', formatDps(run.top_dps)],
     ['Status', null],
