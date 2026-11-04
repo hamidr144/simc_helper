@@ -1,3 +1,17 @@
-# Repository workflow
+# Project guide
 
-Follow **WORKFLOW.md** at the repo root. Summary: cut a `feature/<kanban-id>-<slug>` branch from `dev` (the integration branch; the repo default is `prod` — never PR to prod yourself), test on the dev system (port 8001), open a PR via `gh pr create --base dev` — CI runs checks on every PR to `dev`/`prod` (no checks ≠ passing checks). Identities: three GitHub App bots — workers push/open PRs as the CODER app, the reviewer profile reviews as the REVIEW app (`gh pr review --approve|--request-changes`, first body line `VERDICT: …`), the leader merges as the MERGE app; every `gh`/`git push` call runs `GH_TOKEN=$(~/.hermes/bin/gh-mint)` (helper picks the app from `$HERMES_PROFILE`; never persist a token; the old shared fine-grained PAT was revoked 2026-10-19 — no fallback identity exists). **The ruleset requires 1 approving review before any merge; the leader merges via REST `PUT /repos/hamidr144/simc_helper/pulls/<N>/merge` (`merge_method=merge` — `gh pr merge` fails its own precheck, see WORKFLOW.md) and tags the merge commit; the author never merges their own work, workers never merge.** `prod` gets its PR only from the leader at approved, explicitly shipped milestones. Never commit, merge or push directly to `dev` or `prod` — the `pr-only-dev-prod` ruleset rejects it server-side — and never touch branch protection, rulesets, or the default-branch setting outside an explicitly leader-authorized protection card (Leader app token only).
+SimC Helper is a Python/FastAPI master and SimulationCraft worker cluster with a
+vanilla JavaScript web UI. Development workflow is supplied by the active agent
+harness; this file contains project navigation rather than a second workflow.
+
+- `README.md`: overview, setup and usage.
+- `src/web/`: FastAPI master and static browser UI.
+- `src/worker.py`, `src/cli/`, `src/core/`: worker execution, simulation commands
+  and shared application logic.
+- `utils/` and `examples/`: operational tools and safe configuration templates.
+- `tests/`: Python regression tests and browser-independent JavaScript fixtures.
+- `docs/`: detailed configuration, deployment and application documentation.
+
+The application version comes from `pyproject.toml`; runtime resolution is in
+`src/core/version.py`. Start with focused tests for the changed area; the full
+Python suite runs with `python3 -m pytest -q`.

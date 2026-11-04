@@ -5,10 +5,8 @@ All notable user-visible changes to simc_helper are documented here.
 Convention: one section per released version (semver tag, date), newest first.
 Entries are categorized under `### Features`, `### Improvements`, `### Bug fixes`
 — one short line per user-visible change, Kanban task id in parentheses where the
-commit carries one. Before each `dev → prod` milestone merge, the entry set for the
-new version is prepared and reviewer-approved as a mandatory step (see WORKFLOW.md,
-"Milestone: dev → prod"); the `CHANGELOG.md` update ships in the same merge commit
-that bumps the version and tag.
+commit carries one. Release preparation and publication are governed by the
+active agent harness.
 
 ## [Unreleased]
 
