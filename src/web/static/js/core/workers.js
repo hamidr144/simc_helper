@@ -8,9 +8,15 @@ export async function pollWorkerStatus() {
   if (!chip || !text) return;
   try {
     const response = await apiFetch('api/state');
-    // 401 = logged out: the banner explains it; the chip stays unknown ("—")
-    // until a successful authenticated poll (A4 — never a misleading chip).
-    if (response.status === 401) return;
+    // 401 = logged out: the chip says what it knows (rank-4, ISO 9241-110
+    // self-descriptiveness): status-unknown + sign-in hint. Writes are
+    // idempotent so repeated 401 polls announce nothing new to a reader.
+    if (response.status === 401) {
+      chip.className = 'status-chip status-unknown';
+      text.textContent = 'worker: -';
+      chip.title = 'Sign in to see worker status';
+      return;
+    }
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     workerPollFailures = 0;
