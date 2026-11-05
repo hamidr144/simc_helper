@@ -223,5 +223,8 @@ main button.row-x{min-height:28px;padding:3px 7px}
 /* t_f9c2ead6: gem grid column collapse at the app's standard widths. */
 @media (max-width:850px){.gem-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:430px){.gem-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* t_cdcad11f rank-6: runbar touch targets >=44px on phones (hit area only;
+   must live after the 36px rules at t_76a0ceb9 directive 12 to win the cascade). */
+@media (max-width:430px){.runbar button:not(.cand),.runbar button.runbtn,.runbar a.btn,.runbar a.btn-ghost{min-height:44px}}
 @media (max-width:320px){.gem-grid{grid-template-columns:minmax(0,1fr)}}
 .enh-section:not([open]) .enhancement-group{display:none}
