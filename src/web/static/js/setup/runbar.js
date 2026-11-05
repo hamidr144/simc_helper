@@ -88,7 +88,23 @@ export function updateSummary() {
     : '';
   // t_4485565b: once a character is loaded, Run is always meaningful — a
   // 0-candidate selection runs the baseline current-gear report.
-  if (runButton) runButton.disabled = !(state.generatedInput || state.parsedData);
+  if (runButton) {
+    runButton.disabled = !(state.generatedInput || state.parsedData);
+    // t_c007fe8f rank-1 (ISO 9241-110 self-descriptiveness): the Run button
+    // disabled at boot must explain itself; cleared once a character loads.
+    runButton.title = state.parsedData ? '' : 'Load a character first';
+  }
+  // t_c007fe8f: no character at boot — the empty status band carries the
+  // import hint. Only an EMPTY band takes it, so the boot run-in-progress
+  // and saved-draft notes (written later in setup wire()) and every later
+  // flow keep the band; generateInput's summary replaces the hint after
+  // import because its setWorkflowStatus is unconditional.
+  if (!state.parsedData) {
+    const band = document.getElementById('workflow-status');
+    if (band && !band.textContent) {
+      setWorkflowStatus('Import a character (paste an export, or load from Armory) to start comparing gear.');
+    }
+  }
 }
 
 export function selectionChanged() {

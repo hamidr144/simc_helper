@@ -118,7 +118,7 @@ def test_addendum_4_armory_band_above_the_gear_grid():
 
 def test_version_and_cache_bust_sweep():
     pyproject = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text()
-    assert 'version = "1.4.5-dev.5"' in pyproject
+    assert 'version = "1.4.5-dev.6"' in pyproject
     assert "css/tokens.css?v=red3-6" in APP_HTML
     assert "css/setup.css?v=red3-21" in APP_HTML  # t_f9c2ead6 gem grid sweep
     assert "css/run.css?v=red3-6" in APP_HTML
