@@ -99,7 +99,7 @@ def test_overlay_css_removed_and_assets_versioned():
     # cache sweep for every touched asset reference (skill: manual ?v= busting)
     assert "run.css?v=red3-6" in APP_HTML and "run.css?v=red3-6" in RESULTS_HTML
     assert "results.css?v=red3-7" in RESULTS_HTML
-    assert "results.js?v=red3-9" in RESULTS_HTML and "setup.js?v=red3-11" in APP_HTML
+    assert "results.js?v=red3-9" in RESULTS_HTML and "setup.js?v=red3-12" in APP_HTML
 
 
 def test_format_elapsed_survives_renavigation():

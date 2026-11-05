@@ -120,9 +120,9 @@ def test_version_and_cache_bust_sweep():
     pyproject = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text()
     assert 'version = "1.4.5-dev.7"' in pyproject
     assert "css/tokens.css?v=red3-6" in APP_HTML
-    assert "css/setup.css?v=red3-21" in APP_HTML  # t_f9c2ead6 gem grid sweep
+    assert "css/setup.css?v=red3-22" in APP_HTML  # t_1e22f4eb realm filter sweep
     assert "css/run.css?v=red3-6" in APP_HTML
-    assert "js/pages/setup.js?v=red3-11" in APP_HTML
-    assert "import { renderWorkflow } from '../pages/setup.js?v=red3-11';" in PASTE_JS
+    assert "js/pages/setup.js?v=red3-12" in APP_HTML
+    assert "import { renderWorkflow } from '../pages/setup.js?v=red3-12';" in PASTE_JS
     for page in ("history.html", "login.html", "register.html", "results.html"):
         assert "tokens.css?v=red3-6" in (STATIC / page).read_text(), page

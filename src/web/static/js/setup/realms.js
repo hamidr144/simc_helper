@@ -7,6 +7,32 @@ import { apiFetch } from '../core/api.js';
 // BOTH regions with different ids, so the key carries the region and entries
 // are never deduped by name.
 export const realmIndex = new Map();
+const realmFilter = document.getElementById('realm-filter');
+const REALM_FILTER_PLACEHOLDER = 'Filter realms…';
+
+// t_1e22f4eb rank-3: type-to-filter over the ~500 realm options (ISO 9241-110
+// suitability for the task — optimise the effort of finding a realm).  Same
+// loop shape as history.js: case-insensitive substring, hide non-matches.
+function filterRealmOptions() {
+  const needle = realmFilter.value.trim().toLowerCase();
+  let matches = 0;
+  armoryRealm.querySelectorAll('optgroup').forEach(group => {
+    let visible = 0;
+    group.querySelectorAll('option').forEach(option => {
+      const hit = !needle || option.textContent.toLowerCase().includes(needle);
+      option.hidden = !hit;
+      if (hit) visible += 1;
+    });
+    group.hidden = visible === 0;
+    matches += visible;
+  });
+  // shortcut: the "Select realm…" option lives outside the optgroups and
+  // stays visible while filtering, so clearing the selection stays one click.
+  realmFilter.placeholder = needle
+    ? `${matches} ${matches === 1 ? 'match' : 'matches'}`
+    : REALM_FILTER_PLACEHOLDER;
+}
+
 function populateRealmSelect(data) {
   const groups = data && data.realms;
   if (!groups || !Array.isArray(groups.eu) || !Array.isArray(groups.us)) {
@@ -32,6 +58,7 @@ function populateRealmSelect(data) {
   }
   armoryRealm.disabled = false;
   armoryRealm.hidden = false;
+  if (realmFilter) realmFilter.hidden = false;
 }
 async function loadRealms() {
   if (!armoryRealm) return;
@@ -50,6 +77,7 @@ async function loadRealms() {
 }
 
 export function wire() {
-loadRealms();
+  if (realmFilter) realmFilter.addEventListener('input', filterRealmOptions);
+  loadRealms();
 }
 
