@@ -423,6 +423,10 @@ export function renderResults(results, mode, els) {
   }
 
   // ---- quarantine rail (truth stays visible) ----
+  // t_b1935d1f: the section is hidden in HTML so the no-task page never shows
+  // an empty "Excluded runs" heading; any rendered report un-hides it.
+  const quarSec = document.getElementById('side-quarantine-sec');
+  if (quarSec) quarSec.hidden = false;
   const quarantined = [
     ...failed.map(result => [result, 'failed to simulate']),
     ...noDiff.map(result => [result, 'no gear difference']),
