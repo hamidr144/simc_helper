@@ -26,6 +26,11 @@ import { createEnhancementWowheadLink, refreshWowheadLinks } from '../core/wowhe
 
 import { selectionChanged } from './runbar.js';
 
+// t_7514a3c0 (iter-6 rank-5): users know this system as 'Embellishments'
+// (the WoW item-database name 'Augurnium' matches nothing); the visible
+// labels follow the map. data-enh-group, selectedAugurnium state key,
+// appConfig.augurnium config key and the frozen payload mapping stay as-is.
+const ENH_DISPLAY_TITLES = { Augurnium: 'Embellishments' };
 export const visibleEnchants = enchants => enchants.filter(entry => entry.quality !== 2);
 function appendWowheadLink(group, enhancement, name) {
   const wrapper = document.createElement('span');
@@ -121,7 +126,7 @@ function enhancementEntry(group, entry, name, { id, pressed, equipped, onToggle 
 /* Selection state shows in the section summary (count), never as helper text. */
 function wireSummaryLabel(section) {
   const summary = section.querySelector('summary');
-  const title = section.dataset.enhGroup;
+  const title = ENH_DISPLAY_TITLES[section.dataset.enhGroup] || section.dataset.enhGroup;
   const renderLabel = () => {
     const chips = section.querySelectorAll('.choice-chip[aria-pressed="true"]').length;
     const total = section.querySelectorAll('.choice-chip[aria-pressed]').length;
@@ -251,16 +256,17 @@ export function renderEnhancements() {
   }
 
   // t_76a0ceb9 directive 10: Augurnium is its own section.
+  // t_7514a3c0: its visible label is 'Embellishments' (see ENH_DISPLAY_TITLES).
   // shortcut: current-season config.json ships no augurnium entries, and
   // payload.js is frozen — the chips ride client state only. The section
   // renders when the backend ever ships `appConfig.augurnium` entries.
   const augurnium = state.appConfig.augurnium || [];
   if (augurnium.length) {
-    const group = addFieldset(bodies.Augurnium, 'Augurnium');
+    const group = addFieldset(bodies.Augurnium, ENH_DISPLAY_TITLES.Augurnium);
     group.classList.add('enh-rows');
     for (const entry of augurnium) {
       const id = String(typeof entry === 'object' ? entry.id : entry);
-      const name = typeof entry === 'object' ? entry.name : `Augurnium ${id}`;
+      const name = typeof entry === 'object' ? entry.name : `${ENH_DISPLAY_TITLES.Augurnium} ${id}`;
       enhancementEntry(group, entry, name, {
         id,
         pressed: state.selectedAugurnium.has(id),
