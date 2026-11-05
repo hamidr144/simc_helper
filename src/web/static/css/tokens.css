@@ -227,7 +227,12 @@ table.dt{width:100%;border-collapse:collapse;font-size:13px}
 
 @media (max-width:430px){
   main{padding:12px 10px 120px}
-  .topin{padding:9px 12px}
+  /* t_cdcad11f rank-6: mobile touch targets >=44px (ISO 9241-110 controllability
+     + error tolerance). Hit areas only — structure, labels and the locked 3-state
+     theme behavior are untouched. */
+  .topin{padding:9px 12px;row-gap:8px}
+  .pal .seg button{min-height:44px}
+  .profile-menu-btn{min-height:44px}
   .runbar .in{padding:8px 12px;gap:10px}
   .runbar-top .in{padding:8px 10px}
   .runbar .bud{margin-left:0;text-align:left;width:100%;order:3}
@@ -472,3 +477,11 @@ html[data-pal=light]{--gold:#846500;--eq-bg:var(--surface)}          /* C-2 (was
   .history-table-card{min-width:0;overflow-x:hidden}
 }
 @media(min-width:481px){.history-table-card{overflow-x:visible}}
+@media (max-width:430px){
+  /* t_cdcad11f rank-6 part 2: rules defined below the 430 block above, so the
+     mobile 44px overrides live here (same specificity, later source order wins). */
+  a.btn,a.btn-ghost{min-height:44px}
+  .fight-style-select{min-height:44px}
+  .session-banner button{min-width:44px;min-height:44px;width:auto;height:auto}
+  .toast button{min-height:44px}
+}
