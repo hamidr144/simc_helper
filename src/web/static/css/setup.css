@@ -207,6 +207,11 @@ main button.row-x{min-height:28px;padding:3px 7px}
 .armory-import-band{margin-top:var(--gap-lg);padding:0 2px}
 .armory-import-band .armory-divider{margin:0 0 var(--gap-xs)}
 .armory-field{min-width:160px;flex:1}
+/* t_1e22f4eb rank-3: the realm type-to-filter input reuses the .history-filter
+   style; these flex rules are inert on desktop (block flow) and bind on the
+   phone flex layout, where 100%-basis controls ride their own line. */
+.armory-field{flex-wrap:wrap}
+.armory-field .realm-filter{flex:1 1 100%}
 .armory-divider{color:var(--ink3);font-size:12.5px;margin:var(--gap-sm) 0 var(--gap-xs)}
 .drafts-note{margin-top:var(--gap-sm);padding:8px 10px;border-radius:6px;background:var(--warn-soft);color:var(--ink);font-size:13px}
 .rows>.fold{display:flex;justify-content:center;margin-top:4px;cursor:pointer}
