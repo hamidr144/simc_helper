@@ -119,7 +119,7 @@
         <a class="btn-ghost" href="./">Back to gear</a>
         <a class="btn-ghost" href="history">View run history</a>
       </div>
-      <div class="side">
+      <div class="side" id="side-quarantine-sec" hidden>
         <h3>Excluded runs</h3>
         <div id="side-quarantine" role="status" class="honest"></div>
       </div>
@@ -146,7 +146,8 @@
   </div>
 
   <div class="footmeta">
-    <a href="history">Run history</a>
+    <!-- t_b1935d1f: Run-history link dropped — the side rail's "View run
+         history" is the single affordance. -->
     <span id="app-version"></span>
   </div>
 </main>
@@ -160,7 +161,7 @@
   <span class="chip" id="chip-quarantined" hidden></span>
 </div></div>
 
-<script type="module" src="static/js/pages/results.js?v=red3-8"></script>
+<script type="module" src="static/js/pages/results.js?v=red3-9"></script>
 <noscript>
   <p class="noscript-warning">This application requires JavaScript to function.</p>
 </noscript>

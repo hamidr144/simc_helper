@@ -33,7 +33,14 @@ document.getElementById('btn-log-download').addEventListener('click', downloadLo
 
 async function fetchResults(task = taskId, attempt = 0) {
   if (!task) {
-    els.subtitle.textContent = 'No simulation task was provided.';
+    // t_b1935d1f (ISO 9241-110 self-descriptiveness): a bare subtitle left a
+    // dead page — render the empty-results card in the skip-target slot with
+    // a Gear CTA (same pattern as the history page's empty state).
+    els.subtitle.textContent = 'No run selected.';
+    document.getElementById('verdict-slot').innerHTML =
+      '<section class="panel-card empty-results"><h2>No run selected</h2>'
+      + '<p>Start a comparison on the Gear page and results will appear here.</p>'
+      + '<p><a class="btn" href="./">Go to the Gear page</a></p></section>';
     return;
   }
   els.taskId = task;
